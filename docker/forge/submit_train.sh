@@ -45,7 +45,7 @@ LINK=""
 if [[ "${MOUNT_PATH}" != "${CODE}" ]]; then
     LINK="rm -rf ${CODE} && ln -sfn ${MOUNT_PATH}${CODE_DIR:+/${CODE_DIR}} ${CODE} && "
 fi
-ENTRY="${LINK}cd ${CODE} && ${TRAIN}"
+ENTRY="uwlab-init-cache; ${LINK}cd ${CODE} && ${TRAIN}"
 DESC="OmniReset ${INSERTIVE}/${RECEPTIVE} RSL-RL PPO seed ${SEED}, ${GPUS}x${NUM_ENVS} envs"
 
 ARGS=(

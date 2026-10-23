@@ -16,6 +16,8 @@ without rebuilding the image on every code change.
   Isaac Sim (`/isaac-sim`), the Isaac Lab clone (`/opt/uwlab-deps/_isaaclab`), and
   the `python` / `pip` / `uwlab` wrappers in `/usr/local/bin`.
 
+The image is a single squashed layer and skips Isaac Lab's `isaacsim` pip extra (the container already is Isaac Sim), which keeps it small enough for Forge nodes to unpack. Isaac Sim's runtime caches are symlinked into `/tmp`; run `uwlab-init-cache` first in any entrypoint that does not go through bash's login profile (the helpers do).
+
 Rebuild only when a dependency changes (Isaac Sim / Isaac Lab / RSL-RL / torch
 pins, a new `install_requires` entry in a `setup.py`, a new apt package).
 
