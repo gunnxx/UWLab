@@ -25,7 +25,7 @@ pins, a new `install_requires` entry in a `setup.py`, a new apt package).
 
 ```bash
 # from the repo root
-forge image build --name uwlab-omnireset --tag $(git rev-parse --short HEAD) \
+forge image build --name uwlab-omnireset --tag slim-$(git rev-parse --short HEAD) \
     --context docker/forge --build-timeout 4 --build-memory 32Gi --build-cpu 8
 forge image logs <image-id>
 forge image list --mine
@@ -35,75 +35,38 @@ forge image list --mine
 the Dockerfile to change the baked commit (only matters as a fallback when no disk
 is mounted).
 
-## 2. Create the code disk (once)
+## 2. How code reaches the job
 
-Forge mounts its own ephemeral volume at `/workspace` in every job, which hides the
-copy baked into the image. A disk (or a symlink into one) at `/workspace/uwlab` is
-therefore required, not optional.
+**Default: clone at job start.** `submit_train.sh` makes every job run
+`git clone --depth 1 -b <branch> <fork>` into `/workspace/uwlab`, the pod's local
+scratch volume (hundreds of GB, local SSD). The repo is ~30 MB, so this costs about
+two seconds. The editable installs in the image point at `/workspace/uwlab`, so the
+cloned code is what runs. Push to the fork before submitting; the job never sees your
+laptop. Forge mounts its own ephemeral volume at `/workspace`, which hides the copy
+baked into the image, so some code source is always required.
 
-Use the shared `blob` profile so a notebook (for editing) and training jobs can
-mount the same disk at the same time. The private `disk` profile is faster but
-single-attach: a job cannot start while a notebook holds it.
+**Why not a mounted disk.** The first attempt used a shared `blob` disk mounted at
+`/workspace/uwlab`. After one successful run the blobfuse mount stopped enumerating
+directories (`ls` empty, `find` found 0 files) while files were still readable by
+path, and Python could no longer import sibling modules such as `cli_args`. Blobfuse
+is not a filesystem for git trees. The `disk` (Premium SSD, RWO) profile would work,
+but it is single-attach, so parallel seeds would each need their own disk.
+`CODE_SOURCE=disk DISK=<name>` remains available for that case.
 
-```bash
-forge disk create --name uwlab-code --size 20 --profile blob
-```
-
-**Alternative: the team's shared disk.** `blob-robotics-scus` (profile `blob`,
-RWX, mounted by the team's training jobs at `/mnt/robotics`) can hold the code too,
-e.g. under `/mnt/robotics/code/uwlab/<you>/UWLab`. The job then symlinks
-`/workspace/uwlab` to it:
-
-```bash
-DISK=blob-robotics-scus MOUNT_PATH=/mnt/robotics CODE_DIR=code/uwlab/<you>/UWLab \
-    docker/forge/submit_train.sh peg peghole
-```
-
-Trade-off: one disk for everything, but git churn (many small files) lands on the
-volume that teammates' 8-GPU runs read datasets from, and a stale blobfuse cache
-on one node can serve old code for a while after a pull on another. A dedicated
-`uwlab-code` disk isolates that; keep datasets and checkpoints on the shared one.
-
-## 3. Put code on the disk
-
-Two ways. Both leave a real git checkout on the disk, so `git pull` works there.
-
-**a) git from inside Forge** (no local copy needed, also usable as a job
-`--setup-command`). `code_sync.sh` clones on an empty disk, otherwise fetches and
-checks out the requested branch or commit. It refuses to touch a tree with
-uncommitted changes and takes a lock so two jobs never pull at once.
+**Interactive editing on the cluster.** Start an SSH notebook on the image, clone the
+fork there, edit, commit, push, then submit jobs. `code_sync.sh` clones or
+fast-forwards a checkout in place:
 
 ```bash
-# first time, from a notebook or a 0-GPU job that mounts the disk
-forge job submit --name uwlab-code-bootstrap -m "clone UWLab onto the code disk" \
-    --image uwlab-omnireset --gpu 0 --disk-mount uwlab-code:/workspace/uwlab --max-duration 1 \
-    --entrypoint "wget -qO- https://raw.githubusercontent.com/gunnxx/UWLab/feature/forge-omnireset/docker/forge/code_sync.sh | bash -s -- feature/forge-omnireset"
-
-# later: pull the latest of a branch, or pin a commit, in a notebook terminal
-bash /workspace/uwlab/docker/forge/code_sync.sh feature/forge-omnireset
-bash /workspace/uwlab/docker/forge/code_sync.sh 2b40afb
-
-# or let the training job do it right before it starts
-GIT_REF=feature/forge-omnireset docker/forge/submit_train.sh peg peghole
+forge notebook create --name uwlab-dev --type ssh --gpu 0 --custom-image uwlab-omnireset:slim-4bfca44 \
+    -m "UW Lab dev shell"
+bash docker/forge/code_sync.sh feature/forge-omnireset     # inside the notebook
 ```
 
-The disk tracks the fork `gunnxx/UWLab` (upstream is `UW-Lab/UWLab`). For a private fork set `UWLAB_REPO=https://<user>:<token>@github.com/<user>/UWLab.git`
-(pass it with `--env` on the job).
-
-**b) rsync from your laptop** through an SSH notebook on the image. Includes
-`.git` by default so (a) keeps working afterwards; `NO_GIT=1` skips it.
-
-```bash
-forge notebook create --name uwlab-dev --type ssh --gpu 0 \
-    --custom-image uwlab-omnireset --disk-mount uwlab-code:/workspace/uwlab \
-    -m "UW Lab code disk editor (rsync target)"
-forge notebook get uwlab-dev           # SSH host / port
-docker/forge/sync_code.sh root@<host> -p <port>
-```
-
-Blob storage has no file locking and is slow on many-small-file operations, so:
-sync once, then launch your batch of jobs. Do not run `code_sync.sh` from several
-jobs that start simultaneously on the same disk.
+Checkpoints and logs are written under `/workspace/uwlab/logs`, which is scratch and
+disappears with the pod. For runs you want to keep, add `--disk-mount <data-disk>:/mnt/data`
+on a shareable disk and pass `agent.log_dir`/`--logger wandb`, or copy the run
+directory out at the end of the entrypoint.
 
 ## 4. Train
 
@@ -121,9 +84,8 @@ The equivalent raw command:
 
 ```bash
 forge job dry-run --name omnireset-peg-s42 -m "OmniReset peg insertion, seed 42" \
-    --image uwlab-omnireset --gpu 4 --max-duration 24 \
-    --disk-mount uwlab-code:/workspace/uwlab \
-    --entrypoint "cd /workspace/uwlab && python -m torch.distributed.run --nnodes 1 --nproc_per_node 4 \
+    --image uwlab-omnireset:slim-4bfca44 --gpu 4 --max-duration 24 \
+    --entrypoint "uwlab-init-cache; git clone -q --depth 1 -b feature/forge-omnireset https://github.com/gunnxx/UWLab.git /workspace/uwlab && cd /workspace/uwlab && python -m torch.distributed.run --nnodes 1 --nproc_per_node 4 \
       scripts/reinforcement_learning/rsl_rl/train.py \
       --task OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-v0 --num_envs 16384 \
       --logger tensorboard --visualizer none --distributed agent.seed=42 \
