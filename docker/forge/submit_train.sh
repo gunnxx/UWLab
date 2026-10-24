@@ -17,8 +17,17 @@
 # Logging: wandb by default, project "omnireset", run name "<task>-<objects>-s<seed>".
 #   WANDB_API_KEY is taken from the environment, else from ~/.zshenv. LOGGER=tensorboard disables it.
 #
+# Checkpoints: training writes to local scratch (logs/rsl_rl/<experiment>/<ts>_<run>). Every
+#   SYNC_MINUTES the run directories are rsynced (wandb files excluded) to
+#   ${CKPT_MOUNT}/${CKPT_DIR} on the shareable disk CKPT_DISK, and once more at exit, so a run
+#   survives the pod. Defaults: blob-robotics-scus mounted at /mnt/robotics, dir twguntara/omni-reset.
+#   CKPT_DISK="" disables it. MAX_ITER sets --max_iterations (default 3000; repo cap is 40000).
+#
+# Non-interactive: YES=1 skips the confirmation prompt, DRY_RUN=1 stops after the dry-run.
+#
 # Env overrides: IMAGE, GPUS, NUM_ENVS, SEED, HOURS, TASK, JOB_NAME, LOGGER, LOG_PROJECT, RUN_NAME,
-#                EXTRA, CODE_SOURCE, GIT_REPO, GIT_REF, DISK, MOUNT_PATH, CODE_DIR, WANDB_API_KEY, WANDB_ENTITY
+#                MAX_ITER, EXTRA, CODE_SOURCE, GIT_REPO, GIT_REF, DISK, MOUNT_PATH, CODE_DIR,
+#                CKPT_DISK, CKPT_MOUNT, CKPT_DIR, SYNC_MINUTES, WANDB_API_KEY, WANDB_ENTITY, YES, DRY_RUN
 set -euo pipefail
 
 INSERTIVE="${1:?insertive object (e.g. peg)}"
@@ -42,7 +51,14 @@ if [[ "${LOGGER}" == "wandb" ]]; then
     [[ -n "${WANDB_API_KEY:-}" ]] || { echo "LOGGER=wandb but no WANDB_API_KEY in env or ~/.zshenv" >&2; exit 1; }
 fi
 EXTRA="${EXTRA:-}"
+MAX_ITER="${MAX_ITER:-3000}"
 CODE=/workspace/uwlab
+
+CKPT_DISK="${CKPT_DISK-blob-robotics-scus}"
+CKPT_MOUNT="${CKPT_MOUNT:-/mnt/robotics}"
+CKPT_DIR="${CKPT_DIR:-twguntara/omni-reset}"
+SYNC_MINUTES="${SYNC_MINUTES:-10}"
+EXPERIMENT_DIR="logs/rsl_rl/ur5e_robotiq_2f85_omnireset_agent"   # experiment_name in rsl_rl_cfg.py
 
 CODE_SOURCE="${CODE_SOURCE:-git}"
 GIT_REPO="${GIT_REPO:-https://github.com/gunnxx/UWLab.git}"
@@ -52,11 +68,11 @@ MOUNT_PATH="${MOUNT_PATH:-/mnt/uwlab-code}"
 CODE_DIR="${CODE_DIR:-}"
 
 TRAIN="python scripts/reinforcement_learning/rsl_rl/train.py \
-  --task ${TASK} --num_envs ${NUM_ENVS} --logger ${LOGGER} --log_project_name ${LOG_PROJECT} \
-  --run_name ${RUN_NAME} --visualizer none \
+  --task ${TASK} --num_envs ${NUM_ENVS} --max_iterations ${MAX_ITER} \
+  --logger ${LOGGER} --log_project_name ${LOG_PROJECT} --run_name ${RUN_NAME} --visualizer none \
   agent.seed=${SEED} env.scene.insertive_object=${INSERTIVE} env.scene.receptive_object=${RECEPTIVE} ${EXTRA}"
 if (( GPUS > 1 )); then
-    TRAIN="python -m torch.distributed.run --nnodes 1 --nproc_per_node ${GPUS} \
+    TRAIN="python -m torch.distributed.run --standalone --nnodes 1 --nproc_per_node ${GPUS} \
   ${TRAIN#python } --distributed"
 fi
 
@@ -78,6 +94,14 @@ cd ${CODE} && git log -1 --oneline"
   *) echo "unknown CODE_SOURCE=${CODE_SOURCE}" >&2; exit 1;;
 esac
 
+if [[ -n "${CKPT_DISK}" ]]; then
+    DEST="${CKPT_MOUNT}/${CKPT_DIR}"
+    SYNC="rsync -a --exclude 'wandb/' ${EXPERIMENT_DIR}/ ${DEST}/"
+    ARGS+=(--disk-mount "${CKPT_DISK}:${CKPT_MOUNT}")
+    # background sync loop; final sync after training regardless of its exit code
+    TRAIN="mkdir -p ${DEST} ${EXPERIMENT_DIR} && (while true; do sleep $((SYNC_MINUTES*60)); ${SYNC} 2>/dev/null; done &) ; \
+${TRAIN}; rc=\$?; ${SYNC}; echo \"[ckpt] synced ${EXPERIMENT_DIR} -> ${DEST}\"; ls ${DEST}; exit \$rc"
+fi
 ENTRY="uwlab-init-cache; ${PREP} && ${TRAIN}"
 ARGS+=(-m "OmniReset ${INSERTIVE}/${RECEPTIVE} RSL-RL PPO seed ${SEED}, ${GPUS}x${NUM_ENVS} envs, ${SRC_DESC}")
 ARGS+=(--entrypoint "${ENTRY}")
@@ -86,10 +110,13 @@ if [[ "${LOGGER}" == "wandb" ]]; then
     [[ -n "${WANDB_ENTITY:-}" ]] && ARGS+=(--env "WANDB_ENTITY=${WANDB_ENTITY}")
 fi
 
-echo "== dry-run =="
+echo "== dry-run: ${JOB_NAME} =="
 forge job dry-run "${ARGS[@]}"
 echo
 echo "entrypoint: ${ENTRY}"
-read -r -p "Submit this job? [y/N] " yn
-[[ "${yn}" == [yY] ]] || { echo "not submitted"; exit 0; }
+[[ "${DRY_RUN:-0}" == "1" ]] && exit 0
+if [[ "${YES:-0}" != "1" ]]; then
+    read -r -p "Submit this job? [y/N] " yn
+    [[ "${yn}" == [yY] ]] || { echo "not submitted"; exit 0; }
+fi
 forge job submit "${ARGS[@]}"

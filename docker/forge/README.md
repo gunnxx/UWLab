@@ -63,10 +63,11 @@ forge notebook create --name uwlab-dev --type ssh --gpu 0 --custom-image uwlab-o
 bash docker/forge/code_sync.sh feature/forge-omnireset     # inside the notebook
 ```
 
-Checkpoints and logs are written under `/workspace/uwlab/logs`, which is scratch and
-disappears with the pod. For runs you want to keep, add `--disk-mount <data-disk>:/mnt/data`
-on a shareable disk and pass `agent.log_dir`/`--logger wandb`, or copy the run
-directory out at the end of the entrypoint.
+Checkpoints and TensorBoard files are written to local scratch and rsynced every 10 minutes
+(and at exit) to `/mnt/robotics/twguntara/omni-reset/<timestamp>_<run name>/` on the
+team disk `blob-robotics-scus`. Training never blocks on the shared mount, and the
+destination mirrors RSL-RL's log root, so `--resume_path` can point straight at a synced
+`model_<n>.pt`. Weights & Biases files stay local.
 
 ## 4. Train
 
