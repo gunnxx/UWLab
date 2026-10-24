@@ -71,13 +71,16 @@ directory out at the end of the entrypoint.
 ## 4. Train
 
 `submit_train.sh` dry-runs, prints the entrypoint, and submits only after you
-confirm. Defaults match the paper setup for a single task: 4 GPUs x 16384 envs.
+confirm. Defaults match the paper setup for a single task: 4 GPUs x 16384 envs,
+logged to Weights & Biases project `omnireset` with run name
+`<task>-<insertive>-<receptive>-s<seed>`. The API key is read from the environment
+or `~/.zshenv` and passed to the job as `--env WANDB_API_KEY`.
 
 ```bash
 docker/forge/submit_train.sh peg peghole                 # seed 42, 4 GPUs
 SEED=43 docker/forge/submit_train.sh peg peghole
 GPUS=1 NUM_ENVS=16384 docker/forge/submit_train.sh peg peghole   # smaller run
-WANDB_API_KEY=... LOGGER=wandb docker/forge/submit_train.sh peg peghole
+LOGGER=tensorboard docker/forge/submit_train.sh peg peghole                   # local TensorBoard only
 ```
 
 The equivalent raw command:
