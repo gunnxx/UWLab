@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import importlib
 import torch
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
@@ -13,9 +14,19 @@ import isaaclab.utils.math as math_utils
 from isaaclab.assets import Articulation
 from isaaclab.managers.action_manager import ActionTerm
 
-from uwlab_assets.robots.ur5e_robotiq_gripper.kinematics import compute_jacobian_analytical
-
 from . import actions_cfg
+
+
+def _resolve_jacobian_fn(path: str | None):
+    """Import ``"package.module:function"``; ``None`` -> the calibrated UR5e kinematics."""
+    if path is None:
+        from uwlab_assets.robots.ur5e_robotiq_gripper.kinematics import compute_jacobian_analytical
+
+        return compute_jacobian_analytical
+    module_name, _, attr = path.partition(":")
+    if not attr:
+        raise ValueError(f"jacobian_fn must be 'package.module:function', got {path!r}")
+    return getattr(importlib.import_module(module_name), attr)
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
@@ -73,6 +84,24 @@ class RelCartesianOSCAction(ActionTerm):
         self._kp = kp.unsqueeze(0).expand(self.num_envs, -1).clone()
         self._kd = kd.unsqueeze(0).expand(self.num_envs, -1).clone()
         self._torque_max = torch.tensor(cfg.torque_limit, device=self.device, dtype=torch.float32)
+        if self._torque_max.numel() != self._num_dof:
+            raise ValueError(
+                f"torque_limit has {self._torque_max.numel()} entries for {self._num_dof} joints {self._joint_names}"
+            )
+
+        # Analytical Jacobian of the controlled chain, (N, 6, num_dof) in the articulation root frame
+        self._jacobian_fn = _resolve_jacobian_fn(cfg.jacobian_fn)
+
+        # Optional null-space posture task (redundant arms)
+        self._nullspace_kp = float(cfg.nullspace_stiffness)
+        self._nullspace_kd = 2.0 * (self._nullspace_kp**0.5) * float(cfg.nullspace_damping_ratio)
+        if self._nullspace_kp > 0.0:
+            default_pos = self._asset.data.default_joint_pos.torch[0, self._joint_ids].clone()
+            if cfg.nullspace_joint_pos is not None:
+                for i, name in enumerate(self._joint_names):
+                    if name in cfg.nullspace_joint_pos:
+                        default_pos[i] = cfg.nullspace_joint_pos[name]
+            self._nullspace_q = default_pos.unsqueeze(0).expand(self.num_envs, -1).clone()
 
         # Action scaling
         self._scale = torch.tensor(cfg.scale_xyz_axisangle, device=self.device, dtype=torch.float32)
@@ -145,8 +174,8 @@ class RelCartesianOSCAction(ActionTerm):
         joint_pos = self._asset.data.joint_pos.torch[:, self._joint_ids]
         joint_vel = self._asset.data.joint_vel.torch[:, self._joint_ids]
 
-        # Analytical Jacobian (base_link frame, matching EE pose frame)
-        jacobian = compute_jacobian_analytical(joint_pos, device=str(self.device))
+        # Analytical Jacobian (root frame, matching EE pose frame)
+        jacobian = self._jacobian_fn(joint_pos, device=str(self.device))
 
         # EE velocity from J @ dq (consistent with analytical Jacobian)
         ee_vel = torch.bmm(jacobian, joint_vel.unsqueeze(-1)).squeeze(-1)  # (N, 6)
@@ -161,6 +190,17 @@ class RelCartesianOSCAction(ActionTerm):
         vel_error = -ee_vel
         task_force = self._kp * pose_error + self._kd * vel_error
         joint_torques = torch.bmm(jacobian.transpose(-1, -2), task_force.unsqueeze(-1)).squeeze(-1)
+
+        # Null-space posture task: tau_null projected with N = I - J^T (J J^T + lambda^2 I)^-1 J, so it never
+        # disturbs the end effector (up to the damping). Only meaningful for redundant arms.
+        if self._nullspace_kp > 0.0:
+            tau_posture = self._nullspace_kp * (self._nullspace_q - joint_pos) - self._nullspace_kd * joint_vel
+            jjt = torch.bmm(jacobian, jacobian.transpose(-1, -2))
+            jjt = jjt + 1e-4 * torch.eye(6, device=self.device).unsqueeze(0)
+            jt_pinv = torch.bmm(jacobian.transpose(-1, -2), torch.linalg.solve(jjt, jacobian))  # J^T (J J^T)^-1 J
+            projector = torch.eye(self._num_dof, device=self.device).unsqueeze(0) - jt_pinv
+            joint_torques = joint_torques + torch.bmm(projector, tau_posture.unsqueeze(-1)).squeeze(-1)
+
         joint_torques = torch.clamp(joint_torques, -self._torque_max, self._torque_max)
 
         self._asset.set_joint_effort_target(joint_torques, joint_ids=self._joint_ids)

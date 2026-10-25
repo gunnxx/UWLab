@@ -71,3 +71,7 @@ tests/
 
 # Docker history
 .uw-lab-docker-history
+
+# generated robot assets and datasets (built in-job by docker/forge/g1d_pipeline.sh)
+source/uwlab_assets/data/Robots/
+source/uwlab_assets/data/Datasets/

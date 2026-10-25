@@ -94,7 +94,11 @@ class grasp_sampling_event(ManagerTermBase):
         self.gripper_approach_direction = tuple(metadata.get("gripper_approach_direction"))
         self.grasp_align_axis = tuple(metadata.get("grasp_align_axis"))
         self.orientation_sample_axis = tuple(metadata.get("orientation_sample_axis"))
-        self.gripper_joint_reset_config = {"finger_joint": metadata.get("finger_open_joint_angle")}
+        # Open-gripper joint targets: explicit per-joint map when the metadata has one (multi-joint grippers such
+        # as the Dex1-1), else the legacy single Robotiq ``finger_joint``.
+        self.gripper_joint_reset_config = metadata.get("gripper_open_joint_config") or {
+            "finger_joint": metadata.get("finger_open_joint_angle")
+        }
 
         # Store environment reference for later use
         self._env = env

@@ -1,0 +1,15 @@
+# Copyright (c) 2024-2026, The UW Lab Project Developers. (https://github.com/uw-lab/UWLab/blob/main/CONTRIBUTORS.md).
+# All Rights Reserved.
+#
+# SPDX-License-Identifier: BSD-3-Clause
+
+"""RSL-RL PPO configuration for the G1-D + Dex1-1 OmniReset tasks (same recipe as the UR5e)."""
+
+from isaaclab.utils import configclass
+
+from ...ur5e_robotiq_2f85.agents.rsl_rl_cfg import Base_PPORunnerCfg
+
+
+@configclass
+class G1dDex1_PPORunnerCfg(Base_PPORunnerCfg):
+    experiment_name = "g1d_dex1_omnireset_agent"
