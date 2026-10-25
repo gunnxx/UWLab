@@ -31,6 +31,22 @@ VIS=(--visualizer none)
 log() { echo "[g1d $(date +%H:%M:%S)] $*"; }
 has_stage() { [[ ",${STAGES}," == *",$1,"* ]]; }
 
+# Forge keeps only the tail of a job's log; persist the full transcript on the blob disk.
+if [[ -n "${CACHE}" ]]; then
+    mkdir -p "${CACHE}/logs"
+    LOGFILE="${CACHE}/logs/$(date +%Y%m%d-%H%M%S)-${STAGES//,/-}.log"
+    exec > >(tee -a "${LOGFILE}") 2>&1
+    log "full log: ${LOGFILE}"
+fi
+
+# ------------------------------------------------------------------------------------------------------- debug
+if has_stage debug; then
+    log "debug: probing the Dex1 grasp environment (${INSERTIVE})"
+    [[ -f "${ASSET_DIR}/dex1_gripper.usd" ]] || { mkdir -p "${ASSET_DIR}" && rsync -a "${CACHE}/assets/" "${ASSET_DIR}/"; }
+    python scripts_v2/tools/debug_grasp_env.py --task OmniReset-Dex1-GraspSampling-v0 --num_envs "${DEBUG_ENVS:-16}" \
+        --steps "${DEBUG_STEPS:-300}" "${VIS[@]}" env.scene.object="${INSERTIVE}" || log "debug: probe exited with $?"
+fi
+
 # ------------------------------------------------------------------------------------------------------ assets
 if has_stage assets; then
     if [[ "${FORCE}" != 1 && -n "${CACHE}" && -f "${CACHE}/assets/g1d_dex1_right_arm.usd" ]]; then
