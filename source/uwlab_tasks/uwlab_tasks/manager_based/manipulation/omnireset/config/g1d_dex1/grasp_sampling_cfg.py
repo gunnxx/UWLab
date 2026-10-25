@@ -20,11 +20,15 @@ class Dex1GraspSamplingSceneCfg(robotiq.GraspSamplingSceneCfg):
     robot = DEX1_GRIPPER.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
 
+# configclass stores mutable defaults as factories, so defaults are read from an instance, not the class
+_ROBOTIQ_EVENTS = robotiq.GraspSamplingEventCfg()
+
+
 @configclass
 class Dex1GraspSamplingEventCfg(robotiq.GraspSamplingEventCfg):
-    grasp_sampling = robotiq.GraspSamplingEventCfg.grasp_sampling.replace(
+    grasp_sampling = _ROBOTIQ_EVENTS.grasp_sampling.replace(
         params={
-            **robotiq.GraspSamplingEventCfg.grasp_sampling.params,
+            **_ROBOTIQ_EVENTS.grasp_sampling.params,
             "gripper_cfg": SceneEntityCfg("robot", body_names=DEX1_BASE_BODY_NAME),
         }
     )

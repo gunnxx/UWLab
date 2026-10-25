@@ -60,12 +60,22 @@ def _with_params(term: EventTerm, **updates) -> EventTerm:
     return term.replace(params={**term.params, **updates})
 
 
+# configclass stores mutable defaults as factories, so parent defaults are read from instances, not classes
+_UR5E_SCENE = ur5e.ResetStatesSceneCfg(num_envs=1, env_spacing=1.5)
+_UR5E_EE_ANYWHERE = ur5e.ObjectAnywhereEEAnywhereEventCfg()
+_UR5E_RESTING_GRASPED = ur5e.ObjectRestingEEGraspedEventCfg()
+_UR5E_ANYWHERE_GRASPED = ur5e.ObjectAnywhereEEGraspedEventCfg()
+_UR5E_PARTIAL_ANYWHERE = ur5e.ObjectPartiallyAssembledEEAnywhereEventCfg()
+_UR5E_PARTIAL_GRASPED = ur5e.ObjectPartiallyAssembledEEGraspedEventCfg()
+_UR5E_TERMINATIONS = ur5e.ResetStatesTerminationCfg()
+
+
 # ------------------------------------------------------------------------------------------------------- scene
 @configclass
 class G1dResetStatesSceneCfg(ur5e.ResetStatesSceneCfg):
     robot = IMPLICIT_G1D_DEX1.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
-    table = ur5e.ResetStatesSceneCfg.table.replace(
+    table = _UR5E_SCENE.table.replace(
         init_state=RigidObjectCfg.InitialStateCfg(
             pos=(TABLE_CENTER_X, 0.0, TABLE_ORIGIN_Z), rot=(0.0, 0.0, -0.707, 0.707)
         )
@@ -76,7 +86,7 @@ class G1dResetStatesSceneCfg(ur5e.ResetStatesSceneCfg):
     ground = AssetBaseCfg(
         prim_path="/World/GroundPlane",
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0)),
-        spawn=ur5e.ResetStatesSceneCfg.ground.spawn,
+        spawn=_UR5E_SCENE.ground.spawn,
     )
 
 
@@ -130,7 +140,7 @@ _INSERTIVE_ANYWHERE = EventTerm(
 class G1dObjectAnywhereEEAnywhereEventCfg(G1dResetStatesBaseEventCfg, ur5e.ObjectAnywhereEEAnywhereEventCfg):
     reset_insertive_object_pose = _INSERTIVE_ANYWHERE
     reset_end_effector_pose = _with_params(
-        ur5e.ObjectAnywhereEEAnywhereEventCfg.reset_end_effector_pose,
+        _UR5E_EE_ANYWHERE.reset_end_effector_pose,
         pose_range_b=EE_POSE_RANGE_B,
         robot_ik_cfg=ROBOT_IK_CFG,
     )
@@ -139,11 +149,11 @@ class G1dObjectAnywhereEEAnywhereEventCfg(G1dResetStatesBaseEventCfg, ur5e.Objec
 @configclass
 class G1dObjectRestingEEGraspedEventCfg(G1dResetStatesBaseEventCfg, ur5e.ObjectRestingEEGraspedEventCfg):
     reset_insertive_object_pose_from_reset_states = _with_params(
-        ur5e.ObjectRestingEEGraspedEventCfg.reset_insertive_object_pose_from_reset_states,
+        _UR5E_RESTING_GRASPED.reset_insertive_object_pose_from_reset_states,
         dataset_dir=G1D_DATASET_DIR,
     )
     reset_end_effector_pose_from_grasp_dataset = _with_params(
-        ur5e.ObjectRestingEEGraspedEventCfg.reset_end_effector_pose_from_grasp_dataset,
+        _UR5E_RESTING_GRASPED.reset_end_effector_pose_from_grasp_dataset,
         dataset_dir=G1D_DATASET_DIR,
         robot_ik_cfg=ROBOT_IK_CFG,
         gripper_cfg=GRIPPER_CFG,
@@ -154,7 +164,7 @@ class G1dObjectRestingEEGraspedEventCfg(G1dResetStatesBaseEventCfg, ur5e.ObjectR
 class G1dObjectAnywhereEEGraspedEventCfg(G1dResetStatesBaseEventCfg, ur5e.ObjectAnywhereEEGraspedEventCfg):
     reset_insertive_object_pose = _INSERTIVE_ANYWHERE
     reset_end_effector_pose_from_grasp_dataset = _with_params(
-        ur5e.ObjectAnywhereEEGraspedEventCfg.reset_end_effector_pose_from_grasp_dataset,
+        _UR5E_ANYWHERE_GRASPED.reset_end_effector_pose_from_grasp_dataset,
         dataset_dir=G1D_DATASET_DIR,
         robot_ik_cfg=ROBOT_IK_CFG,
         gripper_cfg=GRIPPER_CFG,
@@ -166,11 +176,11 @@ class G1dObjectPartiallyAssembledEEAnywhereEventCfg(
     G1dResetStatesBaseEventCfg, ur5e.ObjectPartiallyAssembledEEAnywhereEventCfg
 ):
     reset_insertive_object_pose_from_partial_assembly_dataset = _with_params(
-        ur5e.ObjectPartiallyAssembledEEAnywhereEventCfg.reset_insertive_object_pose_from_partial_assembly_dataset,
+        _UR5E_PARTIAL_ANYWHERE.reset_insertive_object_pose_from_partial_assembly_dataset,
         dataset_dir=G1D_DATASET_DIR,
     )
     reset_end_effector_pose = _with_params(
-        ur5e.ObjectPartiallyAssembledEEAnywhereEventCfg.reset_end_effector_pose,
+        _UR5E_PARTIAL_ANYWHERE.reset_end_effector_pose,
         pose_range_b={**EE_POSE_RANGE_B, "z": (EE_Z_ROOT[1], EE_Z_ROOT[1])},
         robot_ik_cfg=ROBOT_IK_CFG,
     )
@@ -181,11 +191,11 @@ class G1dObjectPartiallyAssembledEEGraspedEventCfg(
     G1dResetStatesBaseEventCfg, ur5e.ObjectPartiallyAssembledEEGraspedEventCfg
 ):
     reset_insertive_object_pose_from_partial_assembly_dataset = _with_params(
-        ur5e.ObjectPartiallyAssembledEEGraspedEventCfg.reset_insertive_object_pose_from_partial_assembly_dataset,
+        _UR5E_PARTIAL_GRASPED.reset_insertive_object_pose_from_partial_assembly_dataset,
         dataset_dir=G1D_DATASET_DIR,
     )
     reset_end_effector_pose_from_grasp_dataset = _with_params(
-        ur5e.ObjectPartiallyAssembledEEGraspedEventCfg.reset_end_effector_pose_from_grasp_dataset,
+        _UR5E_PARTIAL_GRASPED.reset_end_effector_pose_from_grasp_dataset,
         dataset_dir=G1D_DATASET_DIR,
         robot_ik_cfg=ROBOT_IK_CFG,
         gripper_cfg=GRIPPER_CFG,
@@ -195,8 +205,8 @@ class G1dObjectPartiallyAssembledEEGraspedEventCfg(
 # ------------------------------------------------------------------------------------------------ terminations
 @configclass
 class G1dResetStatesTerminationCfg(ur5e.ResetStatesTerminationCfg):
-    success = ur5e.ResetStatesTerminationCfg.success.replace(
-        params={**ur5e.ResetStatesTerminationCfg.success.params, "ee_body_name": DEX1_BASE_BODY_NAME}
+    success = _UR5E_TERMINATIONS.success.replace(
+        params={**_UR5E_TERMINATIONS.success.params, "ee_body_name": DEX1_BASE_BODY_NAME}
     )
 
 

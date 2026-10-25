@@ -34,12 +34,20 @@ def _with_params(term, **updates):
     return term.replace(params={**term.params, **updates})
 
 
+# configclass stores mutable defaults as factories, so parent defaults are read from instances, not classes
+_UR5E_SCENE = ur5e.RlStateSceneCfg(num_envs=1, env_spacing=1.5)
+_UR5E_BASE_EVENTS = ur5e.BaseEventCfg()
+_UR5E_TRAIN_EVENTS = ur5e.TrainEventCfg()
+_UR5E_TRAIN_EVAL_EVENTS = ur5e.TrainEvalEventCfg()
+_UR5E_REWARDS = ur5e.RewardsCfg()
+
+
 # ------------------------------------------------------------------------------------------------------- scene
 @configclass
 class G1dRlStateSceneCfg(ur5e.RlStateSceneCfg):
     robot = IMPLICIT_G1D_DEX1.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
-    table = ur5e.RlStateSceneCfg.table.replace(
+    table = _UR5E_SCENE.table.replace(
         init_state=RigidObjectCfg.InitialStateCfg(
             pos=(TABLE_CENTER_X, 0.0, TABLE_ORIGIN_Z), rot=(0.0, 0.0, -0.707, 0.707)
         )
@@ -50,13 +58,13 @@ class G1dRlStateSceneCfg(ur5e.RlStateSceneCfg):
     ground = AssetBaseCfg(
         prim_path="/World/GroundPlane",
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0)),
-        spawn=ur5e.RlStateSceneCfg.ground.spawn,
+        spawn=_UR5E_SCENE.ground.spawn,
     )
 
 
 # ------------------------------------------------------------------------------------------------------ events
 _GRIPPER_GAINS = _with_params(
-    ur5e.BaseEventCfg.randomize_gripper_actuator_parameters,
+    _UR5E_BASE_EVENTS.randomize_gripper_actuator_parameters,
     asset_cfg=SceneEntityCfg("robot", joint_names=DEX1_FINGER_JOINT_REGEX),
 )
 
@@ -64,14 +72,14 @@ _GRIPPER_GAINS = _with_params(
 @configclass
 class G1dTrainEventCfg(ur5e.TrainEventCfg):
     randomize_gripper_actuator_parameters = _GRIPPER_GAINS
-    reset_from_reset_states = _with_params(ur5e.TrainEventCfg.reset_from_reset_states, dataset_dir=G1D_DATASET_DIR)
+    reset_from_reset_states = _with_params(_UR5E_TRAIN_EVENTS.reset_from_reset_states, dataset_dir=G1D_DATASET_DIR)
 
 
 @configclass
 class G1dTrainEvalEventCfg(ur5e.TrainEvalEventCfg):
     randomize_gripper_actuator_parameters = _GRIPPER_GAINS
     reset_from_reset_states = _with_params(
-        ur5e.TrainEvalEventCfg.reset_from_reset_states, dataset_dir=G1D_DATASET_DIR
+        _UR5E_TRAIN_EVAL_EVENTS.reset_from_reset_states, dataset_dir=G1D_DATASET_DIR
     )
 
 
@@ -139,10 +147,10 @@ class G1dObservationsCfg(ur5e.ObservationsCfg):
 @configclass
 class G1dRewardsCfg(ur5e.RewardsCfg):
     joint_vel = _with_params(
-        ur5e.RewardsCfg.joint_vel, asset_cfg=SceneEntityCfg("robot", joint_names=["right_shoulder_.*", "right_elbow_joint", "right_wrist_.*"])
+        _UR5E_REWARDS.joint_vel, asset_cfg=SceneEntityCfg("robot", joint_names=["right_shoulder_.*", "right_elbow_joint", "right_wrist_.*"])
     )
     ee_asset_distance = _with_params(
-        ur5e.RewardsCfg.ee_asset_distance, root_asset_cfg=SceneEntityCfg("robot", body_names=DEX1_BASE_BODY_NAME)
+        _UR5E_REWARDS.ee_asset_distance, root_asset_cfg=SceneEntityCfg("robot", body_names=DEX1_BASE_BODY_NAME)
     )
 
 
