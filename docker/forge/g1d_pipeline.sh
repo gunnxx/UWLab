@@ -46,13 +46,14 @@ if has_stage assets; then
             '/robots/g1_description/meshes/Dex1_*' '/robots/g1_description/meshes/dex1_col_*' && git checkout -q)
         log "assets: building URDFs"
         python -m uwlab_assets.robots.unitree_g1d_dex1.build_urdf --unitree-ros "${UNITREE_ROS}" --out-dir "${ASSET_DIR}" ${BUILD_ARGS:-}
-        # the converter uses the new launcher args; accept either spelling of the headless flag
-        convert() { python scripts/tools/convert_urdf.py "$@" --visualizer none || python scripts/tools/convert_urdf.py "$@" --headless; }
+        # convert inside a Kit app (scripts/tools/convert_urdf.py imports pxr before launching and breaks here)
         log "assets: converting to USD (robot, fixed base)"
-        convert "${ASSET_DIR}/g1d_dex1_right_arm.urdf" "${ASSET_DIR}/g1d_dex1_right_arm.usd" --fix_base --joint_stiffness 0 --joint_damping 0
+        python scripts_v2/tools/convert_urdf_kit.py "${ASSET_DIR}/g1d_dex1_right_arm.urdf" "${ASSET_DIR}/g1d_dex1_right_arm.usd" \
+            --fix_base --joint_stiffness 0 --joint_damping 0 "${VIS[@]}"
         log "assets: converting to USD (floating gripper)"
-        convert "${ASSET_DIR}/dex1_gripper.urdf" "${ASSET_DIR}/dex1_gripper.usd" --joint_stiffness 0 --joint_damping 0
-        test -f "${ASSET_DIR}/g1d_dex1_right_arm.usd" && test -f "${ASSET_DIR}/dex1_gripper.usd"
+        python scripts_v2/tools/convert_urdf_kit.py "${ASSET_DIR}/dex1_gripper.urdf" "${ASSET_DIR}/dex1_gripper.usd" \
+            --joint_stiffness 0 --joint_damping 0 "${VIS[@]}"
+        [[ -f "${ASSET_DIR}/g1d_dex1_right_arm.usd" && -f "${ASSET_DIR}/dex1_gripper.usd" ]] || { log "assets: USD conversion failed"; exit 1; }
         ls -la "${ASSET_DIR}"
         if [[ -n "${CACHE}" ]]; then mkdir -p "${CACHE}/assets" && rsync -a "${ASSET_DIR}/" "${CACHE}/assets/" && log "assets: cached"; fi
     fi
@@ -61,7 +62,7 @@ fi
 # ---------------------------------------------------------------------------------------------------- datasets
 if has_stage datasets; then
     # dataset folder name = sorted USD parent-directory names of the two objects (see mdp/utils.compute_pair_dir)
-    PAIR="$(python3 - "${INSERTIVE}" "${RECEPTIVE}" <<'PY'
+    PAIR="$(python - "${INSERTIVE}" "${RECEPTIVE}" <<'PY'
 import sys
 names = {"peg": "Peg", "peghole": "PegHole", "fbleg": "SquareLeg", "fbtabletop": "SquareTableTop",
          "fbdrawerbottom": "DrawerBottom", "fbdrawerbox": "DrawerBox", "cupcake": "CupCake", "plate": "Plate",
