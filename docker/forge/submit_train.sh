@@ -23,6 +23,10 @@
 #   survives the pod. Defaults: blob-robotics-scus mounted at /mnt/robotics, dir twguntara/omni-reset.
 #   CKPT_DISK="" disables it. MAX_ITER sets --max_iterations (default 3000; repo cap is 40000).
 #
+# Resume: RESUME_PATH=/mnt/robotics/twguntara/omni-reset/<run dir>/model_<n>.pt continues that run
+#   (RSL-RL restores the iteration counter, so MAX_ITER stays the total). The checkpoint disk is
+#   mounted at CKPT_MOUNT, so the path must live under it.
+#
 # Non-interactive: YES=1 skips the confirmation prompt, DRY_RUN=1 stops after the dry-run.
 #
 # Env overrides: IMAGE, GPUS, NUM_ENVS, SEED, HOURS, TASK, JOB_NAME, LOGGER, LOG_PROJECT, RUN_NAME,
@@ -39,10 +43,10 @@ NUM_ENVS="${NUM_ENVS:-16384}"       # per GPU process; the paper used 16384 x 4 
 SEED="${SEED:-42}"
 HOURS="${HOURS:-24}"
 TASK="${TASK:-OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-v0}"
-JOB_NAME="${JOB_NAME:-omnireset-${INSERTIVE}-${RECEPTIVE}-s${SEED}}"
+JOB_NAME="${JOB_NAME:-omnireset-${INSERTIVE}-${RECEPTIVE}-s${SEED}${RESUME_PATH:+-resume}}"
 LOGGER="${LOGGER:-wandb}"
 LOG_PROJECT="${LOG_PROJECT:-omnireset}"
-RUN_NAME="${RUN_NAME:-${TASK}-${INSERTIVE}-${RECEPTIVE}-s${SEED}}"
+RUN_NAME="${RUN_NAME:-${TASK}-${INSERTIVE}-${RECEPTIVE}-s${SEED}${RESUME_PATH:+-resume}}"
 
 if [[ "${LOGGER}" == "wandb" ]]; then
     if [[ -z "${WANDB_API_KEY:-}" && -f "${HOME}/.zshenv" ]]; then
@@ -52,6 +56,7 @@ if [[ "${LOGGER}" == "wandb" ]]; then
 fi
 EXTRA="${EXTRA:-}"
 MAX_ITER="${MAX_ITER:-3000}"
+RESUME_PATH="${RESUME_PATH:-}"
 CODE=/workspace/uwlab
 
 CKPT_DISK="${CKPT_DISK-blob-robotics-scus}"
@@ -70,6 +75,7 @@ CODE_DIR="${CODE_DIR:-}"
 TRAIN="python scripts/reinforcement_learning/rsl_rl/train.py \
   --task ${TASK} --num_envs ${NUM_ENVS} --max_iterations ${MAX_ITER} \
   --logger ${LOGGER} --log_project_name ${LOG_PROJECT} --run_name ${RUN_NAME} --visualizer none \
+  ${RESUME_PATH:+--resume_path ${RESUME_PATH}} \
   agent.seed=${SEED} env.scene.insertive_object=${INSERTIVE} env.scene.receptive_object=${RECEPTIVE} ${EXTRA}"
 if (( GPUS > 1 )); then
     TRAIN="python -m torch.distributed.run --standalone --nnodes 1 --nproc_per_node ${GPUS} \

@@ -66,8 +66,9 @@ bash docker/forge/code_sync.sh feature/forge-omnireset     # inside the notebook
 Checkpoints and TensorBoard files are written to local scratch and rsynced every 10 minutes
 (and at exit) to `/mnt/robotics/twguntara/omni-reset/<timestamp>_<run name>/` on the
 team disk `blob-robotics-scus`. Training never blocks on the shared mount, and the
-destination mirrors RSL-RL's log root, so `--resume_path` can point straight at a synced
-`model_<n>.pt`. Weights & Biases files stay local.
+destination mirrors RSL-RL's log root, so a run that hit its duration cap continues with
+`RESUME_PATH=/mnt/robotics/twguntara/omni-reset/<run dir>/model_<n>.pt docker/forge/submit_train.sh <objs>`
+(the iteration counter resumes, `MAX_ITER` stays the total). Weights & Biases files stay local.
 
 ## 4. Train
 
