@@ -39,14 +39,6 @@ if [[ -n "${CACHE}" ]]; then
     log "full log: ${LOGFILE}"
 fi
 
-# ------------------------------------------------------------------------------------------------------- debug
-if has_stage debug; then
-    log "debug: probing the Dex1 grasp environment (${INSERTIVE})"
-    [[ -f "${ASSET_DIR}/dex1_gripper.usd" ]] || { mkdir -p "${ASSET_DIR}" && rsync -a "${CACHE}/assets/" "${ASSET_DIR}/"; }
-    python scripts_v2/tools/debug_grasp_env.py --task OmniReset-Dex1-GraspSampling-v0 --num_envs "${DEBUG_ENVS:-16}" \
-        --steps "${DEBUG_STEPS:-300}" "${VIS[@]}" env.scene.object="${INSERTIVE}" || log "debug: probe exited with $?"
-fi
-
 # ------------------------------------------------------------------------------------------------------ assets
 if has_stage assets; then
     if [[ "${FORCE}" != 1 && -n "${CACHE}" && -f "${CACHE}/assets/g1d_dex1_right_arm.usd" ]]; then
@@ -66,13 +58,21 @@ if has_stage assets; then
         log "assets: converting to USD (robot, fixed base)"
         python scripts_v2/tools/convert_urdf_kit.py "${ASSET_DIR}/g1d_dex1_right_arm.urdf" "${ASSET_DIR}/g1d_dex1_right_arm.usd" \
             --fix_base --joint_stiffness 0 --joint_damping 0 "${VIS[@]}"
-        log "assets: converting to USD (floating gripper)"
+        log "assets: converting to USD (gripper, fixed base: the sampler moves it by writing the root pose)"
         python scripts_v2/tools/convert_urdf_kit.py "${ASSET_DIR}/dex1_gripper.urdf" "${ASSET_DIR}/dex1_gripper.usd" \
-            --joint_stiffness 0 --joint_damping 0 "${VIS[@]}"
+            --fix_base --joint_stiffness 0 --joint_damping 0 "${VIS[@]}"
         [[ -f "${ASSET_DIR}/g1d_dex1_right_arm.usd" && -f "${ASSET_DIR}/dex1_gripper.usd" ]] || { log "assets: USD conversion failed"; exit 1; }
         ls -la "${ASSET_DIR}"
         if [[ -n "${CACHE}" ]]; then mkdir -p "${CACHE}/assets" && rsync -a "${ASSET_DIR}/" "${CACHE}/assets/" && log "assets: cached"; fi
     fi
+fi
+
+# ------------------------------------------------------------------------------------------------------- debug
+if has_stage debug; then
+    log "debug: probing the Dex1 grasp environment (${INSERTIVE})"
+    [[ -f "${ASSET_DIR}/dex1_gripper.usd" ]] || { mkdir -p "${ASSET_DIR}" && rsync -a "${CACHE}/assets/" "${ASSET_DIR}/"; }
+    python scripts_v2/tools/debug_grasp_env.py --task OmniReset-Dex1-GraspSampling-v0 --num_envs "${DEBUG_ENVS:-16}" \
+        --steps "${DEBUG_STEPS:-300}" "${VIS[@]}" env.scene.object="${INSERTIVE}" || log "debug: probe exited with $?"
 fi
 
 # ---------------------------------------------------------------------------------------------------- datasets

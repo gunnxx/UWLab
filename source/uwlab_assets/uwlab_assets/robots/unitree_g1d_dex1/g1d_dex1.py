@@ -153,7 +153,12 @@ DEX1_GRIPPER = ArticulationCfg(
             max_depenetration_velocity=5.0,
         ),
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
-            enabled_self_collisions=False, solver_position_iteration_count=36, solver_velocity_iteration_count=0
+            enabled_self_collisions=False,
+            solver_position_iteration_count=36,
+            solver_velocity_iteration_count=0,
+            # Anchored like the Robotiq grasp-sampling gripper (fixed root joint to the world); the sampler
+            # moves it by writing the root pose. A free-floating gripper gets dragged down by whatever it holds.
+            fix_root_link=True,
         ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(pos=(0, 0, 0.1), rot=(0, 0, 0, 1), joint_pos=DEX1_DEFAULT_JOINT_POS),
