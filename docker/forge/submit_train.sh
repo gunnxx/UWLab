@@ -23,9 +23,10 @@
 #   survives the pod. Defaults: blob-robotics-scus mounted at /mnt/robotics, dir twguntara/omni-reset.
 #   CKPT_DISK="" disables it. MAX_ITER sets --max_iterations (default 3000; repo cap is 40000).
 #
-# Resume: RESUME_PATH=/mnt/robotics/twguntara/omni-reset/<run dir>/model_<n>.pt continues that run
-#   (RSL-RL restores the iteration counter, so MAX_ITER stays the total). The checkpoint disk is
-#   mounted at CKPT_MOUNT, so the path must live under it.
+# Resume: RESUME_PATH=/mnt/robotics/twguntara/omni-reset/<run dir>/model_<n>.pt continues that run.
+#   RSL-RL restores the iteration counter but treats --max_iterations as *additional* iterations,
+#   so the helper passes MAX_ITER - n (MAX_ITER stays the intended total; n is parsed from the
+#   checkpoint file name). The checkpoint disk is mounted at CKPT_MOUNT; the path must live under it.
 #
 # Non-interactive: YES=1 skips the confirmation prompt, DRY_RUN=1 stops after the dry-run.
 #
@@ -57,6 +58,16 @@ fi
 EXTRA="${EXTRA:-}"
 MAX_ITER="${MAX_ITER:-3000}"
 RESUME_PATH="${RESUME_PATH:-}"
+ITERS_ARG="${MAX_ITER}"
+if [[ -n "${RESUME_PATH}" ]]; then
+    if [[ "${RESUME_PATH}" =~ model_([0-9]+)\.pt$ ]]; then
+        ITERS_ARG=$(( MAX_ITER - BASH_REMATCH[1] ))
+        (( ITERS_ARG > 0 )) || { echo "checkpoint iteration ${BASH_REMATCH[1]} >= MAX_ITER ${MAX_ITER}; nothing to do" >&2; exit 1; }
+        echo "resume from iteration ${BASH_REMATCH[1]}: ${ITERS_ARG} more iterations to reach ${MAX_ITER}"
+    else
+        echo "RESUME_PATH does not end in model_<n>.pt; passing MAX_ITER=${MAX_ITER} as additional iterations" >&2
+    fi
+fi
 CODE=/workspace/uwlab
 
 CKPT_DISK="${CKPT_DISK-blob-robotics-scus}"
@@ -73,7 +84,7 @@ MOUNT_PATH="${MOUNT_PATH:-/mnt/uwlab-code}"
 CODE_DIR="${CODE_DIR:-}"
 
 TRAIN="python scripts/reinforcement_learning/rsl_rl/train.py \
-  --task ${TASK} --num_envs ${NUM_ENVS} --max_iterations ${MAX_ITER} \
+  --task ${TASK} --num_envs ${NUM_ENVS} --max_iterations ${ITERS_ARG} \
   --logger ${LOGGER} --log_project_name ${LOG_PROJECT} --run_name ${RUN_NAME} --visualizer none \
   ${RESUME_PATH:+--resume_path ${RESUME_PATH}} \
   agent.seed=${SEED} env.scene.insertive_object=${INSERTIVE} env.scene.receptive_object=${RECEPTIVE} ${EXTRA}"
