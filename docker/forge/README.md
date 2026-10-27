@@ -9,10 +9,11 @@ without rebuilding the image on every code change.
   Isaac Lab 3.0 EA (pin inside `uwlab.sh`), torch 2.11+cu128, RSL-RL (pin in
   `source/uwlab_rl/setup.py`), and the four `uwlab*` extensions installed
   **editable** from `/workspace/uwlab`.
-* A Forge disk holding your working copy is mounted **over** `/workspace/uwlab`
-  at job time. The editable installs resolve to whatever is at that path, so the
-  mounted code is what runs. No `pip install`, no rebuild.
-* Everything that has to survive that mount lives outside `/workspace/uwlab`:
+* The code is **not** in the image. At job start a snapshot of your working copy
+  (uploaded by `push_code.sh`, see section 2) is extracted into `/workspace/uwlab`,
+  the pod's local scratch. The editable installs resolve to whatever is at that path,
+  so the extracted code is what runs. No `pip install`, no rebuild, no push.
+* Everything that has to survive that replacement lives outside `/workspace/uwlab`:
   Isaac Sim (`/isaac-sim`), the Isaac Lab clone (`/opt/uwlab-deps/_isaaclab`), and
   the `python` / `pip` / `uwlab` wrappers in `/usr/local/bin`.
 
@@ -124,20 +125,41 @@ is mounted).
 
 ## 2. How code reaches the job
 
-**Default: clone at job start.** `submit_train.sh` makes every job run
-`git clone --depth 1 -b <branch> <fork>` into `/workspace/uwlab`, the pod's local
-scratch volume (hundreds of GB, local SSD). The repo is ~30 MB, so this costs about
-two seconds. The editable installs in the image point at `/workspace/uwlab`, so the
-cloned code is what runs. Push to the fork before submitting; the job never sees your
-laptop. Forge mounts its own ephemeral volume at `/workspace`, which hides the copy
-baked into the image, so some code source is always required.
+**Default: a tarball of your working copy, extracted at job start.** `push_code.sh`
+snapshots the laptop checkout (tracked files plus untracked files that are not
+gitignored, so uncommitted edits ship and logs/datasets do not; ~22 MB) and uploads it to
+`/mnt/robotics/twguntara/code/uwlab-src.tar.gz` on the team disk through an SSH
+notebook that mounts the disk. `submit_train.sh` (`CODE_SOURCE=tar`) makes the job mount
+that disk (it already does, for checkpoints), extract the tarball into `/workspace/uwlab`
+on the pod's local scratch and run from there. No image rebuild, no commit, no push for a
+code change; two jobs never share a working tree, and a job keeps the snapshot it started
+with even if you push again. The job log starts with the snapshot's `[code] commit …`
+stamp. The helper warns at submit time when the working tree differs from the last push.
 
-**Why not a mounted disk.** The first attempt used a shared `blob` disk mounted at
-`/workspace/uwlab`. After one successful run the blobfuse mount stopped enumerating
-directories (`ls` empty, `find` found 0 files) while files were still readable by
-path, and Python could no longer import sibling modules such as `cli_args`. Blobfuse
-is not a filesystem for git trees. The `disk` (Premium SSD, RWO) profile would work,
-but it is single-attach, so parallel seeds would each need their own disk.
+```bash
+# once: a CPU-only SSH notebook as the upload channel (lives up to 168 h)
+forge notebook create --name uwlab-code-push --type ssh --gpu 0 --duration 168 \
+    --disk-mount blob-robotics-scus:/mnt/robotics -m "UW Lab code upload channel (push_code.sh)"
+# every time the code changed
+docker/forge/push_code.sh                 # or: docker/forge/push_code.sh <other-notebook>
+docker/forge/submit_train.sh peg peghole
+```
+
+**Alternative: clone at job start** (`CODE_SOURCE=git`). The job runs
+`git clone --depth 1 -b <branch> <fork>` into `/workspace/uwlab` (~2 s). Push to the fork
+before submitting; the job never sees your laptop. Forge mounts its own ephemeral volume
+at `/workspace`, which hides the copy baked into the image, so some code source is
+always required.
+
+**Why not run from a mounted disk directly.** The first attempt mounted a shared `blob`
+(blobfuse) disk at `/workspace/uwlab`. After one successful run the mount stopped
+enumerating directories (`ls` empty, `find` found 0 files) while files were still
+readable by path, and Python could no longer import sibling modules such as `cli_args`.
+Blobfuse is not a filesystem for git trees; reading a single tarball by path and
+extracting it locally sidesteps the problem entirely. (The team disk `blob-robotics-scus`
+is in fact served over NFS, which lists fine, but local extraction is still faster and
+isolates concurrent jobs.) The `disk` (Premium SSD, RWO) profile would work for a direct
+mount but is single-attach, so parallel seeds would each need their own disk;
 `CODE_SOURCE=disk DISK=<name>` remains available for that case.
 
 **Interactive editing on the cluster.** Start an SSH notebook on the image, clone the
@@ -177,7 +199,8 @@ The equivalent raw command:
 ```bash
 forge job dry-run --name omnireset-peg-s42 -m "OmniReset peg insertion, seed 42" \
     --image uwlab-omnireset:slim-4bfca44 --gpu 4 --max-duration 24 \
-    --entrypoint "uwlab-init-cache; git clone -q --depth 1 -b feature/forge-omnireset https://github.com/gunnxx/UWLab.git /workspace/uwlab && cd /workspace/uwlab && python -m torch.distributed.run --nnodes 1 --nproc_per_node 4 \
+    --disk-mount blob-robotics-scus:/mnt/robotics \
+    --entrypoint "uwlab-init-cache; mkdir -p /workspace/uwlab && tar xzf /mnt/robotics/twguntara/code/uwlab-src.tar.gz -C /workspace/uwlab && cd /workspace/uwlab && python -m torch.distributed.run --nnodes 1 --nproc_per_node 4 \
       scripts/reinforcement_learning/rsl_rl/train.py \
       --task OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-v0 --num_envs 16384 \
       --logger tensorboard --visualizer none --distributed agent.seed=42 \
@@ -189,8 +212,8 @@ Notes
 * The cluster is single-node (`forge cluster info`: MULTI-NODE no), so use
   `--gpu N` and `python -m torch.distributed.run` yourself; `--num-nodes` stays 1.
 * `--num_envs` is **per process**. 16384 x 4 GPUs is the paper configuration.
-* Logs land in `/workspace/uwlab/logs/rsl_rl/...` on the code disk. Each job
-  writes its own run directory, which is safe on blob.
+* Logs land in `/workspace/uwlab/logs/rsl_rl/...` on local scratch and are
+  rsynced to the team disk (see section 2); the pod's scratch is gone when it ends.
 * `python` in the image is Isaac Sim's `python.sh`. Use it for everything.
 * Evaluation: same image, `--gpu 1`, entrypoint
   `cd /workspace/uwlab && python scripts/reinforcement_learning/rsl_rl/play.py --task OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-Play-v0 --num_envs 1 --visualizer none --checkpoint <path> env.scene.insertive_object=peg env.scene.receptive_object=peghole`.

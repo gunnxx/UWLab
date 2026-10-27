@@ -6,13 +6,18 @@
 #   GIT_REF=my-branch docker/forge/submit_train.sh peg peghole     # train another branch of the fork
 #
 # Code source (CODE_SOURCE):
-#   git  (default) clone ${GIT_REPO}@${GIT_REF} into /workspace/uwlab at job start.
-#                  /workspace is the pod's local scratch volume; the clone takes ~2 s.
+#   tar  (default) extract ${CODE_MOUNT}/${CODE_TAR} (uploaded from your laptop by
+#                  docker/forge/push_code.sh, uncommitted edits included) into /workspace/uwlab,
+#                  the pod's local scratch volume. ~22 MB, a few seconds. The tarball lives on
+#                  CODE_DISK (default: the checkpoint disk, so no extra mount). The helper warns
+#                  when the working tree differs from the last push.
+#   git            clone ${GIT_REPO}@${GIT_REF} into /workspace/uwlab at job start (~2 s).
 #                  Push before you submit: the job sees the fork, not your laptop.
 #   disk           mount a Forge disk at ${MOUNT_PATH} and symlink /workspace/uwlab to
 #                  ${MOUNT_PATH}/${CODE_DIR}. Only for a `disk` (fast, RWO) profile.
 #                  Blob (blobfuse) disks lost directory listings under a git tree and
-#                  broke Python imports (2026-10-24); do not use them for code.
+#                  broke Python imports (2026-10-24); do not run code from them. (The tar
+#                  source reads one file and extracts locally, which is why it is safe.)
 #
 # Logging: wandb by default, project "omnireset", run name "<task>-<objects>-s<seed>".
 #   WANDB_API_KEY is taken from the environment, else from ~/.zshenv. LOGGER=tensorboard disables it.
@@ -31,9 +36,13 @@
 # Non-interactive: YES=1 skips the confirmation prompt, DRY_RUN=1 stops after the dry-run.
 #
 # Env overrides: IMAGE, GPUS, NUM_ENVS, SEED, HOURS, TASK, JOB_NAME, LOGGER, LOG_PROJECT, RUN_NAME,
-#                MAX_ITER, EXTRA, CODE_SOURCE, GIT_REPO, GIT_REF, DISK, MOUNT_PATH, CODE_DIR,
+#                MAX_ITER, EXTRA, CODE_SOURCE, CODE_DISK, CODE_MOUNT, CODE_TAR, GIT_REPO, GIT_REF,
+#                DISK, MOUNT_PATH, CODE_DIR,
 #                CKPT_DISK, CKPT_MOUNT, CKPT_DIR, SYNC_MINUTES, WANDB_API_KEY, WANDB_ENTITY, YES, DRY_RUN
 set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=_lib.sh
+source "${HERE}/_lib.sh"
 
 INSERTIVE="${1:?insertive object (e.g. peg)}"
 RECEPTIVE="${2:?receptive object (e.g. peghole)}"
@@ -76,7 +85,10 @@ CKPT_DIR="${CKPT_DIR:-twguntara/omni-reset}"
 SYNC_MINUTES="${SYNC_MINUTES:-10}"
 EXPERIMENT_DIR="logs/rsl_rl/ur5e_robotiq_2f85_omnireset_agent"   # experiment_name in rsl_rl_cfg.py
 
-CODE_SOURCE="${CODE_SOURCE:-git}"
+CODE_SOURCE="${CODE_SOURCE:-tar}"
+CODE_DISK="${CODE_DISK-${CKPT_DISK}}"
+CODE_MOUNT="${CODE_MOUNT:-${CKPT_MOUNT}}"
+CODE_TAR="${CODE_TAR:-twguntara/code/uwlab-src.tar.gz}"
 GIT_REPO="${GIT_REPO:-https://github.com/gunnxx/UWLab.git}"
 GIT_REF="${GIT_REF:-feature/forge-omnireset}"
 DISK="${DISK:-}"
@@ -96,6 +108,25 @@ fi
 ARGS=(--name "${JOB_NAME}" --image "${IMAGE}" --gpu "${GPUS}" --max-duration "${HOURS}")
 
 case "${CODE_SOURCE}" in
+  tar)
+    [[ -n "${CODE_DISK}" ]] || { echo "CODE_SOURCE=tar needs CODE_DISK (or CKPT_DISK)" >&2; exit 1; }
+    PREP="rm -rf ${CODE} && mkdir -p ${CODE} && tar xzf ${CODE_MOUNT}/${CODE_TAR} -C ${CODE} && \
+ln -s /isaac-sim ${CODE}/_isaac_sim && ln -s /opt/uwlab-deps/_isaaclab ${CODE}/_isaaclab && \
+cd ${CODE} && echo \"[code] \$(cat .forge-code-stamp)\""
+    if [[ "${CODE_DISK}:${CODE_MOUNT}" != "${CKPT_DISK}:${CKPT_MOUNT}" ]]; then
+        ARGS+=(--disk-mount "${CODE_DISK}:${CODE_MOUNT}")
+    fi
+    SRC_DESC="code tarball ${CODE_TAR}"
+    LAST="${HERE}/../../.forge-last-push"
+    if [[ -f "${LAST}" ]]; then
+        if [[ "$(sed -n 's/^hash=//p' "${LAST}")" != "$(uwlab_tree_hash "${HERE}/../..")" ]]; then
+            echo "WARNING: working tree differs from the last push_code.sh upload ($(sed -n 's/^stamp=//p' "${LAST}"))." >&2
+            echo "         The job trains that older snapshot unless you run docker/forge/push_code.sh first." >&2
+        fi
+    else
+        echo "WARNING: no record of a push_code.sh upload on this machine; the job trains whatever ${CODE_TAR} holds." >&2
+    fi
+    ;;
   git)
     PREP="rm -rf ${CODE} && git clone -q --depth 1 -b ${GIT_REF} ${GIT_REPO} ${CODE} && \
 ln -s /isaac-sim ${CODE}/_isaac_sim && ln -s /opt/uwlab-deps/_isaaclab ${CODE}/_isaaclab && \
