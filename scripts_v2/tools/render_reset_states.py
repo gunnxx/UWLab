@@ -42,8 +42,9 @@ parser.add_argument(
     "--gripper",
     choices=["recorded", "close", "open"],
     default="recorded",
-    help="Gripper target during the settle: the recorded finger positions, or the task's close / open command "
-    "(the recorder commands close while holding the grasped sets).",
+    help="Gripper command during the settle: the task's close / open command through its binary gripper action "
+    "(the recorder commands close while holding the grasped sets), or the recorded finger positions held as targets. "
+    "The arm is always held by the task's own controller at a zero action, as during recording.",
 )
 AppLauncher.add_app_launcher_args(parser)
 args_cli, remaining_args = parser.parse_known_args()
@@ -114,22 +115,26 @@ def main(env_cfg, agent_cfg) -> None:
     robot = env.scene["robot"]
     os.makedirs(args_cli.out_dir, exist_ok=True)
 
+    # The hold replicates what the recorder does while it waits for its success check: the task's own action
+    # terms run with a zero arm action, so the operational-space controller holds the end effector where the
+    # reset put it (joint position targets would do nothing, the arm actuators have no joint stiffness), and the
+    # binary gripper action drives the fingers to the open or close command. With --gripper recorded the finger
+    # targets are overridden with the recorded positions instead.
     gripper_cfg = env.cfg.actions.gripper
-    gripper_expr = {"close": gripper_cfg.close_command_expr, "open": gripper_cfg.open_command_expr}.get(args_cli.gripper)
+    gripper_joint_ids = robot.find_joints(list(gripper_cfg.close_command_expr.keys()))[0]
+    actions = torch.zeros((env.num_envs, env.action_manager.total_action_dim), device=device)
+    actions[:, -1] = {"close": -1.0, "open": 1.0}.get(args_cli.gripper, 0.0)
 
     def hold_and_render(num_steps: int):
-        # hold the recorded arm configuration as a fixed target while physics runs and the renderer catches
-        # up; the fingers either stay at their recorded positions or are driven to the task's open / close
-        # command, which is what the recorder does while it holds a state before the success check
-        hold_pos = robot.data.joint_pos.clone()
-        if gripper_expr is not None:
-            for expr, value in gripper_expr.items():
-                ids = robot.find_joints(expr)[0]
-                hold_pos[:, ids] = value
-        for _ in range(num_steps):
-            robot.set_joint_position_target(hold_pos)
-            robot.set_joint_velocity_target(torch.zeros_like(robot.data.joint_vel))
-            robot.write_data_to_sim()
+        hold_pos = robot.data.joint_pos[:, gripper_joint_ids].clone()
+        env.action_manager.reset()
+        for i in range(num_steps):
+            if i % env.cfg.decimation == 0:
+                env.action_manager.process_action(actions)
+            env.action_manager.apply_action()
+            if args_cli.gripper == "recorded":
+                robot.set_joint_position_target(hold_pos, joint_ids=gripper_joint_ids)
+            env.scene.write_data_to_sim()
             env.sim.step(render=True)
             # asset data buffers refresh lazily on the scene timestamp; without this the poses read
             # below would still be the values written at reset, whatever physics did in between

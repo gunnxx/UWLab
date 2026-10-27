@@ -67,8 +67,9 @@ docker/forge/run_local.sh python scripts_v2/tools/visualize_reset_states.py \
 Without a display, `scripts_v2/tools/render_reset_states.py` writes the first N states of every set as images
 (one camera per environment, RTX, `--viz none`): `--task ... --dataset_dir ... --out_dir logs/reset_renders`.
 By default it shows the state as recorded (two physics steps). `--settle_steps 240 --gripper close` shows the
-same states after two seconds with the arm held and the gripper driven closed, which is what the recorder does
-during its hold, and `poses.json` next to the images holds the peg, hole and end-effector positions so two
+same states after two seconds with the task's own controller holding the arm at a zero action and the gripper
+commanded closed, which is what the recorder does during its hold (joint position targets would not hold the
+arm: the arm actuators have no joint stiffness, the OSC supplies the torques), and `poses.json` next to the images holds the peg, hole and end-effector positions so two
 renders can be compared numerically. A recorded grasp holds the peg only while the gripper is *commanded*
 closed: the dataset stores finger positions, the clamping force comes from the position target being past the
 contact, so a policy that opens the gripper on its first step drops the peg by design.
