@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Relative Cartesian OSC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.11/contrib/auto-render.min.js"></script>
+<style>
+/* Layout: a single reading column of about 68 characters, figures allowed to run a little wider. */
+:root {
+  --paper: #f7f8f7;
+  --paper-2: #eceeec;
+  --ink: #1b2024;
+  --ink-2: #4a5259;
+  --ink-3: #7a838a;
+  --rule: #cfd4d6;
+  --accent: #1f6f8b;      /* "desired" / series 1 */
+  --accent-2: #b8571c;    /* "current"  / series 2 */
+  --accent-soft: #dfeaef;
+  --code-bg: #eef1f1;
+  --font-body: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --font-ui: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #161a1d; --paper-2: #1f2529; --ink: #e6e9ea; --ink-2: #b4bcc1; --ink-3: #8a949b;
+    --rule: #3a4349; --accent: #6cb8d2; --accent-2: #ef9a5a; --accent-soft: #203640; --code-bg: #1d2327;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #161a1d; --paper-2: #1f2529; --ink: #e6e9ea; --ink-2: #b4bcc1; --ink-3: #8a949b;
+  --rule: #3a4349; --accent: #6cb8d2; --accent-2: #ef9a5a; --accent-soft: #203640; --code-bg: #1d2327;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 18px;
+  line-height: 1.6;
+  padding-block: 0 6rem;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.page { max-width: 44rem; margin: 0 auto; }
+header.title {
+  border-bottom: 1px solid var(--rule);
+  padding-block: 3.5rem 1.5rem;
+  margin-bottom: 2.5rem;
+}
+.eyebrow {
+  font-family: var(--font-ui); font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--ink-3); margin: 0 0 0.75rem;
+}
+h1 { font-size: 2.4rem; line-height: 1.15; font-weight: 600; margin: 0 0 0.75rem; text-wrap: balance; }
+.lede { font-size: 1.15rem; color: var(--ink-2); margin: 0; }
+h2 { font-size: 1.55rem; font-weight: 600; margin: 3rem 0 1rem; line-height: 1.25; text-wrap: balance; }
+h2 .num { color: var(--ink-3); font-weight: 400; margin-right: 0.5rem; font-variant-numeric: tabular-nums; }
+h3 { font-size: 1.15rem; font-weight: 600; margin: 2rem 0 0.6rem; }
+p { margin: 0 0 1.1rem; }
+ul, ol { margin: 0 0 1.1rem; padding-left: 1.4rem; }
+li { margin-bottom: 0.4rem; }
+em { font-style: italic; }
+a { color: var(--accent); }
+code, pre { font-family: var(--font-mono); font-size: 0.86em; }
+code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 3px; }
+pre {
+  background: var(--code-bg); border-left: 3px solid var(--accent); padding: 0.9rem 1rem;
+  overflow-x: auto; line-height: 1.5; margin: 0 0 1.2rem; border-radius: 0 4px 4px 0;
+}
+pre code { background: none; padding: 0; }
+.katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.3rem 0; margin: 0.8rem 0 1.2rem; }
+.katex { font-size: 1.05em; }
+
+.toc { font-family: var(--font-ui); font-size: 0.95rem; border: 1px solid var(--rule); padding: 1rem 1.25rem; border-radius: 4px; margin-bottom: 2.5rem; }
+.toc p { margin: 0 0 0.5rem; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.75rem; }
+.toc ol { margin: 0; padding-left: 1.3rem; columns: 2; column-gap: 2rem; }
+.toc li { break-inside: avoid; margin-bottom: 0.25rem; }
+.toc a { text-decoration: none; color: var(--ink); }
+.toc a:hover { color: var(--accent); }
+@media (max-width: 560px) { .toc ol { columns: 1; } body { font-size: 17px; } h1 { font-size: 2rem; } }
+
+figure { margin: 1.5rem 0 2rem; }
+figure.wide { margin-left: -2rem; margin-right: -2rem; }
+@media (max-width: 760px) { figure.wide { margin-left: 0; margin-right: 0; } }
+figure svg { display: block; max-width: 100%; height: auto; font-family: var(--font-ui); }
+figcaption {
+  font-family: var(--font-ui); font-size: 0.88rem; color: var(--ink-2); line-height: 1.5;
+  margin-top: 0.7rem; padding-top: 0.5rem; border-top: 1px solid var(--rule);
+}
+figcaption b { color: var(--ink); font-weight: 600; }
+.scroll { overflow-x: auto; }
+
+.def, .note {
+  border: 1px solid var(--rule); border-radius: 4px; padding: 1rem 1.2rem; margin: 1.4rem 0 1.6rem;
+  background: var(--paper-2);
+}
+.def .label, .note .label {
+  font-family: var(--font-ui); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--accent); margin: 0 0 0.4rem; font-weight: 600;
+}
+.def p:last-child, .note p:last-child { margin-bottom: 0; }
+
+table { border-collapse: collapse; width: 100%; font-family: var(--font-ui); font-size: 0.92rem; margin: 0 0 1.4rem; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-weight: 600; color: var(--ink-2); font-size: 0.8rem; letter-spacing: 0.04em; text-transform: uppercase; }
+td.n { text-align: right; }
+th.n { text-align: right; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 0.75rem 1.25rem; align-items: center; font-family: var(--font-ui); font-size: 0.9rem; margin-bottom: 0.6rem; }
+.controls label { display: inline-flex; gap: 0.5rem; align-items: center; }
+select { font: inherit; padding: 0.2rem 0.4rem; border: 1px solid var(--rule); border-radius: 3px; background: var(--paper); color: var(--ink); }
+select:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.legend { display: flex; gap: 1.25rem; font-family: var(--font-ui); font-size: 0.85rem; color: var(--ink-2); margin-top: 0.4rem; flex-wrap: wrap; }
+.legend span::before { content: ""; display: inline-block; width: 22px; height: 0; border-top: 2px solid var(--accent); margin-right: 0.45rem; vertical-align: middle; }
+.legend span.s2::before { border-top-color: var(--accent-2); border-top-style: dashed; }
+.chart-tip {
+  position: absolute; pointer-events: none; font-family: var(--font-ui); font-size: 0.8rem; background: var(--ink); color: var(--paper);
+  padding: 0.3rem 0.5rem; border-radius: 3px; white-space: nowrap; transform: translate(-50%, -130%); display: none;
+}
+.chart-wrap { position: relative; }
+footer { margin-top: 4rem; padding-top: 1.2rem; border-top: 1px solid var(--rule); font-family: var(--font-ui); font-size: 0.85rem; color: var(--ink-3); }
+@media (prefers-reduced-motion: no-preference) { .toc a, select { transition: color 120ms; } }
+</style>
+</head>
+<body>
+<div class="page">
+
+<header class="title">
+  <p class="eyebrow">OmniReset &middot; UR5e + Robotiq 2F-85 &middot; Controller notes</p>
+  <h1>From a Desired End-Effector Pose to Joint Torques</h1>
+  <p class="lede">A tutorial on the relative Cartesian operational-space controller that turns the policy's six-dimensional pose delta into the torques applied at the six joints of the UR5e arm.</p>
+</header>
+
+<nav class="toc" aria-label="Contents">
+  <p>Contents</p>
+  <ol>
+    <li><a href="#overview">The pipeline at a glance</a></li>
+    <li><a href="#notation">Frames and notation</a></li>
+    <li><a href="#target">From action to desired pose</a></li>
+    <li><a href="#error">The pose error</a></li>
+    <li><a href="#jacobian">The Jacobian</a></li>
+    <li><a href="#pd">The task-space PD law</a></li>
+    <li><a href="#transpose">From task-space force to joint torque</a></li>
+    <li><a href="#planar">A planar example</a></li>
+    <li><a href="#gains">Gains, damping ratios, and the step response</a></li>
+    <li><a href="#timing">Timing: two control rates</a></li>
+    <li><a href="#actuator">The actuator layer</a></li>
+    <li><a href="#osc">What the controller leaves out</a></li>
+    <li><a href="#code">Mapping the mathematics to the code</a></li>
+  </ol>
+</nav>
+
+<!-- ============================================================ -->
+<h2 id="overview"><span class="num">1</span>The pipeline at a glance</h2>
+
+<p>The reinforcement-learning policy in the OmniReset peg-insertion task does not command joint angles or joint torques directly. Instead, it outputs a small displacement of the end effector, and a controller is responsible for producing the joint torques that realise that displacement. The controller is a <em>relative Cartesian operational-space controller</em>: relative, because the policy specifies a change of pose rather than an absolute pose; Cartesian, because the specification lives in the three-dimensional workspace rather than in joint space; and operational-space, because the control law is written in terms of a force on the end effector that is then mapped to the joints.</p>
+
+<p>Figure 1 shows the whole chain. Two rates are involved. The policy runs once every 0.1 s and produces a new desired pose. Within that interval the physics engine advances twelve times, and at every one of those steps the controller recomputes the torques from the current state and the held desired pose.</p>
+
+<figure class="wide">
+<svg viewBox="0 0 880 300" role="img" aria-label="Block diagram: the policy outputs a 6-D delta at 10 Hz; it is scaled and added to the current pose to form a desired pose that is held; at 120 Hz the controller computes the pose error, applies task-space PD gains, multiplies by the transposed Jacobian, clamps the torque, and passes it through the actuator into the physics engine, whose state feeds back.">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <g fill="none" stroke="currentColor" stroke-width="1.2" color="currentColor">
+    <!-- rate bands -->
+    <rect x="20" y="20" width="300" height="118" rx="6" fill="var(--accent-soft)" stroke="none" opacity="0.55"/>
+    <rect x="20" y="158" width="840" height="122" rx="6" fill="var(--paper-2)" stroke="none"/>
+    <!-- 10 Hz row -->
+    <rect x="36" y="56" width="92" height="46" rx="3"/>
+    <rect x="160" y="56" width="140" height="46" rx="3"/>
+    <!-- 120 Hz row -->
+    <rect x="36" y="196" width="100" height="46" rx="3"/>
+    <rect x="166" y="196" width="118" height="46" rx="3"/>
+    <rect x="314" y="196" width="88" height="46" rx="3"/>
+    <rect x="432" y="196" width="98" height="46" rx="3"/>
+    <rect x="560" y="196" width="118" height="46" rx="3"/>
+    <rect x="708" y="196" width="134" height="46" rx="3"/>
+    <!-- arrows 10 Hz row -->
+    <line x1="128" y1="79" x2="158" y2="79" marker-end="url(#arr)"/>
+    <!-- desired pose down to error -->
+    <path d="M230,102 L230,130 L86,130 L86,194" marker-end="url(#arr)"/>
+    <!-- 120 Hz chain -->
+    <line x1="136" y1="219" x2="164" y2="219" marker-end="url(#arr)"/>
+    <line x1="284" y1="219" x2="312" y2="219" marker-end="url(#arr)"/>
+    <line x1="402" y1="219" x2="430" y2="219" marker-end="url(#arr)"/>
+    <line x1="530" y1="219" x2="558" y2="219" marker-end="url(#arr)"/>
+    <line x1="678" y1="219" x2="706" y2="219" marker-end="url(#arr)"/>
+    <!-- feedback from physics -->
+    <path d="M775,242 L775,266 L60,266 L60,244" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+    <!-- current pose feeds the 10 Hz adder: from physics up -->
+    <path d="M775,196 L775,36 L230,36 L230,54" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+  </g>
+  <g font-size="12" fill="currentColor" text-anchor="middle">
+    <text x="82" y="75">policy</text><text x="82" y="91" fill="var(--ink-3)">a ∈ ℝ⁶</text>
+    <text x="230" y="75">scale + add</text><text x="230" y="91" fill="var(--ink-3)">x_des = x ⊕ (s ⊙ a)</text>
+    <text x="86" y="215">pose error</text><text x="86" y="231" fill="var(--ink-3)">e = x_des ⊖ x</text>
+    <text x="225" y="215">task-space PD</text><text x="225" y="231" fill="var(--ink-3)">F = K_p e − K_d J q̇</text>
+    <text x="358" y="215">transpose</text><text x="358" y="231" fill="var(--ink-3)">τ = Jᵀ F</text>
+    <text x="481" y="215">clamp</text><text x="481" y="231" fill="var(--ink-3)">|τ_i| ≤ τ_max,i</text>
+    <text x="619" y="215">actuator</text><text x="619" y="231" fill="var(--ink-3)">identity / delay</text>
+    <text x="775" y="215">PhysX</text><text x="775" y="231" fill="var(--ink-3)">q, q̇, x</text>
+  </g>
+  <g font-size="11" fill="var(--ink-3)" font-weight="500">
+    <text x="30" y="40">10 Hz · once per policy step</text>
+    <text x="700" y="178" text-anchor="end">120 Hz · every physics step (12 per policy step)</text>
+    <text x="160" y="124" text-anchor="middle">hold x_des</text>
+    <text x="420" y="279" text-anchor="middle">joint state q, q̇ and end-effector pose x read back each step</text>
+    <text x="560" y="31" text-anchor="middle">current pose x at the start of the policy step</text>
+  </g>
+</svg>
+<figcaption><b>Figure 1.</b> The control chain. The upper band runs once per policy step and only decides <em>where</em> the end effector should be. The lower band runs at the physics rate and decides <em>how hard to push</em> toward that place. Dashed arrows carry state read from the simulator.</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="notation"><span class="num">2</span>Frames and notation</h2>
+
+<p>Throughout, all poses, velocities, forces, and Jacobians are expressed in the robot's <em>base frame</em>, which is the frame of the UR5e's <code>base_link</code>. The end effector is the <code>wrist_3_link</code>, the flange to which the gripper is bolted; the gripper itself is not part of the controlled chain. The six arm joints are, in order, the shoulder pan, shoulder lift, elbow, and three wrist joints.</p>
+
+<div class="def">
+<p class="label">Notation</p>
+<p>\( q \in \mathbb{R}^6 \) is the vector of arm joint angles and \( \dot q \) its time derivative. The end-effector pose is the pair \( x = (p, Q) \), where \( p \in \mathbb{R}^3 \) is the position and \( Q \) is a unit quaternion, stored in \((x, y, z, w)\) order as elsewhere in this code base. A rotation can equally be written as a rotation vector \( \theta \, \hat{n} \in \mathbb{R}^3 \), the product of an angle and a unit axis; the controller moves between the two representations freely.</p>
+<p>\( \Delta x \in \mathbb{R}^6 \) denotes a small pose change, with its first three entries a translation and its last three a rotation vector. Subscript \(\mathrm{des}\) marks a desired quantity. \( K_p, K_d \in \mathbb{R}^{6\times 6} \) are diagonal gain matrices, and \( J(q) \in \mathbb{R}^{6\times 6} \) is the geometric Jacobian.</p>
+</div>
+
+<p>Because the position and orientation both have three degrees of freedom, every task-space quantity in this controller is six-dimensional, and the arm has exactly six joints. The Jacobian is therefore square. This coincidence simplifies the exposition but is not essential: the control law below is valid for any number of joints.</p>
+
+<!-- ============================================================ -->
+<h2 id="target"><span class="num">3</span>From action to desired pose</h2>
+
+<p>The policy emits an action \( a \in \mathbb{R}^6 \) whose entries are nominally of unit scale. The first operation multiplies it elementwise by a fixed scale vector \( s \), which converts a dimensionless network output into metres and radians:</p>
+
+\[
+\Delta x \;=\; s \odot a, \qquad
+s_{\text{train}} = (0.02,\,0.02,\,0.02,\;0.02,\,0.02,\,0.2).
+\]
+
+<p>During the first training stage a unit action therefore requests a 2 cm translation along any axis, a rotation of 0.02 rad (about 1.1°) about the base \(x\) or \(y\) axes, and a rotation of 0.2 rad (about 11.5°) about the base \(z\) axis. The larger allowance about \(z\) reflects the task: aligning a peg with a hole mostly requires turning the tool about its own axis.</p>
+
+<p>The translational part of the desired pose is simply the current position plus the commanded displacement:</p>
+
+\[
+p_{\mathrm{des}} \;=\; p \;+\; \Delta x_{1:3}.
+\]
+
+<p>The rotational part requires more care, because rotations do not add. The last three entries of \( \Delta x \) form a rotation vector \( \mathbf{r} = \Delta x_{4:6} \). Its magnitude is the rotation angle and its direction is the rotation axis:</p>
+
+\[
+\theta = \lVert \mathbf{r} \rVert, \qquad \hat{n} = \mathbf{r} / \theta \quad (\theta > 10^{-6}),
+\]
+
+<p>and the corresponding unit quaternion is obtained from the exponential map,</p>
+
+\[
+\Delta Q \;=\; \Big( \hat{n} \sin\tfrac{\theta}{2},\; \cos\tfrac{\theta}{2} \Big).
+\]
+
+<p>When \( \theta \) is below the threshold, the axis is undefined and the code substitutes the identity rotation \( \Delta Q = (0,0,0,1) \). The desired orientation is then the composition</p>
+
+\[
+Q_{\mathrm{des}} \;=\; \Delta Q \,\otimes\, Q,
+\]
+
+<p>where \( \otimes \) is the quaternion (Hamilton) product. The order matters. Multiplying on the left applies \( \Delta Q \) <em>after</em> \( Q \) and therefore expresses the rotation in the base frame: a positive \( \mathbf{r} \) about the base \( z \) axis always turns the tool about the vertical, regardless of how the tool is currently oriented. Had the delta been multiplied on the right, it would have been interpreted in the tool's own frame.</p>
+
+<div class="note">
+<p class="label">Why "relative" is a design decision</p>
+<p>Because \( x_{\mathrm{des}} \) is rebuilt from the <em>measured</em> pose at every policy step, the target can never run away from the robot. If contact with the hole stops the peg, the next policy step starts again from where the peg actually is, and the accumulated error is wiped out. This is what makes the scheme safe for contact-rich insertion: a stuck end effector never results in an ever-growing restoring force.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="error"><span class="num">4</span>The pose error</h2>
+
+<p>At every physics step the controller reads the current pose \( x = (p, Q) \) and compares it with the held target. The position error is the plain difference,</p>
+
+\[
+e_p \;=\; p_{\mathrm{des}} - p \;\in\; \mathbb{R}^3 .
+\]
+
+<p>The orientation error is the rotation that takes the current orientation to the desired one. In quaternion form it is</p>
+
+\[
+Q_{e} \;=\; Q_{\mathrm{des}} \,\otimes\, Q^{-1},
+\]
+
+<p>which satisfies \( Q_e \otimes Q = Q_{\mathrm{des}} \), as required. This quaternion is converted back to a rotation vector by the logarithmic map, the inverse of the construction in Section 3:</p>
+
+\[
+e_o \;=\; \log(Q_e) \;=\; 2\,\operatorname{atan2}\!\big(\lVert \mathbf{v} \rVert,\, w\big)\,\frac{\mathbf{v}}{\lVert \mathbf{v} \rVert}, \qquad Q_e = (\mathbf{v}, w).
+\]
+
+<p>For small misalignments, \( e_o \) is approximately twice the vector part of \( Q_e \), and it behaves like an ordinary three-dimensional error signal: its direction is the axis about which the tool must turn and its magnitude is the remaining angle. The full six-dimensional error is the concatenation</p>
+
+\[
+e \;=\; \begin{bmatrix} e_p \\ e_o \end{bmatrix} \in \mathbb{R}^6 .
+\]
+
+<p>Immediately after a policy step, before the arm has moved, the error equals the commanded delta: \( e = \Delta x \). As the arm moves, the error shrinks toward zero.</p>
+
+<!-- ============================================================ -->
+<h2 id="jacobian"><span class="num">5</span>The Jacobian</h2>
+
+<p>The geometric Jacobian links joint velocities to the linear and angular velocity of the end effector:</p>
+
+\[
+\begin{bmatrix} v \\ \omega \end{bmatrix} \;=\; J(q)\,\dot q, \qquad J(q) \in \mathbb{R}^{6 \times 6}.
+\]
+
+<p>Each column of \( J \) is the end-effector twist produced by unit velocity at one joint while the others are held still. For a revolute joint \( i \) with axis \( \hat{z}_i \) through the point \( o_i \), that column is</p>
+
+\[
+J_{:,i} \;=\; \begin{bmatrix} \hat{z}_i \times (p - o_i) \\ \hat{z}_i \end{bmatrix},
+\]
+
+<p>where \( p \) is the end-effector position. The cross product expresses the familiar fact that rotating about a distant axis sweeps the tool through a large arc, whereas rotating about a nearby axis barely moves it.</p>
+
+<p>The controller does not query the physics engine for this matrix. It evaluates a closed-form expression derived from the UR5e's kinematic parameters, with the parameters replaced by values measured on the physical robot during calibration. This choice is deliberate. The real robot's controller uses exactly the same analytical Jacobian, so using it in simulation removes one source of discrepancy between the two. For the same reason the end-effector velocity entering the damping term is not read from the simulator but computed as \( J\dot q \) from the measured joint velocities, which keeps the velocity and the Jacobian mutually consistent.</p>
+
+<!-- ============================================================ -->
+<h2 id="pd"><span class="num">6</span>The task-space PD law</h2>
+
+<p>With an error and a velocity in hand, the controller computes a <em>virtual wrench</em>, a force and a moment that one would like to apply to the end effector:</p>
+
+\[
+F \;=\; K_p\, e \;+\; K_d\,\big( \dot x_{\mathrm{des}} - J\dot q \big), \qquad \dot x_{\mathrm{des}} = 0 .
+\]
+
+<p>The proportional term pulls the end effector toward the target in proportion to the remaining error, exactly as a spring would. The derivative term opposes the end-effector velocity, as a damper would. Because the target is held constant between policy steps, the desired velocity is zero and the damping term reduces to \( -K_d J \dot q \). The analogy is therefore literal: the controller behaves as if six springs and six dampers, one per Cartesian direction, connected the tool to an invisible anchor at \( x_{\mathrm{des}} \).</p>
+
+<p>Both gain matrices are diagonal, so each direction is tuned independently. The stiffness matrix is specified directly; the damping is derived from it through a <em>damping ratio</em> \( \zeta \):</p>
+
+\[
+K_d \;=\; 2\,\zeta \sqrt{K_p}, \qquad \text{elementwise}.
+\]
+
+<p>To see where this comes from, consider a single direction and suppose, for the moment, that the end effector behaved as a point of unit mass. Its motion would obey</p>
+
+\[
+\ddot e + K_d\,\dot e + K_p\, e = 0,
+\]
+
+<p>the equation of a damped harmonic oscillator with natural frequency \( \omega_n = \sqrt{K_p} \). Writing \( K_d = 2\zeta\omega_n \) gives the standard form \( \ddot e + 2\zeta\omega_n \dot e + \omega_n^2 e = 0 \), in which \( \zeta \) alone decides the shape of the response: \( \zeta < 1 \) oscillates, \( \zeta = 1 \) returns to zero as fast as possible without overshooting, and \( \zeta > 1 \) returns more slowly and without overshoot. Section 9 shows what the two gain sets used in OmniReset look like under this model.</p>
+
+<!-- ============================================================ -->
+<h2 id="transpose"><span class="num">7</span>From task-space force to joint torque</h2>
+
+<p>The wrench \( F \) is a fiction: no actuator pushes on the wrist. What the robot can do is apply a torque \( \tau_i \) at each joint. The question is which joint torques are equivalent to the desired wrench, and the answer is given by the principle of virtual work.</p>
+
+<p>Suppose the joints move by an infinitesimal displacement \( \delta q \). The end effector then moves by \( \delta x = J \delta q \). The work done by the joint torques is \( \tau^{\mathsf T} \delta q \); the work that the wrench would do through the same motion is \( F^{\mathsf T} \delta x \). For the two to be equivalent, the work must agree for <em>every</em> possible \( \delta q \):</p>
+
+\[
+\tau^{\mathsf T}\,\delta q \;=\; F^{\mathsf T} J\,\delta q \quad \forall\, \delta q
+\;\;\Longrightarrow\;\;
+\tau \;=\; J^{\mathsf T} F .
+\]
+
+<p>This is the central identity of operational-space control. The transpose of the matrix that maps joint velocities to end-effector velocities is the matrix that maps end-effector forces back to joint torques. No matrix inversion is required, and the formula remains valid even when \( J \) is singular, which is one reason the transpose law is preferred over inverse-kinematics schemes for contact tasks.</p>
+
+<p>The final operation is a safety clamp. Each component of \( \tau \) is limited to the torque the corresponding joint can deliver:</p>
+
+\[
+\tau_i \;\leftarrow\; \operatorname{clip}\!\big(\tau_i,\, -\tau_{\max,i},\, \tau_{\max,i}\big),
+\qquad
+\tau_{\max} = (150,\,150,\,150,\;28,\,28,\,28)\ \mathrm{N\cdot m}.
+\]
+
+<p>The three large joints of the UR5e are rated for 150 N·m and the three wrist joints for 28 N·m. Clamping after the transpose, rather than clamping \( F \), means that the limit is applied where it physically exists, at the joint, although it also means that a saturated joint changes the direction of the realised wrench.</p>
+
+<!-- ============================================================ -->
+<h2 id="planar"><span class="num">8</span>A planar example</h2>
+
+<p>The six-dimensional case is hard to picture, but a two-link planar arm shows everything that matters. Let the links have lengths \( \ell_1, \ell_2 \) and joint angles \( \theta_1, \theta_2 \), with \( \theta_2 \) measured relative to the first link. The tip position is</p>
+
+\[
+p = \begin{bmatrix} \ell_1 \cos\theta_1 + \ell_2 \cos(\theta_1+\theta_2) \\ \ell_1 \sin\theta_1 + \ell_2 \sin(\theta_1+\theta_2) \end{bmatrix},
+\]
+
+<p>and differentiating with respect to the joint angles gives the Jacobian</p>
+
+\[
+J = \begin{bmatrix}
+-\ell_1 \sin\theta_1 - \ell_2 \sin(\theta_1+\theta_2) & -\ell_2 \sin(\theta_1+\theta_2) \\
+\phantom{-}\ell_1 \cos\theta_1 + \ell_2 \cos(\theta_1+\theta_2) & \phantom{-}\ell_2 \cos(\theta_1+\theta_2)
+\end{bmatrix}.
+\]
+
+<p>Now take the configuration in Figure 2, with the arm stretched horizontally: \( \theta_1 = \theta_2 = 0 \). The Jacobian collapses to</p>
+
+\[
+J = \begin{bmatrix} 0 & 0 \\ \ell_1 + \ell_2 & \ell_2 \end{bmatrix},
+\qquad
+J^{\mathsf T} = \begin{bmatrix} 0 & \ell_1 + \ell_2 \\ 0 & \ell_2 \end{bmatrix}.
+\]
+
+<p>Suppose the controller wants to push the tip upward with force \( F = (0, F_y) \). Then</p>
+
+\[
+\tau = J^{\mathsf T} F = \begin{bmatrix} (\ell_1+\ell_2)\,F_y \\ \ell_2\,F_y \end{bmatrix}.
+\]
+
+<p>Each joint receives the force times its lever arm to the tip, which is exactly the torque a static force at the tip would exert on that joint. The shoulder, being farther away, must work harder than the elbow. If instead the controller wants to push along the arm, \( F = (F_x, 0) \), the result is \( \tau = 0 \): the stretched arm cannot move in that direction, so no torque can help, and the transpose law quietly produces none. An inverse-Jacobian controller would have divided by zero at the same configuration.</p>
+
+<figure>
+<svg viewBox="0 0 560 240" role="img" aria-label="A two-link planar arm stretched horizontally. An upward force at the tip produces a shoulder torque proportional to the full arm length and an elbow torque proportional to the second link only.">
+  <defs>
+    <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+    </marker>
+    <marker id="arrA" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/>
+    </marker>
+    <marker id="arrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--accent-2)"/>
+    </marker>
+  </defs>
+  <!-- ground -->
+  <line x1="40" y1="190" x2="130" y2="190" stroke="currentColor" stroke-width="1.2"/>
+  <g stroke="currentColor" stroke-width="1"><line x1="52" y1="190" x2="44" y2="200"/><line x1="70" y1="190" x2="62" y2="200"/><line x1="88" y1="190" x2="80" y2="200"/><line x1="106" y1="190" x2="98" y2="200"/><line x1="124" y1="190" x2="116" y2="200"/></g>
+  <!-- links -->
+  <line x1="85" y1="150" x2="285" y2="150" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
+  <line x1="285" y1="150" x2="435" y2="150" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
+  <!-- joints -->
+  <circle cx="85" cy="150" r="9" fill="var(--paper)" stroke="currentColor" stroke-width="2"/>
+  <circle cx="285" cy="150" r="9" fill="var(--paper)" stroke="currentColor" stroke-width="2"/>
+  <circle cx="435" cy="150" r="5" fill="currentColor"/>
+  <!-- base post -->
+  <line x1="85" y1="159" x2="85" y2="190" stroke="currentColor" stroke-width="2"/>
+  <!-- force at tip -->
+  <line x1="435" y1="140" x2="435" y2="70" stroke="var(--accent)" stroke-width="2.2" marker-end="url(#arrA)"/>
+  <text x="446" y="80" font-size="13" fill="var(--accent)" font-weight="600">F = (0, F_y)</text>
+  <!-- torque arcs -->
+  <path d="M63,122 A22,22 0 0 1 107,122" fill="none" stroke="var(--accent-2)" stroke-width="2" marker-end="url(#arrB)"/>
+  <path d="M263,122 A22,22 0 0 1 307,122" fill="none" stroke="var(--accent-2)" stroke-width="2" marker-end="url(#arrB)"/>
+  <text x="85" y="90" font-size="13" fill="var(--accent-2)" text-anchor="middle" font-weight="600">τ₁ = (ℓ₁+ℓ₂) F_y</text>
+  <text x="285" y="90" font-size="13" fill="var(--accent-2)" text-anchor="middle" font-weight="600">τ₂ = ℓ₂ F_y</text>
+  <!-- lever arm dims -->
+  <line x1="85" y1="194" x2="435" y2="194" stroke="currentColor" stroke-width="1" marker-start="url(#arr2)" marker-end="url(#arr2)"/>
+  <text x="260" y="210" font-size="12" fill="var(--ink-3)" text-anchor="middle">ℓ₁ + ℓ₂  (lever arm of joint 1)</text>
+  <line x1="285" y1="172" x2="435" y2="172" stroke="currentColor" stroke-width="1" marker-start="url(#arr2)" marker-end="url(#arr2)"/>
+  <text x="360" y="186" font-size="12" fill="var(--ink-3)" text-anchor="middle">ℓ₂  (lever arm of joint 2)</text>
+  <!-- labels -->
+  <text x="85" y="230" font-size="12" fill="var(--ink-3)" text-anchor="middle">joint 1</text>
+  <text x="285" y="230" font-size="12" fill="var(--ink-3)" text-anchor="middle">joint 2</text>
+  <text x="435" y="230" font-size="12" fill="var(--ink-3)" text-anchor="middle">tip</text>
+  <!-- x along arm note -->
+  <line x1="455" y1="150" x2="520" y2="150" stroke="var(--ink-3)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr2)"/>
+  <text x="488" y="140" font-size="11" fill="var(--ink-3)" text-anchor="middle">F_x → τ = 0</text>
+</svg>
+<figcaption><b>Figure 2.</b> The transpose law on a two-link arm. The upward force at the tip is converted into joint torques equal to the force times each joint's lever arm. A force along the stretched arm maps to zero torque, because the arm cannot move that way.</figcaption>
+</figure>
+
+<!-- ============================================================ -->
+<h2 id="gains"><span class="num">9</span>Gains, damping ratios, and the step response</h2>
+
+<p>OmniReset uses two gain sets. The first, used throughout the initial training stage, is deliberately soft and heavily overdamped. The second, used for evaluation and for the real robot, is five times stiffer in translation and critically damped. During fine-tuning a curriculum interpolates from the first to the second.</p>
+
+<div class="scroll">
+<table>
+<thead><tr><th>Quantity</th><th class="n">Training (x, y, z)</th><th class="n">Training (rx, ry, rz)</th><th class="n">Eval (x, y, z)</th><th class="n">Eval (rx, ry, rz)</th></tr></thead>
+<tbody>
+<tr><td>Stiffness \(K_p\)</td><td class="n">200</td><td class="n">3</td><td class="n">1000</td><td class="n">50</td></tr>
+<tr><td>Damping ratio \(\zeta\)</td><td class="n">3.0</td><td class="n">1.0</td><td class="n">1.0</td><td class="n">1.0</td></tr>
+<tr><td>Damping \(K_d = 2\zeta\sqrt{K_p}\)</td><td class="n">84.9</td><td class="n">3.46</td><td class="n">63.2</td><td class="n">14.1</td></tr>
+<tr><td>Action scale \(s\)</td><td class="n">0.02 m</td><td class="n">0.02, 0.02, 0.2 rad</td><td class="n">0.01, 0.01, 0.002 m</td><td class="n">0.02, 0.02, 0.2 rad</td></tr>
+<tr><td>Torque limit</td><td class="n" colspan="2">150 N·m (joints 1–3), 28 N·m (joints 4–6)</td><td class="n" colspan="2">same</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>The unit-mass model of Section 6 lets us compare the two settings. For the training gains in translation, the characteristic equation \( s^2 + 84.9\,s + 200 = 0 \) has roots near \( -2.4 \) and \( -82 \). The fast root dies out almost immediately; the slow root gives a time constant of about 0.4 s. For the evaluation gains, \( s^2 + 63.2\,s + 1000 = 0 \) has a double root at \( -31.6 \), a time constant of about 0.03 s.</p>
+
+<p>Figure 3 integrates the model numerically for a step of one action unit. The vertical rules mark the 0.1 s policy period. With the training gains, the end effector has covered only a fraction of the commanded 2 cm by the time the next action arrives; the commanded delta functions less as a position target than as a velocity command, which is a sensible thing for an exploring policy to control. With the evaluation gains, the arm nearly completes the (smaller) step within one policy period, so the policy commands positions in a more literal sense.</p>
+
+<figure class="wide">
+<div class="controls">
+  <label for="mass">Effective mass seen at the end effector
+    <select id="mass">
+      <option value="1" selected>1 kg (unit-mass model)</option>
+      <option value="2">2 kg</option>
+      <option value="4">4 kg</option>
+    </select>
+  </label>
+</div>
+<div class="chart-wrap">
+  <svg id="step-chart" viewBox="0 0 820 360" role="img" aria-label="Step response of the translational PD loop under a unit effective mass. The training gains reach the target slowly without overshoot over about one second; the evaluation gains reach the target within roughly one policy period of 0.1 seconds."></svg>
+  <div class="chart-tip" id="step-tip"></div>
+</div>
+<div class="legend"><span>Training: K<sub>p</sub> = 200, ζ = 3</span><span class="s2">Evaluation: K<sub>p</sub> = 1000, ζ = 1</span></div>
+<figcaption><b>Figure 3.</b> Fraction of a commanded translation step that has been completed, as a function of time, for the two gain sets. The vertical rules are policy steps, 0.1 s apart. Hover the curves to read values. The effective mass selector shows how a heavier load slows both responses; the real arm's apparent mass varies with its configuration, which is the price of omitting the inertia matrix discussed in Section 12.</figcaption>
+</figure>
+
+<p>The rotational gains deserve a remark. A stiffness of 3 N·m/rad with the training set is tiny: an orientation error of a full radian produces only 3 N·m of moment at the wrist. This is intentional during exploration, since a compliant wrist survives collisions with the hole gracefully, and the fine-tuning curriculum raises the value to 50 N·m/rad once the policy is competent.</p>
+
+<!-- ============================================================ -->
+<h2 id="timing"><span class="num">10</span>Timing: two control rates</h2>
+
+<p>The simulation runs at a time step of \( 1/120 \) s and the environment applies a <em>decimation</em> of 12, so the policy acts once every \( 12/120 = 0.1 \) s. Figure 4 lays the two clocks side by side. At each policy tick the desired pose is recomputed from the measured pose and then held constant, a zero-order hold. In between, the controller runs twelve times, each time with a fresh measurement of \( q, \dot q \) and \( x \) but the same \( x_{\mathrm{des}} \).</p>
+
+<figure class="wide">
+<svg viewBox="0 0 820 200" role="img" aria-label="Timeline with policy ticks every 0.1 seconds on top and twelve physics steps per policy period underneath. The desired pose is set at each policy tick and held flat; torques are recomputed at every physics step.">
+  <defs>
+    <marker id="arr3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <g font-size="12" fill="currentColor">
+    <text x="20" y="40" font-weight="600">policy · 10 Hz</text>
+    <text x="20" y="118" font-weight="600">controller · 120 Hz</text>
+  </g>
+  <!-- policy axis -->
+  <line x1="170" y1="46" x2="800" y2="46" stroke="currentColor" stroke-width="1.2" marker-end="url(#arr3)"/>
+  <g stroke="var(--accent)" stroke-width="2.5">
+    <line x1="180" y1="30" x2="180" y2="62"/><line x1="384" y1="30" x2="384" y2="62"/><line x1="588" y1="30" x2="588" y2="62"/>
+  </g>
+  <g font-size="11" fill="var(--accent)" text-anchor="middle" font-weight="600">
+    <text x="180" y="24">a_k → x_des,k</text><text x="384" y="24">a_k+1 → x_des,k+1</text><text x="588" y="24">a_k+2</text>
+  </g>
+  <!-- held target -->
+  <g stroke="var(--accent)" stroke-width="2" fill="none">
+    <path d="M180,80 L384,80"/><path d="M384,72 L588,72"/><path d="M588,86 L780,86"/>
+  </g>
+  <text x="282" y="76" font-size="11" fill="var(--accent)" text-anchor="middle">x_des held (zero-order hold)</text>
+  <!-- controller axis -->
+  <line x1="170" y1="150" x2="800" y2="150" stroke="currentColor" stroke-width="1.2" marker-end="url(#arr3)"/>
+  <g stroke="var(--accent-2)" stroke-width="1.5">
+    <line x1="180" y1="140" x2="180" y2="160"/><line x1="197" y1="140" x2="197" y2="160"/><line x1="214" y1="140" x2="214" y2="160"/><line x1="231" y1="140" x2="231" y2="160"/><line x1="248" y1="140" x2="248" y2="160"/><line x1="265" y1="140" x2="265" y2="160"/><line x1="282" y1="140" x2="282" y2="160"/><line x1="299" y1="140" x2="299" y2="160"/><line x1="316" y1="140" x2="316" y2="160"/><line x1="333" y1="140" x2="333" y2="160"/><line x1="350" y1="140" x2="350" y2="160"/><line x1="367" y1="140" x2="367" y2="160"/>
+    <line x1="384" y1="140" x2="384" y2="160"/><line x1="401" y1="140" x2="401" y2="160"/><line x1="418" y1="140" x2="418" y2="160"/><line x1="435" y1="140" x2="435" y2="160"/><line x1="452" y1="140" x2="452" y2="160"/><line x1="469" y1="140" x2="469" y2="160"/><line x1="486" y1="140" x2="486" y2="160"/><line x1="503" y1="140" x2="503" y2="160"/><line x1="520" y1="140" x2="520" y2="160"/><line x1="537" y1="140" x2="537" y2="160"/><line x1="554" y1="140" x2="554" y2="160"/><line x1="571" y1="140" x2="571" y2="160"/>
+    <line x1="588" y1="140" x2="588" y2="160"/><line x1="605" y1="140" x2="605" y2="160"/><line x1="622" y1="140" x2="622" y2="160"/><line x1="639" y1="140" x2="639" y2="160"/><line x1="656" y1="140" x2="656" y2="160"/><line x1="673" y1="140" x2="673" y2="160"/><line x1="690" y1="140" x2="690" y2="160"/><line x1="707" y1="140" x2="707" y2="160"/><line x1="724" y1="140" x2="724" y2="160"/><line x1="741" y1="140" x2="741" y2="160"/><line x1="758" y1="140" x2="758" y2="160"/><line x1="775" y1="140" x2="775" y2="160"/>
+  </g>
+  <line x1="180" y1="172" x2="384" y2="172" stroke="currentColor" stroke-width="1" marker-start="url(#arr3)" marker-end="url(#arr3)"/>
+  <text x="282" y="190" font-size="11" fill="var(--ink-3)" text-anchor="middle">12 steps × 1/120 s = 0.1 s</text>
+  <text x="680" y="190" font-size="11" fill="var(--ink-3)" text-anchor="middle">each tick: read q, q̇, x → τ = Jᵀ(K_p e − K_d J q̇)</text>
+  <!-- time labels -->
+  <g font-size="11" fill="var(--ink-3)" text-anchor="middle"><text x="180" y="100">t_k</text><text x="384" y="100">t_k + 0.1 s</text><text x="588" y="100">t_k + 0.2 s</text></g>
+</svg>
+<figcaption><b>Figure 4.</b> The two clocks. A policy action fixes the target for the next twelve physics steps; the torque is recomputed at each of them from the latest measurement. The held target is drawn at a different height after each tick to emphasise that it is rebuilt from the measured pose, not accumulated.</figcaption>
+</figure>
+
+<p>Running the feedback loop at the physics rate rather than at the policy rate is what makes the soft gains workable. A spring-damper evaluated only ten times a second would be unstable for the damping values in the table, because \( K_d \,\Delta t = 84.9 \times 0.1 \approx 8.5 \) far exceeds the stability margin of a discrete damper. At \( \Delta t = 1/120 \) s the same product is about 0.7, which is comfortably stable.</p>
+
+<!-- ============================================================ -->
+<h2 id="actuator"><span class="num">11</span>The actuator layer</h2>
+
+<p>In Isaac Lab the quantity produced by an action term is a <em>target</em>, and an actuator model decides what the simulator finally receives. For a position-controlled robot the actuator would contain its own joint-level PD loop with its own stiffness and damping. The OmniReset arm sets both of those to zero. The effort target coming out of the operational-space controller is therefore passed to the physics engine unchanged, and the only PD loop in the system is the task-space one described above.</p>
+
+<figure>
+<svg viewBox="0 0 700 190" role="img" aria-label="Two rows. Stage one: the torque passes through an implicit actuator with zero joint stiffness and damping straight into PhysX. Stage two: the same torque passes through a delayed actuator that applies a zero-to-one step delay and software effort limits, into a PhysX model with identified joint friction and armature.">
+  <defs>
+    <marker id="arr4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+    </marker>
+  </defs>
+  <g fill="none" stroke="currentColor" stroke-width="1.2">
+    <rect x="150" y="26" width="150" height="46" rx="3"/>
+    <rect x="360" y="26" width="200" height="46" rx="3"/>
+    <rect x="150" y="116" width="150" height="46" rx="3"/>
+    <rect x="360" y="116" width="200" height="46" rx="3"/>
+    <line x1="60" y1="49" x2="148" y2="49" marker-end="url(#arr4)"/>
+    <line x1="300" y1="49" x2="358" y2="49" marker-end="url(#arr4)"/>
+    <line x1="60" y1="139" x2="148" y2="139" marker-end="url(#arr4)"/>
+    <line x1="300" y1="139" x2="358" y2="139" marker-end="url(#arr4)"/>
+  </g>
+  <g font-size="12" fill="currentColor" text-anchor="middle">
+    <text x="225" y="45">implicit actuator</text><text x="225" y="61" fill="var(--ink-3)">k = 0, d = 0 → identity</text>
+    <text x="460" y="45">PhysX joints</text><text x="460" y="61" fill="var(--ink-3)">nominal friction and armature</text>
+    <text x="225" y="135">delayed PD actuator</text><text x="225" y="151" fill="var(--ink-3)">0–1 step delay, effort clamp</text>
+    <text x="460" y="135">PhysX joints</text><text x="460" y="151" fill="var(--ink-3)">identified friction, armature</text>
+  </g>
+  <g font-size="12" fill="currentColor" text-anchor="start" font-weight="600">
+    <text x="20" y="14">Stage 1 · training</text>
+    <text x="20" y="104">Stage 2 · fine-tuning / eval</text>
+  </g>
+  <g font-size="12" fill="var(--accent)" text-anchor="end" font-weight="600"><text x="56" y="44">τ</text><text x="56" y="134">τ</text></g>
+  <text x="330" y="180" font-size="11" fill="var(--ink-3)" text-anchor="middle">the controller upstream of τ is identical in both stages; only the gains and scales differ</text>
+</svg>
+<figcaption><b>Figure 5.</b> The actuator layer in the two training stages. In neither stage does the actuator add a joint-level PD term. The second stage inserts a one-step motor delay and loads the joint friction and rotor inertia identified on the physical arm, so that the same controller faces a more realistic plant.</figcaption>
+</figure>
+
+<p>The second training stage replaces the implicit actuator by a <em>delayed</em> one. Its joint-level gains are still zero, so it still does not add a PD term; what it adds is a delay of zero or one physics step between the torque being computed and its being applied, together with an explicit effort clamp. In the same stage a randomisation event writes the joint friction and armature values measured on the real UR5e into the simulator, scaled by a factor drawn from a range that a curriculum widens as the policy's success rate permits. The controller itself does not know about any of this; it only notices that the plant has become harder to move.</p>
+
+<!-- ============================================================ -->
+<h2 id="osc"><span class="num">12</span>What the controller leaves out</h2>
+
+<p>Readers familiar with Khatib's operational-space formulation will have noticed an omission. The complete law reads</p>
+
+\[
+\tau \;=\; J^{\mathsf T}\,\Lambda(q)\,\big( K_p e - K_d J\dot q \big) \;+\; \mu(q,\dot q) \;+\; g(q),
+\]
+
+<p>where \( \Lambda(q) = \big(J M^{-1} J^{\mathsf T}\big)^{-1} \) is the task-space inertia matrix built from the joint-space mass matrix \( M(q) \), and \( \mu \) and \( g \) compensate Coriolis, centrifugal, and gravitational effects. Pre-multiplying by \( \Lambda \) makes the closed loop behave exactly like the unit-mass oscillator of Section 6 in every direction and every configuration. The OmniReset controller drops \( \Lambda \), \( \mu \), and \( g \) entirely, so the law is</p>
+
+\[
+\tau \;=\; J^{\mathsf T}\big( K_p e - K_d J\dot q \big)
+\]
+
+<p>and nothing more. Three consequences follow.</p>
+
+<ol>
+<li><strong>The apparent stiffness depends on the configuration.</strong> Without \( \Lambda \), the same gain produces a fast response in directions where the arm is light and a slow one where it is heavy. This is why Figure 3 offers a choice of effective mass: no single curve describes the real arm.</li>
+<li><strong>Gravity must come from elsewhere.</strong> In simulation the robot links are spawned with gravity disabled, so there is nothing to compensate. On the physical UR5e the manufacturer's firmware compensates gravity below the level at which torques are commanded, so again the controller need not.</li>
+<li><strong>Simulation and reality use the same equations.</strong> This is the reason for the simplification. The controller running on the real robot is this same transpose PD law with the same analytical Jacobian and the same gains. A more sophisticated simulated controller would have trained the policy against a plant that behaves differently from the one it meets on deployment.</li>
+</ol>
+
+<!-- ============================================================ -->
+<h2 id="code"><span class="num">13</span>Mapping the mathematics to the code</h2>
+
+<p>The controller is implemented in the class <code>RelCartesianOSCAction</code> in <code>source/uwlab_tasks/uwlab_tasks/manager_based/manipulation/omnireset/mdp/actions/task_space_actions.py</code>. Its two methods correspond to the two bands of Figure 1. The first runs once per policy step and implements Section 3:</p>
+
+<pre><code>def process_actions(self, actions):
+    scaled = actions * self._scale                       # Δx = s ⊙ a
+    ee_pos_b, ee_quat_b = self._get_ee_pose_root_frame() # x = (p, Q) in base frame
+    self._ee_pos_des[:] = ee_pos_b + scaled[:, :3]       # p_des = p + Δx[0:3]
+
+    delta_rot = scaled[:, 3:6]                           # rotation vector r
+    angle = torch.norm(delta_rot, dim=-1, keepdim=True)  # θ = ‖r‖
+    axis  = delta_rot / angle  (guarded for θ ≈ 0)       # n̂ = r / θ
+    delta_quat = cat([axis * sin(angle/2), cos(angle/2)])# ΔQ = (n̂ sin θ/2, cos θ/2)
+    self._ee_quat_des[:] = quat_mul(delta_quat, ee_quat_b)  # Q_des = ΔQ ⊗ Q</code></pre>
+
+<p>The second runs at every physics step and implements Sections 4 through 7 in order:</p>
+
+<pre><code>def apply_actions(self):
+    ee_pos_b, ee_quat_b = self._get_ee_pose_root_frame()
+    joint_pos = self._asset.data.joint_pos[:, self._joint_ids]      # q
+    joint_vel = self._asset.data.joint_vel[:, self._joint_ids]      # q̇
+
+    jacobian = compute_jacobian_analytical(joint_pos)               # J(q), calibrated, base frame
+    ee_vel   = bmm(jacobian, joint_vel)                             # ẋ = J q̇
+
+    pos_error  = self._ee_pos_des - ee_pos_b                        # e_p
+    quat_error = quat_mul(self._ee_quat_des, quat_inv(ee_quat_b))   # Q_e = Q_des ⊗ Q⁻¹
+    pose_error = cat([pos_error, axis_angle_from_quat(quat_error)]) # e = [e_p ; log Q_e]
+
+    task_force    = self._kp * pose_error + self._kd * (-ee_vel)    # F = K_p e − K_d ẋ
+    joint_torques = bmm(jacobian.transpose(-1, -2), task_force)     # τ = Jᵀ F
+    joint_torques = clamp(joint_torques, -self._torque_max, self._torque_max)
+    self._asset.set_joint_effort_target(joint_torques, joint_ids=self._joint_ids)</code></pre>
+
+<p>Two implementation details complete the picture. In the constructor the damping is derived from the stiffness exactly as in Section 6, <code>kd = 2.0 * torch.sqrt(kp) * damping_ratio</code>, and both gains are stored per environment so that a randomisation event can scale them independently in each of the thousands of parallel copies of the scene. On reset, the desired pose is set equal to the current pose, so that a freshly reset environment starts with zero error and the arm does not lurch toward a stale target.</p>
+
+<p>The gain values themselves live in <code>config/ur5e_robotiq_2f85/actions.py</code>, in the three configurations <code>UR5E_ROBOTIQ_2F85_RELATIVE_OSC</code> for training, <code>..._EVAL</code> for evaluation and the real robot, and <code>..._UNSCALED</code> for the system-identification scripts, where the action is interpreted directly in metres and radians.</p>
+
+<footer>
+Written from the source of the UWLab repository, branch <code>feature/forge-omnireset</code>, October 2026. Formulas rendered with KaTeX; figures are inline SVG.
+</footer>
+
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  if (window.renderMathInElement) {
+    renderMathInElement(document.body, {
+      delimiters: [
+        {left: "\\[", right: "\\]", display: true},
+        {left: "\\(", right: "\\)", display: false}
+      ],
+      throwOnError: false
+    });
+  }
+});
+
+/* ---------- Figure 3: step response of the unit-mass PD model ---------- */
+(function () {
+  var svg = document.getElementById("step-chart");
+  var tip = document.getElementById("step-tip");
+  var massSel = document.getElementById("mass");
+  if (!svg) return;
+
+  var W = 820, H = 360, L = 64, R = 24, T = 20, B = 48;
+  var tMax = 1.0, dtPlot = 0.002;
+
+  function simulate(kp, zeta, m) {
+    var kd = 2 * zeta * Math.sqrt(kp);
+    var x = 0, v = 0, dt = 1 / 2400, out = [], tNext = 0;
+    for (var t = 0; t <= tMax + 1e-9; t += dt) {
+      if (t >= tNext - 1e-9) { out.push([t, x]); tNext += dtPlot; }
+      var a = (kp * (1 - x) - kd * v) / m;   // target at 1, error = 1 - x
+      v += a * dt; x += v * dt;              // semi-implicit Euler
+    }
+    return out;
+  }
+
+  function sx(t) { return L + (t / tMax) * (W - L - R); }
+  function sy(f) { return T + (1 - f / 1.1) * (H - T - B); }
+
+  function pathOf(pts) {
+    var d = "";
+    for (var i = 0; i < pts.length; i++) {
+      d += (i ? "L" : "M") + sx(pts[i][0]).toFixed(1) + "," + sy(pts[i][1]).toFixed(1);
+    }
+    return d;
+  }
+
+  var series = [
+    { name: "Training (K_p = 200, ζ = 3)", kp: 200, zeta: 3, color: "var(--accent)", dash: "" },
+    { name: "Evaluation (K_p = 1000, ζ = 1)", kp: 1000, zeta: 1, color: "var(--accent-2)", dash: "7 5" }
+  ];
+
+  function draw() {
+    var m = parseFloat(massSel.value);
+    var ns = "http://www.w3.org/2000/svg";
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    function el(tag, attrs, text) {
+      var e = document.createElementNS(ns, tag);
+      for (var k in attrs) e.setAttribute(k, attrs[k]);
+      if (text != null) e.textContent = text;
+      svg.appendChild(e);
+      return e;
+    }
+
+    // grid and axes
+    var yTicks = [0, 0.25, 0.5, 0.75, 1.0];
+    yTicks.forEach(function (f) {
+      el("line", { x1: L, x2: W - R, y1: sy(f), y2: sy(f), stroke: "var(--rule)", "stroke-width": 1 });
+      el("text", { x: L - 10, y: sy(f) + 4, "text-anchor": "end", "font-size": 12, fill: "var(--ink-2)" }, (f * 100).toFixed(0) + "%");
+    });
+    for (var k = 0; k <= 10; k++) {
+      var t = k * 0.1;
+      el("line", { x1: sx(t), x2: sx(t), y1: T, y2: H - B, stroke: "var(--rule)", "stroke-width": k % 1 === 0 ? 1 : 0.5, "stroke-dasharray": k === 0 ? "" : "2 3" });
+      el("text", { x: sx(t), y: H - B + 18, "text-anchor": "middle", "font-size": 12, fill: "var(--ink-2)" }, t.toFixed(1));
+    }
+    el("text", { x: (L + W - R) / 2, y: H - 8, "text-anchor": "middle", "font-size": 12, fill: "var(--ink-3)" }, "time since the policy step, s  (vertical rules are policy steps, 0.1 s apart)");
+    el("text", { x: 14, y: T + 4, "font-size": 12, fill: "var(--ink-3)" }, "step");
+    el("text", { x: 14, y: T + 18, "font-size": 12, fill: "var(--ink-3)" }, "done");
+    el("line", { x1: L, x2: W - R, y1: sy(1), y2: sy(1), stroke: "var(--ink-3)", "stroke-width": 1, "stroke-dasharray": "1 3" });
+
+    var data = series.map(function (s) { return simulate(s.kp, s.zeta, m); });
+
+    // curves
+    series.forEach(function (s, i) {
+      el("path", { d: pathOf(data[i]), fill: "none", stroke: s.color, "stroke-width": 2.2, "stroke-dasharray": s.dash, "stroke-linejoin": "round" });
+    });
+
+    // direct labels at the point where each curve crosses 0.1 s
+    series.forEach(function (s, i) {
+      var p = data[i][Math.round(0.1 / dtPlot)];
+      var pct = (p[1] * 100).toFixed(0) + "% at 0.1 s";
+      el("circle", { cx: sx(p[0]), cy: sy(p[1]), r: 4.5, fill: s.color, stroke: "var(--paper)", "stroke-width": 2 });
+      el("text", { x: sx(p[0]) + 9, y: sy(p[1]) + (i === 0 ? 16 : -8), "font-size": 12, fill: "var(--ink)", "font-weight": 600 }, pct);
+    });
+
+    // hover layer
+    var cross = el("line", { x1: 0, x2: 0, y1: T, y2: H - B, stroke: "var(--ink-3)", "stroke-width": 1, opacity: 0 });
+    var dots = series.map(function (s) { return el("circle", { r: 4, fill: s.color, stroke: "var(--paper)", "stroke-width": 2, opacity: 0 }); });
+    var hit = el("rect", { x: L, y: T, width: W - L - R, height: H - T - B, fill: "transparent" });
+
+    function move(evt) {
+      var rect = svg.getBoundingClientRect();
+      var px = (evt.clientX - rect.left) * (W / rect.width);
+      var t = Math.min(tMax, Math.max(0, (px - L) / (W - L - R) * tMax));
+      var idx = Math.round(t / dtPlot);
+      cross.setAttribute("x1", sx(t)); cross.setAttribute("x2", sx(t)); cross.setAttribute("opacity", 1);
+      var lines = [];
+      series.forEach(function (s, i) {
+        var p = data[i][idx];
+        dots[i].setAttribute("cx", sx(p[0])); dots[i].setAttribute("cy", sy(p[1])); dots[i].setAttribute("opacity", 1);
+        lines.push((i === 0 ? "train " : "eval ") + (p[1] * 100).toFixed(1) + "%");
+      });
+      tip.textContent = "t = " + t.toFixed(3) + " s  ·  " + lines.join("  ·  ");
+      tip.style.left = (evt.clientX - rect.left) + "px";
+      tip.style.top = (T * rect.height / H) + 14 + "px";
+      tip.style.display = "block";
+    }
+    function leave() {
+      cross.setAttribute("opacity", 0); dots.forEach(function (d) { d.setAttribute("opacity", 0); }); tip.style.display = "none";
+    }
+    hit.addEventListener("mousemove", move);
+    hit.addEventListener("mouseleave", leave);
+    hit.addEventListener("touchmove", function (e) { if (e.touches[0]) move(e.touches[0]); }, { passive: true });
+  }
+
+  massSel.addEventListener("change", draw);
+  draw();
+})();
+</script>
+</body>
+</html>
