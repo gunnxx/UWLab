@@ -14,8 +14,14 @@ uwlab_tree_hash() {
 # line do not apply to a -J jump host, so the bastion gets its own options via ProxyCommand.
 # Sets UWLAB_SSH_OPTS (array) and UWLAB_SSH_HOST (user@host).
 uwlab_notebook_ssh() {
-    local nb="$1" line jump
-    line="$(forge notebook ssh "${nb}" 2>&1)" || { echo "forge notebook ssh ${nb}: ${line}" >&2; return 1; }
+    local nb="$1" line jump id
+    # `forge notebook ssh` takes an ID; resolve a name through the list (running one preferred)
+    id="$(forge notebook list -o json 2>/dev/null | python3 -c '
+import json,sys; nb=sys.argv[1]; d=json.load(sys.stdin)
+m=[n for n in d if n.get("name")==nb or n.get("id","").startswith(nb)]
+m.sort(key=lambda n: n.get("status")!="running")
+print(m[0]["id"] if m else nb)' "${nb}")"
+    line="$(forge notebook ssh "${id}" 2>&1)" || { echo "forge notebook ssh ${nb} (${id}): ${line}" >&2; return 1; }
     UWLAB_SSH_HOST="$(grep -oE 'root@[^ ]+' <<<"${line}" | head -1)"
     jump="$(grep -oE '\-J [^ ]+' <<<"${line}" | awk '{print $2}')"
     [[ -n "${UWLAB_SSH_HOST}" ]] || { echo "could not parse an ssh target from: ${line}" >&2; return 1; }
