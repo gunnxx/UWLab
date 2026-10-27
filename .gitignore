@@ -48,7 +48,7 @@ docker/artifacts/
 **/generated/*
 
 # Isaac-Sim packman
-/_isaaclab/
+/_isaaclab
 /_uwlab/
 _isaac_sim*
 _repo

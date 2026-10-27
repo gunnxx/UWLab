@@ -52,6 +52,8 @@ if has_stage assets; then
             '/robots/g1_d_description/*' '/robots/g1_d_description/meshes/*' \
             '/robots/g1_description/g1_29dof_mode_15_with_dex1_1.urdf' \
             '/robots/g1_description/meshes/Dex1_*' '/robots/g1_description/meshes/dex1_col_*' && git checkout -q)
+        # the importer appends _1, _2, ... when its output folder exists; start from a clean slate
+        rm -rf "${ASSET_DIR}"/g1d_dex1_right_arm "${ASSET_DIR}"/g1d_dex1_right_arm_* "${ASSET_DIR}"/dex1_gripper "${ASSET_DIR}"/dex1_gripper_* "${ASSET_DIR}"/*.usd
         log "assets: building URDFs"
         python -m uwlab_assets.robots.unitree_g1d_dex1.build_urdf --unitree-ros "${UNITREE_ROS}" --out-dir "${ASSET_DIR}" ${BUILD_ARGS:-}
         # convert inside a Kit app (scripts/tools/convert_urdf.py imports pxr before launching and breaks here)

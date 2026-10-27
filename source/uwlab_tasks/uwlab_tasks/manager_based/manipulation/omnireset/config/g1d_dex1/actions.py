@@ -30,7 +30,9 @@ G1D_DEX1_RELATIVE_OSC = RelCartesianOSCActionCfg(
     body_name=G1D_EE_BODY_NAME,
     scale_xyz_axisangle=(0.02, 0.02, 0.02, 0.02, 0.02, 0.2),
     motion_stiffness=(200.0, 200.0, 200.0, 3.0, 3.0, 3.0),
-    motion_damping_ratio=(3.0, 3.0, 3.0, 1.0, 1.0, 1.0),
+    # No explicit task-space damping: it is unstable on the light G1-D wrist links; the damping is provided
+    # implicitly by the arm actuator (see IMPLICIT_G1D_DEX1 in uwlab_assets).
+    motion_damping_ratio=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
     torque_limit=G1D_TORQUE_LIMIT,
     jacobian_fn=G1D_JACOBIAN_FN,
     # 7-DoF arm: hold the default elbow configuration in the null space of the task

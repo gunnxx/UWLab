@@ -12,7 +12,7 @@ actuator randomization joints, and the reset-state dataset location.
 
 from __future__ import annotations
 
-from isaaclab.assets import AssetBaseCfg, RigidObjectCfg
+from isaaclab.assets import AssetBaseCfg
 from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils import configclass
@@ -27,7 +27,7 @@ from uwlab_assets.robots.unitree_g1d_dex1 import (
 from ... import mdp as task_mdp
 from ..ur5e_robotiq_2f85 import rl_state_cfg as ur5e
 from .actions import G1dDex1RelativeOSCAction, G1dDex1RelativeOSCEvalAction
-from .layout import G1D_DATASET_DIR, TABLE_CENTER_X, TABLE_ORIGIN_Z
+from .layout import G1D_DATASET_DIR, G1D_TABLE
 
 
 def _with_params(term, **updates):
@@ -47,11 +47,7 @@ _UR5E_REWARDS = ur5e.RewardsCfg()
 class G1dRlStateSceneCfg(ur5e.RlStateSceneCfg):
     robot = IMPLICIT_G1D_DEX1.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
-    table = _UR5E_SCENE.table.replace(
-        init_state=RigidObjectCfg.InitialStateCfg(
-            pos=(TABLE_CENTER_X, 0.0, TABLE_ORIGIN_Z), rot=(0.0, 0.0, -0.707, 0.707)
-        )
-    )
+    table = G1D_TABLE
 
     ur5_metal_support = None
 

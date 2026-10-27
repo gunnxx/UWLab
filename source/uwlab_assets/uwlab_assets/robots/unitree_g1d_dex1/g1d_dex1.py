@@ -106,7 +106,10 @@ G1D_DEX1_ARTICULATION = ArticulationCfg(
             enabled_self_collisions=True,
             solver_position_iteration_count=36,
             solver_velocity_iteration_count=0,
-            fix_root_link=True,
+            # Fixed base: ``convert_urdf_kit.py --fix_base`` authors a world ``root_joint`` and puts the articulation
+            # root on the default prim (see ``anchor_articulation_root``), so PhysX treats the asset as a true
+            # fixed-base articulation. Leave ``fix_root_link`` unset: Isaac Lab's spawn-time repair fails on the
+            # Newton attributes authored in the referenced layer.
         ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(
@@ -136,7 +139,12 @@ IMPLICIT_G1D_DEX1.actuators = {
     "arm": ImplicitActuatorCfg(
         joint_names_expr=G1D_ARM_JOINT_REGEX,
         stiffness=0.0,
-        damping=0.0,
+        # Joint damping lives here (PhysX applies it implicitly, stable at any gain) instead of in the OSC: the
+        # wrist links weigh ~85 g (I ~ 5e-4 kg m^2 about the roll axis), and an explicit task-space damping torque
+        # of a few N m s/rad at 120 Hz overshoots the velocity each substep and diverges within a handful of
+        # substeps (verified with scripts_v2/tools/debug_reset_env-style probes on 2026-10-26). The UR5e gets away
+        # with explicit damping only because its wrist links are ~10x heavier.
+        damping=1.0,
         effort_limit_sim=G1D_EFFORT_LIMITS,
         velocity_limit_sim=G1D_VELOCITY_LIMITS,
     ),
@@ -156,9 +164,9 @@ DEX1_GRIPPER = ArticulationCfg(
             enabled_self_collisions=False,
             solver_position_iteration_count=36,
             solver_velocity_iteration_count=0,
-            # Anchored like the Robotiq grasp-sampling gripper (fixed root joint to the world); the sampler
-            # moves it by writing the root pose. A free-floating gripper gets dragged down by whatever it holds.
-            fix_root_link=True,
+            # Anchored like the Robotiq grasp-sampling gripper (fixed-base articulation authored by the converter's
+            # ``--fix_base``); the sampler moves it by writing the root pose. A free-floating gripper gets dragged
+            # down by whatever it holds. ``fix_root_link`` must stay unset (see G1D_DEX1_ARTICULATION).
         ),
     ),
     init_state=ArticulationCfg.InitialStateCfg(pos=(0, 0, 0.1), rot=(0, 0, 0, 1), joint_pos=DEX1_DEFAULT_JOINT_POS),

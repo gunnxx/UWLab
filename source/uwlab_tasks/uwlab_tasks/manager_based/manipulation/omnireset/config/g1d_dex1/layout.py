@@ -6,8 +6,9 @@
 """Table-top layout for the Unitree G1-D + Dex1-1 OmniReset scenes.
 
 World frame: the environment origin is on the floor under the chassis centre, x forward, y to the robot's left,
-z up. The articulation root (``AGV_link``) sits at z = :data:`AGV_ROOT_HEIGHT`. The same Vention table as the
-UR5e scene is used; it stands in front of the robot with its long (1.384 m) side along x.
+z up. The articulation root (``AGV_link``) sits at z = :data:`AGV_ROOT_HEIGHT`. The table is a plain block with
+the footprint and top height of the Vention table of the UR5e scene; it stands in front of the robot with its
+long (1.384 m) side along x.
 
 Workspace numbers come from an inverse-kinematics sweep of the right arm with the waist pitched 0.1 rad and the
 lift at its lowest (``docs/notes`` of 2026-10-25): with the gripper pointing within 45 deg of straight down,
@@ -17,21 +18,42 @@ by arm length, because the table top is only 0.22 m below the shoulder.
 
 import os
 
+import isaaclab.sim as sim_utils
+from isaaclab.assets import RigidObjectCfg
+
 from uwlab_assets import UWLAB_ASSETS_DATA_DIR
 from uwlab_assets.robots.unitree_g1d_dex1 import AGV_ROOT_HEIGHT  # noqa: F401
 
 # ---- table -----------------------------------------------------------------------------------------------------
-TABLE_ORIGIN_Z = -0.013
-"""z of the table USD origin: puts the mat top at 0.855 m, exactly as in the UR5e scene (ground -0.868, table
--0.881 there)."""
 TABLE_TOP_Z = 0.855
-"""Height of the table surface above the floor."""
+"""Height of the table surface above the floor: the Vention mat top of the UR5e scene (ground -0.868, table origin
+-0.881, mat top 0.8685 above the origin)."""
 TABLE_HALF_LENGTH = 0.692
-"""Half of the table's long side, which runs along x after the -90 deg yaw used in the UR5e scene."""
+"""Half of the table's long side (1.384 m), which runs along x."""
+TABLE_HALF_WIDTH = 0.557
+"""Half of the table's short side (1.115 m), along y."""
 TABLE_EDGE_X = 0.29
-"""x of the near table edge. The chassis front is at x = 0.273, so this leaves ~2 cm; the table frame has a
-0.25 m high beam along this edge, so the chassis cannot roll under it."""
+"""x of the near table edge. The chassis front is at x = 0.273, so this leaves ~2 cm; the table block reaches the
+floor, so the chassis cannot roll under it."""
 TABLE_CENTER_X = TABLE_EDGE_X + TABLE_HALF_LENGTH
+
+G1D_TABLE = RigidObjectCfg(
+    prim_path="{ENV_REGEX_NS}/Table",
+    init_state=RigidObjectCfg.InitialStateCfg(pos=(TABLE_CENTER_X, 0.0, TABLE_TOP_Z / 2)),
+    spawn=sim_utils.CuboidCfg(
+        size=(2 * TABLE_HALF_LENGTH, 2 * TABLE_HALF_WIDTH, TABLE_TOP_Z),
+        rigid_props=sim_utils.RigidBodyPropertiesCfg(kinematic_enabled=True),
+        collision_props=sim_utils.CollisionPropertiesCfg(),
+        mass_props=sim_utils.MassPropertiesCfg(mass=40.0),
+        physics_material=sim_utils.RigidBodyMaterialCfg(static_friction=0.5, dynamic_friction=0.4),
+        visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.36, 0.38, 0.4)),
+    ),
+)
+"""The table: a plain block with the Vention table's footprint and top height, used by every G1-D scene.
+
+The state-based task has no cameras, and the Vention USD adds a 2 m frame above the top and a dense collision
+mesh for nothing. Kinematic rigid body with a mass and a physics material so the table mass / material
+randomization events inherited from the UR5e configs still apply."""
 
 # ---- object spawn regions (env frame, on the table top) ---------------------------------------------------------
 RECEPTIVE_X = (0.31, 0.41)
