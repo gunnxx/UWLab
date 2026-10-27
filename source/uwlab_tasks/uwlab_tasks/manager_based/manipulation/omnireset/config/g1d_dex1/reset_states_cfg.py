@@ -198,11 +198,26 @@ class G1dObjectPartiallyAssembledEEGraspedEventCfg(
 
 
 # ------------------------------------------------------------------------------------------------ terminations
+# Only the right arm and the Dex1 can touch the objects; the chassis, lift, torso and the frozen left arm never
+# come near the table top, so the collision analyzers sample points on these links alone (31 links otherwise).
+G1D_COLLISION_BODY_REGEX = ["right_shoulder_.*_link", "right_elbow_link", "right_wrist_.*_link", "right_dex1_.*"]
+
+
+def _robot_links_only(analyzer_cfg):
+    asset_cfg = analyzer_cfg.asset_cfg
+    if asset_cfg.name != "robot":
+        return analyzer_cfg
+    return analyzer_cfg.replace(asset_cfg=SceneEntityCfg("robot", body_names=G1D_COLLISION_BODY_REGEX))
+
+
 @configclass
 class G1dResetStatesTerminationCfg(ur5e.ResetStatesTerminationCfg):
     success = _UR5E_TERMINATIONS.success.replace(
         params={
             **_UR5E_TERMINATIONS.success.params,
+            "collision_analyzer_cfgs": [
+                _robot_links_only(c) for c in _UR5E_TERMINATIONS.success.params["collision_analyzer_cfgs"]
+            ],
             "ee_body_name": DEX1_BASE_BODY_NAME,
             # objects (and the hand) must stay above the table top: a peg that rolled off the edge onto the
             # floor is not a usable reset state (the UR5e value is relative to its mounting plate)

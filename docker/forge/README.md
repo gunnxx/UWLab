@@ -80,9 +80,13 @@ contact, so a policy that opens the gripper on its first step drops the peg by d
 `scripts_v2/tools/debug_reset_env.py --funnel --close_gripper --task OmniReset-G1dDex1-<Set>-v0 --num_envs 256
 --steps 150 --viz none env.scene.insertive_object=peg env.scene.receptive_object=peghole` prints, at the end,
 how many resets were discarded at once because the IK placement missed the grasp pose
-(`grasp_placement_failed`), how many reached the end of the hold, and how many of those passed each clause of
-the success term (approach from above, stability, pose deviation per asset, collision freedom, fingers blocked,
-end effector still at the grasp pose). The "EE grasped" sets need the end effector to stay within 1.5 cm and
+(`grasp_placement_failed`), how many holds were abandoned early because a body had already moved to twice its
+allowed deviation or dropped below the height threshold (`hold_lost`), how many reached the end of the hold, and
+how many of those passed each clause of the success term (approach from above, stability, pose deviation per
+asset, collision freedom, fingers blocked, end effector still at the grasp pose). The tool also prints the
+environment step rate. The expensive clauses (signed-distance collision queries, grasp-pose comparison, assembly
+check) run only on the final step of a hold and only for environments that passed the cheap clauses; on the
+G1-D the collision analyzers sample the right arm and Dex1 links only. The "EE grasped" sets need the end effector to stay within 1.5 cm and
 15 degrees of the sampled grasp pose in the object's frame; the IK iterates are clamped to the joint limits
 (an out-of-range wrist is snapped back by PhysX on the first step and throws the hand off the peg); grasps
 whose fingers never closed are dropped when the grasp dataset is loaded.

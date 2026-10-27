@@ -185,9 +185,14 @@ def main(env_cfg, agent_cfg):
     grasp_event = term._resolve_grasp_event(env) if getattr(term, "require_grasp", False) else None
     if args_cli.close_gripper:
         actions[:, -1] = -1.0
+    import time as _time
+    step_time = 0.0
     for t in range(args_cli.steps):
+        _t0 = _time.perf_counter()
         _, _, terminated, truncated, _ = env.step(actions)
+        step_time += _time.perf_counter() - _t0
         N = env.num_envs
+        printing = t % 5 == 0 or bool((terminated | truncated).any())
         jv = robot.data.joint_vel.torch
         abnormal_gripper = (jv.abs() > robot.data.joint_vel_limits.torch * 2).any(dim=1)
         ee_quat = robot.data.body_link_quat_w.torch[:, term.ee_body_idx]
@@ -197,19 +202,22 @@ def main(env_cfg, agent_cfg):
         stab = term.stability_counter >= term.consecutive_stability_steps
         dev_robot = (ee_pos - robot.initial_pos).norm(dim=1) if hasattr(robot, "initial_pos") else torch.full((N,), float("nan"), device=env.device)
         devs_obj = {a.cfg.prim_path.split("/")[-1]: (a.data.root_pos_w.torch - a.initial_pos).norm(dim=1) for a in term.object_assets if hasattr(a, "initial_pos")}
-        all_ids = torch.arange(N, device=env.device)
-        coll = [c(env, all_ids) for c in term.collision_analyzers]
-        coll_free = torch.all(torch.stack(coll), dim=0)
         tm = env.termination_manager
-        if args_cli.funnel and "grasp_placement_failed" in tm.active_terms:
-            tally("ik_failed_early_out", tm.get_term("grasp_placement_failed"))
+        if printing:  # the analyzers are expensive; the tool only queries them when it prints
+            all_ids = torch.arange(N, device=env.device)
+            coll = [c(env, all_ids) for c in term.collision_analyzers]
+            coll_free = torch.all(torch.stack(coll), dim=0)
+        if args_cli.funnel:
+            for name in ("grasp_placement_failed", "hold_lost"):
+                if name in tm.active_terms:
+                    tally(f"{name}_early_out", tm.get_term(name))
         if args_cli.detail:
             arm = env.action_manager.get_term("arm")
             pos_b, quat_b = arm._get_ee_pose_root_frame()
             perr = (arm._ee_pos_des - pos_b).norm(dim=1)
             tq = robot.data.applied_torque.torch if hasattr(robot.data, "applied_torque") else robot.data.joint_effort_target.torch
             print(f"[detail] t={t:3d} env0 q_dot={f(jv[0], n=9, d=2)} torque={f(tq[0], n=9, d=1)} |pos_err|={float(perr[0]):.3f} ee_pos_b={f(pos_b[0:1])[0]} q={f(robot.data.joint_pos.torch[0], n=7, d=2)}")
-        if t % 5 == 0 or (terminated | truncated).any():
+        if printing:
             print(f"[probe] t={t:3d} ep={int(env.episode_length_buf[0])} term={int(terminated.sum())} trunc={int(truncated.sum())} "
                   f"time_out={int(tm.get_term('time_out').sum())} abnormal={int(tm.get_term('abnormal_robot').sum())} success={int(tm.get_term('success').sum())}")
             print(f"[probe]   ok-counts/{N}: !abn_grip={int((~abnormal_gripper).sum())} orient={int(orient_ok.sum())} stable={int(stab.sum())} "
@@ -218,6 +226,8 @@ def main(env_cfg, agent_cfg):
                   f"z_ok={int((ee_pos[:, 2] >= term.pos_z_threshold).sum())}")
             print(f"[probe]   ee_pos={f(ee_pos)} appr_z={f(appr[:, 2])} |jv|sum={f(jv.abs().sum(1))} dev_robot={f(dev_robot)} stabcnt={f(term.stability_counter.float())}")
             print(f"[probe]   q={f(robot.data.joint_pos.torch[0], n=9)} obj_z={[f(a.data.root_pos_w.torch[:, 2]) for a in term.object_assets]}")
+    print(f"[timing] {args_cli.steps} env.step calls x {env.num_envs} envs in {step_time:.1f} s: "
+          f"{args_cli.steps * env.num_envs / step_time:.0f} env-steps/s, {1000 * step_time / args_cli.steps:.0f} ms per step")
     if args_cli.funnel:
         print("[funnel] counts over the run: early-outs, then episodes reaching the hold end and each clause at that step")
         for k, v in list(funnel.items()) + list(term.funnel.items()):

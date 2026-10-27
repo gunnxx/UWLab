@@ -37,6 +37,10 @@ class CollisionAnalyzer:
 
     def __init__(self, cfg: CollisionAnalyzerCfg, env: ManagerBasedRLEnv):
         self.cfg = cfg
+        # nested scene-entity configs are not resolved by the manager; resolve them here so that body_names work
+        cfg.asset_cfg.resolve(env.scene)
+        for obstacle_cfg in cfg.obstacle_cfgs:
+            obstacle_cfg.resolve(env.scene)
         self.asset: RigidObject = env.scene[cfg.asset_cfg.name]
         self.obstacles: list[RigidObject] = [env.scene[cfg.name] for cfg in cfg.obstacle_cfgs]
         # we support passing in a Articulation(joint connected rigidbodies) as asset, but that requires we collect all

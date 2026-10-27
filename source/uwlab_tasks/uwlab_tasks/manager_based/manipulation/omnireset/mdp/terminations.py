@@ -469,22 +469,28 @@ class check_reset_state_success(ManagerTermBase):
             # Asset is above ground if position is greater than z threshold
             pos_below_threshold |= asset_pos[:, 2] < self.pos_z_threshold
 
-        # Check for collisions between gripper and object
-        all_env_ids = torch.arange(env.num_envs, device=env.device)
-        collision_free = torch.all(
-            torch.stack([collision_analyzer(env, all_env_ids) for collision_analyzer in self.collision_analyzers]),
-            dim=0,
-        )
-
-        reset_success = (
+        # The cheap clauses are evaluated every step for every environment. The expensive ones (signed-distance
+        # collision queries over the sampled point clouds, the grasp-pose comparison, the assembly check) can only
+        # change the outcome on the final step of the hold, and only for environments that passed the cheap clauses,
+        # so they run on that subset alone. With collect_funnel they run on every environment at the final step so
+        # that the per-clause counts stay comparable.
+        cheap_ok = (
             (~abnormal_gripper_state)
             & gripper_orientation_within_range
             & stability_reached
             & (~excessive_pose_deviation)
             & (~pos_below_threshold)
-            & collision_free
-            & time_out
         )
+        eval_mask = time_out if self.collect_funnel else (time_out & cheap_ok)
+        eval_ids = eval_mask.nonzero(as_tuple=False).squeeze(-1)
+        collision_free = torch.zeros(env.num_envs, device=env.device, dtype=torch.bool)
+        if eval_ids.numel() > 0:
+            collision_free[eval_ids] = torch.all(
+                torch.stack([collision_analyzer(env, eval_ids) for collision_analyzer in self.collision_analyzers]),
+                dim=0,
+            )
+
+        reset_success = cheap_ok & collision_free & time_out
 
         clauses = {}
         if self.collect_funnel:
@@ -520,13 +526,20 @@ class check_reset_state_success(ManagerTermBase):
                 clauses["object_near_ee"] = object_near_ee
             grasp_event = self._resolve_grasp_event(env)
             if grasp_event is not None:
-                ee_quat = self.robot_asset.data.body_link_quat_w.torch[:, self.ee_body_idx]
-                ee_pos_obj, ee_quat_obj = math_utils.subtract_frame_transforms(
-                    self.grasp_object.data.root_pos_w.torch, self.grasp_object.data.root_quat_w.torch, ee_pos, ee_quat
-                )
-                pos_err = (ee_pos_obj - grasp_event.target_pos_obj).norm(dim=1)
-                ang_err = math_utils.quat_error_magnitude(ee_quat_obj, grasp_event.target_quat_obj)
-                at_grasp_pose = (pos_err < self.grasp_pos_tol) & (ang_err < self.grasp_ang_tol)
+                at_grasp_pose = torch.zeros(env.num_envs, device=env.device, dtype=torch.bool)
+                pos_err = torch.full((env.num_envs,), float("inf"), device=env.device)
+                ang_err = torch.full((env.num_envs,), float("inf"), device=env.device)
+                if eval_ids.numel() > 0:
+                    ee_quat = self.robot_asset.data.body_link_quat_w.torch[eval_ids, self.ee_body_idx]
+                    ee_pos_obj, ee_quat_obj = math_utils.subtract_frame_transforms(
+                        self.grasp_object.data.root_pos_w.torch[eval_ids],
+                        self.grasp_object.data.root_quat_w.torch[eval_ids],
+                        ee_pos[eval_ids],
+                        ee_quat,
+                    )
+                    pos_err[eval_ids] = (ee_pos_obj - grasp_event.target_pos_obj[eval_ids]).norm(dim=1)
+                    ang_err[eval_ids] = math_utils.quat_error_magnitude(ee_quat_obj, grasp_event.target_quat_obj[eval_ids])
+                    at_grasp_pose[eval_ids] = (pos_err[eval_ids] < self.grasp_pos_tol) & (ang_err[eval_ids] < self.grasp_ang_tol)
                 reset_success = reset_success & at_grasp_pose
                 if self.collect_funnel:
                     clauses["grasp_pos_ok"] = pos_err < self.grasp_pos_tol
@@ -539,14 +552,20 @@ class check_reset_state_success(ManagerTermBase):
                 self.funnel[name] = self.funnel.get(name, 0) + int(n)
 
         if self.assembly_success_prob is not None:
-            ins_pos_w, ins_quat_w = self.insertive_asset_offset.apply(self.insertive_asset)
-            rec_pos_w, rec_quat_w = self.receptive_asset_offset.apply(self.receptive_asset)
-            rel_pos, rel_quat = math_utils.subtract_frame_transforms(rec_pos_w, rec_quat_w, ins_pos_w, ins_quat_w)
-            e_x, e_y, _ = math_utils.euler_xyz_from_quat(rel_quat)
-            euler_xy_dist = math_utils.wrap_to_pi(e_x).abs() + math_utils.wrap_to_pi(e_y).abs()
-            xyz_dist = torch.norm(rel_pos, dim=1)
-            assembly_success = (xyz_dist < self.assembly_pos_threshold) & (euler_xy_dist < self.assembly_ori_threshold)
-            assembly_match = torch.where(self.require_assembly_success, assembly_success, ~assembly_success)
+            assembly_match = torch.zeros(env.num_envs, device=env.device, dtype=torch.bool)
+            if eval_ids.numel() > 0:
+                ins_pos_w, ins_quat_w = self.insertive_asset_offset.apply(self.insertive_asset)
+                rec_pos_w, rec_quat_w = self.receptive_asset_offset.apply(self.receptive_asset)
+                rel_pos, rel_quat = math_utils.subtract_frame_transforms(
+                    rec_pos_w[eval_ids], rec_quat_w[eval_ids], ins_pos_w[eval_ids], ins_quat_w[eval_ids]
+                )
+                e_x, e_y, _ = math_utils.euler_xyz_from_quat(rel_quat)
+                euler_xy_dist = math_utils.wrap_to_pi(e_x).abs() + math_utils.wrap_to_pi(e_y).abs()
+                xyz_dist = torch.norm(rel_pos, dim=1)
+                assembly_success = (xyz_dist < self.assembly_pos_threshold) & (euler_xy_dist < self.assembly_ori_threshold)
+                assembly_match[eval_ids] = torch.where(
+                    self.require_assembly_success[eval_ids], assembly_success, ~assembly_success
+                )
             reset_success = reset_success & assembly_match
             self._pending_reflip |= reset_success
             if self.collect_funnel:
@@ -906,6 +925,56 @@ class grasp_placement_failed(ManagerTermBase):
         if self._event is None:
             return torch.zeros(env.num_envs, device=env.device, dtype=torch.bool)
         return (self._event.ik_pos_error > self.pos_tol) | (self._event.ik_ang_error > self.ang_tol)
+
+
+class reset_hold_lost(ManagerTermBase):
+    """Terminate a reset-state hold as soon as it can no longer pass ``check_reset_state_success``.
+
+    The success term compares every tracked body with the position it had right after the reset events and
+    rejects, at the end of the hold, any hold in which the end effector moved more than its allowed deviation,
+    an object moved more than the family's allowed deviation, or a body dropped below the height threshold.
+    The height condition never recovers within a hold. A deviation can in principle shrink again (an object
+    nudged and settling back), so the deviation limits are applied with a margin, ``deviation_margin`` times the
+    success term's limit, which still catches the common case of a hand snapped away from its placement on the
+    first physics step. It reads the references and thresholds from the success term (``success_term_name``) and
+    is a no-op in environments without one.
+    """
+
+    def __init__(self, cfg: TerminationTermCfg, env: ManagerBasedEnv):
+        super().__init__(cfg, env)
+        self.success_term_name = cfg.params.get("success_term_name", "success")
+        self.deviation_margin = float(cfg.params.get("deviation_margin", 2.0))
+        self._term = None
+        self._checked = False
+
+    def __call__(
+        self, env: ManagerBasedEnv, success_term_name: str = "success", deviation_margin: float = 2.0
+    ) -> torch.Tensor:
+        if not self._checked:
+            self._checked = True
+            try:
+                term = env.termination_manager.get_term_cfg(self.success_term_name).func
+                self._term = term if hasattr(term, "assets_to_check") else None
+            except (ValueError, KeyError, AttributeError):
+                self._term = None
+        lost = torch.zeros(env.num_envs, device=env.device, dtype=torch.bool)
+        term = self._term
+        if term is None:
+            return lost
+        for asset in term.assets_to_check:
+            if not hasattr(asset, "initial_pos"):
+                return lost  # before the first reset
+            if asset is term.robot_asset:
+                pos = asset.data.body_link_pos_w.torch[:, term.ee_body_idx]
+                limit = term.max_robot_pos_deviation
+            else:
+                pos = asset.data.root_pos_w.torch
+                limit = term.max_object_pos_deviation
+            valid = ~torch.isnan(pos).any(dim=1)
+            deviation = (pos - asset.initial_pos).norm(dim=1)
+            lost |= valid & (deviation > self.deviation_margin * limit)
+            lost |= valid & (pos[:, 2] < term.pos_z_threshold)
+        return lost
 
 
 def consecutive_success_state(env: ManagerBasedRLEnv, num_consecutive_successes: int = 10):

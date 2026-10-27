@@ -402,6 +402,10 @@ class ResetStatesTerminationCfg:
     # "EE grasped" sets only (no-op elsewhere): give up at once on resets whose IK placement missed the grasp pose
     grasp_placement_failed = DoneTerm(func=task_mdp.grasp_placement_failed, params={"pos_tol": 0.01, "ang_tol": 0.17})
 
+    # give up as soon as a hold can no longer pass the success test (a body moved beyond its allowed deviation or
+    # dropped below the height threshold) instead of simulating the remaining steps
+    hold_lost = DoneTerm(func=task_mdp.reset_hold_lost)
+
     success = DoneTerm(
         func=task_mdp.check_reset_state_success,
         params={
