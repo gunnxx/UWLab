@@ -7,11 +7,16 @@
 #   STAGES=train GPUS=4 NUM_ENVS=16384 docker/forge/submit_g1d.sh   # train from the cached datasets
 #   STAGES=assets,datasets,train MAX_ITER=5 HOURS=3 docker/forge/submit_g1d.sh   # end-to-end smoke test
 #
-# The job clones ${GIT_REPO}@${GIT_REF} (push first!) and mounts the shared blob disk at /mnt/robotics for the
-# asset/dataset cache and checkpoints. Env knobs: IMAGE, GPUS, HOURS, STAGES, INSERTIVE, RECEPTIVE, SEED, NUM_ENVS,
-# MAX_ITER, LOGGER, LOG_PROJECT, RUN_NAME, FORCE, BUILD_ARGS, RESET_ENVS, NUM_RESETS, GIT_REPO, GIT_REF, JOB_NAME,
-# WANDB_API_KEY, WANDB_ENTITY, YES, DRY_RUN.
+# Code source (CODE_SOURCE), as in submit_train.sh: `tar` (default) extracts the working-copy tarball uploaded by
+# docker/forge/push_code.sh from the blob disk; `git` clones ${GIT_REPO}@${GIT_REF} (push first!). The job mounts
+# the shared blob disk at /mnt/robotics for the asset/dataset cache and checkpoints. Env knobs: IMAGE, GPUS, HOURS,
+# STAGES, INSERTIVE, RECEPTIVE, SEED, NUM_ENVS, MAX_ITER, LOGGER, LOG_PROJECT, RUN_NAME, FORCE, BUILD_ARGS,
+# RESET_ENVS, NUM_RESETS, GRASP_ENVS, NUM_GRASPS, RESET_TYPES, BENCH_*, CODE_SOURCE, CODE_TAR, GIT_REPO, GIT_REF,
+# JOB_NAME, WANDB_API_KEY, WANDB_ENTITY, YES, DRY_RUN.
 set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=_lib.sh
+source "${HERE}/_lib.sh"
 
 IMAGE="${IMAGE:-uwlab-omnireset:slim-4bfca44}"
 GPUS="${GPUS:-1}"
@@ -29,6 +34,8 @@ GIT_REPO="${GIT_REPO:-https://github.com/gunnxx/UWLab.git}"
 GIT_REF="${GIT_REF:-feature/forge-omnireset}"
 CKPT_DISK="${CKPT_DISK:-blob-robotics-scus}"
 CKPT_MOUNT="${CKPT_MOUNT:-/mnt/robotics}"
+CODE_SOURCE="${CODE_SOURCE:-tar}"
+CODE_TAR="${CODE_TAR:-twguntara/code/uwlab-src.tar.gz}"
 CODE=/workspace/uwlab
 
 if [[ "${LOGGER}" == "wandb" && ",${STAGES}," == *",train,"* ]]; then
@@ -46,14 +53,35 @@ done
 ENVSTR=""
 for v in "${FWD[@]}"; do ENVSTR+="${v}=$(printf '%q' "${!v}") "; done
 
-PREP="rm -rf ${CODE} && git clone -q --depth 1 -b ${GIT_REF} ${GIT_REPO} ${CODE} && \
+case "${CODE_SOURCE}" in
+  tar)
+    PREP="rm -rf ${CODE} && mkdir -p ${CODE} && tar xzf ${CKPT_MOUNT}/${CODE_TAR} -C ${CODE} && \
+ln -s /isaac-sim ${CODE}/_isaac_sim && ln -s /opt/uwlab-deps/_isaaclab ${CODE}/_isaaclab && \
+cd ${CODE} && echo \"[code] \$(cat .forge-code-stamp)\""
+    SRC_DESC="code tarball ${CODE_TAR}"
+    LAST="${HERE}/../../.forge-last-push"
+    if [[ -f "${LAST}" ]]; then
+        if [[ "$(sed -n 's/^hash=//p' "${LAST}")" != "$(uwlab_tree_hash "${HERE}/../..")" ]]; then
+            echo "WARNING: working tree differs from the last push_code.sh upload ($(sed -n 's/^stamp=//p' "${LAST}"))." >&2
+            echo "         The job runs that older snapshot unless you run docker/forge/push_code.sh first." >&2
+        fi
+    else
+        echo "WARNING: no record of a push_code.sh upload on this machine; the job runs whatever ${CODE_TAR} holds." >&2
+    fi
+    ;;
+  git)
+    PREP="rm -rf ${CODE} && git clone -q --depth 1 -b ${GIT_REF} ${GIT_REPO} ${CODE} && \
 ln -s /isaac-sim ${CODE}/_isaac_sim && ln -s /opt/uwlab-deps/_isaaclab ${CODE}/_isaaclab && \
 cd ${CODE} && git log -1 --oneline"
+    SRC_DESC="${GIT_REF}@fork"
+    ;;
+  *) echo "CODE_SOURCE must be tar or git" >&2; exit 1 ;;
+esac
 ENTRY="uwlab-init-cache; ${PREP} && ${ENVSTR}bash docker/forge/g1d_pipeline.sh"
 
 ARGS=(--name "${JOB_NAME}" --image "${IMAGE}" --gpu "${GPUS}" --max-duration "${HOURS}"
       --disk-mount "${CKPT_DISK}:${CKPT_MOUNT}"
-      -m "OmniReset G1-D/Dex1 ${INSERTIVE}/${RECEPTIVE}: ${STAGES} (${GPUS}x${NUM_ENVS} envs, seed ${SEED}, ${GIT_REF}@fork)"
+      -m "OmniReset G1-D/Dex1 ${INSERTIVE}/${RECEPTIVE}: ${STAGES} (${GPUS}x${NUM_ENVS} envs, seed ${SEED}, ${SRC_DESC})"
       --entrypoint "${ENTRY}")
 if [[ "${LOGGER}" == "wandb" && ",${STAGES}," == *",train,"* ]]; then
     ARGS+=(--env "WANDB_API_KEY=${WANDB_API_KEY}")
