@@ -167,16 +167,299 @@ Reset states are the last of three datasets. The other two provide the raw mater
 
 The partial-assembly dataset answers the question ``what does a half-finished insertion look like?'' The procedure places the insertive object exactly at its assembled pose, which the asset metadata provides as an offset relative to the receptive object. It then applies a tiny random force and torque to the object on every physics step, so that the object jiggles out of the hole along whatever directions the geometry allows. At each physics step the pose of the insertive object expressed in the frame of the receptive object is logged. A pose is kept when the objects are collision-free at that instant and when it differs from every pose already kept by more than a position and an orientation threshold. The result is a set of relative poses $(\bm p^{\mathrm{rec}}_{\mathrm{ins}},\bm q^{\mathrm{rec}}_{\mathrm{ins}})$ that span the insertion path. The file does not store a robot state. It stores only where the object may sit in the hole.
 
+\paragraph{Where the assembled pose comes from.}
+The sampler does not know what a finished insertion looks like. That knowledge is authored by hand, once per asset, in a small \code{metadata.yaml} file next to each USD. Each object declares an \code{assembled\_offset}, a frame fixed to that object, and the pair is assembled when the two frames coincide. Writing $T_{\mathrm{ins}}$ and $T_{\mathrm{rec}}$ for the two offsets, the insertive object's assembled pose in the world is
+\begin{equation}
+  \Tf{\w}{\mathrm{ins}} = \Tf{\w}{\mathrm{rec}}\; T_{\mathrm{rec}}\; T_{\mathrm{ins}}^{-1}.
+  \label{eq:assembled}
+\end{equation}
+For the peg the offset is the identity, and for the hole it is a translation of $14.8$\,mm along $z$, which is where the peg's origin sits when it is fully home. The hole's metadata also carries the \code{success\_thresholds}, $2.5$\,mm and $0.025$\,rad, that define a completed insertion, and both files carry a \code{bottom\_offset} that the spawner uses to rest objects on the table. None of these numbers is computed from the meshes.
+
+Suppose, then, that you want to insert a gear between two fixed gears. You would provide the insertive gear as one USD and the fixture with both fixed gears as a single receptive USD, then write the two metadata files so that the assembled offsets coincide exactly at the meshed pose, measured in a USD editor or from the CAD. Only after that can the sampler do its part, which is to perturb the object out of that pose with tiny forces and record every collision-free pose it passes through until its bounding box no longer overlaps the receptive object. The sampler also assumes one assembled pose per pair: a gear has as many valid meshing angles as it has teeth, and only the one you author, plus whatever the perturbation reaches from it, will appear in the dataset. Note too that this environment sets friction to zero on both objects, so forces of $5$\,mN and $5$\,mN\,m suffice to move the part.
+
 \subsection{Grasps}
 \label{sec:grasps}
 
-The grasp dataset answers ``how can this gripper hold this object?'' It is recorded with a gripper alone, anchored to the world, and the object floating in front of it. Candidate grasps are generated geometrically by antipodal sampling on the object mesh~\cite{nguyen1988constructing}.
+The grasp dataset answers ``how can this gripper hold this object?'' It is recorded with a gripper alone, anchored to the world, and the object floating in front of it. Candidate grasps are generated geometrically by antipodal sampling on the object mesh~\cite{nguyen1988constructing}, in the three steps sketched in Figure~\ref{fig:threesteps}.
 \begin{enumerate}[leftmargin=*, itemsep=2pt]
   \item Sample points on the mesh surface, together with their outward normals. A share of the samples is taken from the highest points with upward-facing normals; the rest are uniform over the surface. For the Dex1 gripper this share is one half, so that a peg lying on its side also receives grasps across its diameter.
   \item From each sample, cast a ray into the object along the negative normal. The farthest hit that lies within the gripper's maximum aperture becomes the opposing contact. The segment between the two contacts is the \emph{grasp axis}, and its midpoint is the \emph{grasp centre}.
-  \item Align the gripper's closing axis with the grasp axis, rotate about the gripper's approach direction through sixteen equally spaced angles, and for each angle retreat the gripper along its approach direction through thirty-two standoff distances between the finger offset and the finger offset plus the mesh diagonal.
+  \item Align the gripper's alignment axis, which for both grippers here is its approach direction, with the grasp axis, rotate about the approach direction through sixteen equally spaced angles, and for each angle retreat the gripper along its approach direction through thirty-two standoff distances between the finger offset and the finger offset plus the mesh diagonal.
 \end{enumerate}
+
+\begin{figure}[tp]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[x=1cm, y=1cm, every node/.style={font=\normalsize}, sub/.style={font=\footnotesize\color{black!60}}]
+  % ---------------- panel 1: sample
+  \node[font=\normalsize\bfseries, anchor=west] at (0,5.9) {1\quad Sample the surface};
+  \fill[accentsoft] (1.6,1.0) rectangle (2.8,3.8); \draw[accent, thick] (1.6,1.0) rectangle (2.8,3.8);
+  \draw[arr] (0.6,1.0) -- (0.6,2.0); \node[sub, left] at (0.6,2.0) {$z$};
+  \foreach \x in {1.8,2.1,2.4,2.65} {\fill[accent] (\x,3.8) circle (1.3pt); \draw[karr] (\x,3.82) -- (\x,4.35);}
+  \foreach \y in {1.5,2.2,3.0} {\fill[black!50] (1.6,\y) circle (1.3pt); \draw[arr, black!50] (1.58,\y) -- (1.1,\y);}
+  \foreach \y in {1.3,2.0,2.6,3.3} {\fill[black!50] (2.8,\y) circle (1.3pt); \draw[arr, black!50] (2.82,\y) -- (3.3,\y);}
+  \foreach \x in {1.9,2.25,2.55} {\fill[black!50] (\x,1.0) circle (1.3pt); \draw[arr, black!50] (\x,0.98) -- (\x,0.5);}
+  \node[sub, anchor=west, align=left] at (0,-0.1) {random points on the triangles,\\ each with its outward normal};
+  \fill[accent] (0.1,-0.75) circle (1.3pt); \node[sub, anchor=west, align=left] at (0.2,-0.85) {share $f_{\mathrm{top}}$: highest $z$,\\ normal up (the cap)};
+  \fill[black!50] (0.1,-1.55) circle (1.3pt); \node[sub, anchor=west, align=left] at (0.2,-1.55) {the rest: uniform over the surface};
+  % ---------------- panel 2: ray
+  \begin{scope}[shift={(6.0,0)}]
+  \node[font=\normalsize\bfseries, anchor=west] at (0,5.9) {2\quad Cast a ray into the object};
+  \fill[accentsoft] (1.6,1.0) rectangle (2.8,3.8); \draw[accent, thick] (1.6,1.0) rectangle (2.8,3.8);
+  \fill (2.2,3.8) circle (1.6pt); \node[anchor=west] at (2.3,3.95) {$\bm p_1$};
+  \draw[karr] (2.2,3.85) -- (2.2,4.5); \node[sub, accent, anchor=west] at (2.3,4.35) {$\bm n_1$};
+  \draw[very thick] (2.2,3.75) -- (2.2,1.05);
+  \draw[arr, dashed, black!50] (2.2,1.0) -- (2.2,0.3); \node[sub, anchor=west] at (2.3,0.45) {ray along $-\bm n_1$};
+  \fill[warn] (2.2,1.0) circle (1.6pt); \node[sub, warn, anchor=west] at (2.3,0.85) {$\bm p_2$: farthest hit};
+  \fill[accent] (2.2,2.4) ++(0,0.1) -- ++(0.1,-0.1) -- ++(-0.1,-0.1) -- ++(-0.1,0.1) -- cycle; \node[accent, anchor=west] at (2.32,2.4) {$\bm c$};
+  \draw[black!60] (1.2,1.0) -- (1.2,3.8); \draw[black!60] (1.1,1.0) -- (1.3,1.0); \draw[black!60] (1.1,3.8) -- (1.3,3.8); \node[sub, anchor=east] at (1.1,2.4) {$w$};
+  \draw[black!60, dashed] (4.7,3.8) -- (4.7,-0.65); \draw[black!60] (4.6,3.8) -- (4.8,3.8); \draw[black!60] (4.6,-0.65) -- (4.8,-0.65);
+  \node[sub, rotate=90, anchor=south] at (4.8,1.6) {$w_{\max}$, the aperture};
+  \node[sub, anchor=west, align=left] at (0,-1.1) {kept hit $\bm p_2$: farthest within $w_{\max}$\\ axis $\bm a=(\bm p_2-\bm p_1)/w$\\ centre $\bm c$: the midpoint};
+  \end{scope}
+  % ---------------- panel 3: align, rotate, retreat
+  \begin{scope}[shift={(12.0,0)}]
+  \node[font=\normalsize\bfseries, anchor=west] at (0,5.9) {3\quad Align, rotate, retreat};
+  \fill[accentsoft] (1.6,-1.2) rectangle (2.8,1.6); \draw[accent, thick] (1.6,-1.2) rectangle (2.8,1.6);
+  \draw[very thick] (2.2,1.6) -- (2.2,-1.2);
+  \draw[black!50, dashed] (2.2,1.65) -- (2.2,5.0);
+  \fill[accent] (2.2,0.2) ++(0,0.1) -- ++(0.1,-0.1) -- ++(-0.1,-0.1) -- ++(-0.1,0.1) -- cycle;
+  % ghost grippers
+  \foreach \dy in {1.3,0.65} {\draw[black!25, line width=1.4pt] (1.7,2.9+\dy) -- (2.7,2.9+\dy) (1.82,2.9+\dy) -- (1.82,0.2+\dy) (2.58,2.9+\dy) -- (2.58,0.2+\dy);}
+  % gripper at j = 0
+  \draw[warn, line width=1.8pt] (1.7,2.9) -- (2.7,2.9) (1.82,2.9) -- (1.82,0.2) (2.58,2.9) -- (2.58,0.2);
+  \node[sub, warn, anchor=west] at (2.8,2.95) {$j=0$: tips at $\bm c$};
+  % rotation about the axis
+  \draw[accent] (2.2,4.6) ellipse (0.95 and 0.25);
+  \foreach \a in {0,22.5,...,337.5} {\draw[accent] ($(2.2,4.6)+({0.95*cos(\a)},{0.25*sin(\a)})$) -- ($(2.2,4.6)+({1.05*cos(\a)},{0.3*sin(\a)})$);}
+  \draw[karr] (3.15,4.6) arc[start angle=0, end angle=-70, x radius=0.95, y radius=0.25];
+  \node[sub, accent, anchor=south] at (2.2,5.0) {16 angles $\theta_k$ about the axis};
+  % retreat arrow
+  \draw[arr] (1.2,2.8) -- (1.2,4.1);
+  \node[sub, anchor=east, align=right] at (1.1,3.45) {32 standoffs $d_j$\\ from $d_0$, tips at $\bm c$,\\ to $d_0+D+\delta/2$};
+  \node[sub, anchor=west, align=left] at (0,-1.7) {approach axis aligned with $\bm a$\\ (also the axis the fingers close\\ across, for these grippers)\\ not to scale};
+  \end{scope}
+\end{tikzpicture}}
+\caption{The three construction steps on a block, side view. Left: surface samples with their outward normals, the top-biased share in blue and the uniform share in grey. Middle: one sample casts a ray along its inward normal; the farthest hit within the aperture is the opposing contact, and the segment between the two is the grasp axis with the centre at its midpoint. Right: the gripper's approach axis is aligned with the grasp axis, rolled through sixteen angles about it, and retreated along it through thirty-two standoffs, the nearest of which puts the fingertips at the centre.}
+\label{fig:threesteps}
+\end{figure}
+
+\paragraph{Choosing surface points.}
+The budget is a number of candidates, $N_{\mathrm{cand}}=10^6$, which is divided among the orientations and standoffs to give the number of surface samples,
+\begin{equation}
+  N_{\mathrm{surf}} = \Big\lfloor \frac{N_{\mathrm{cand}}}{n_\theta\, n_d} \Big\rfloor = \Big\lfloor \frac{10^6}{16\times 32} \Big\rfloor = 1953 .
+\end{equation}
+Ten times that many points are drawn uniformly on the mesh, each with its face normal $\bm n_i$, and every point receives a top-bias score in the object's own frame,
+\begin{equation}
+  s_i = \frac{z_i - z_{\min}}{z_{\max}-z_{\min}} + \max(n_{i,z},\,0),
+  \label{eq:topbias}
+\end{equation}
+which is largest for high points whose normals face up. A fraction $f_{\mathrm{top}}$ of the $N_{\mathrm{surf}}$ samples is taken from the top of this ranking and the remainder uniformly from the rest. The Robotiq configuration uses $f_{\mathrm{top}}=1$; the Dex1 configuration uses $f_{\mathrm{top}}=0.5$, for the reason shown in Figure~\ref{fig:sidegrasp}.
+
+\paragraph{The antipodal pair.}
+From a sample $\bm p_1$ with outward normal $\bm n_1$, a ray is cast into the object, $\bm r(t)=\bm p_1 - t\,\bm n_1$ for $t>0$. Among its intersections with the mesh, the opposing contact is the farthest one that the gripper can still span,
+\begin{equation}
+  \bm p_2 = \arg\max_{\bm p\in\text{hits}} \lVert \bm p-\bm p_1\rVert
+  \quad\text{subject to}\quad \lVert \bm p-\bm p_1\rVert \le w_{\max},
+\end{equation}
+where $w_{\max}$ is the gripper's maximum aperture from its metadata, $9.0$\,cm for the Robotiq and $9.5$\,cm for the Dex1. A sample with no admissible hit is discarded. The pair defines the grasp width, axis and centre,
+\begin{equation}
+  w = \lVert \bm p_2-\bm p_1\rVert, \qquad \bm a = \frac{\bm p_2-\bm p_1}{w}, \qquad \bm c = \bm p_1 + \tfrac{w}{2}\,\bm a .
+  \label{eq:pair}
+\end{equation}
+Choosing the farthest hit rather than the nearest makes the segment span the whole object along that line, so the centre lies in the middle of the body rather than inside a thin wall.
+
+\paragraph{From a pair to a family of gripper poses.}
+A gripper's metadata names three unit vectors in its own base frame: the approach direction $\bm g_{\mathrm{app}}$, the axis $\bm g_{\mathrm{al}}$ to be aligned with the grasp axis, and the axis $\bm o$ about which orientations are sampled. For both grippers in this repository all three are the base frame's $x$ axis, which points from the palm to the fingertips. The candidate transforms are
+\begin{align}
+  T_{k,j} &= \operatorname{Trans}(\bm c)\; R_{\mathrm{al}}\; \operatorname{Rot}(\bm o,\theta_k)\; \operatorname{Trans}(-d_j\,\bm g_{\mathrm{app}}), \label{eq:candidate}\\
+  \theta_k &= -\pi + \frac{2\pi k}{n_\theta-1},\quad k=0,\dots,15; \qquad
+  d_j = d_0 + \frac{j}{n_d-1}\Big(D+\tfrac{\delta}{2}\Big),\quad j=0,\dots,31, \nonumber
+\end{align}
+where $R_{\mathrm{al}}$ is the rotation that takes $\bm g_{\mathrm{al}}$ onto $\bm a$, $d_0$ is the \emph{finger offset}, the distance from the gripper base to the fingertips ($13.45$\,cm for the Robotiq, $12$\,cm for the Dex1), $D$ is the diagonal of the object's bounding box, and $\delta$ is the \emph{finger clearance} ($6.0$\,cm and $6.6$\,cm). Because the approach direction and the alignment axis coincide, the construction has a simple geometric reading (Figure~\ref{fig:antipodal}). The gripper approaches along the line through $\bm p_1$ and $\bm p_2$, with $\bm p_1$ nearest the palm, and its fingers close across that line. The sixteen angles $\theta_k$ spin the closing direction around the line, and the thirty-two standoffs slide the fingertips along it, from the segment's centre at $j=0$ outward past $\bm p_1$ at large $j$.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[x=1cm, y=1cm]
+  % side view
+  \draw[black!30, thick] (0.2,0) -- (6.4,0);
+  \fill[accentsoft] (2.6,0) rectangle (3.6,3.2); \draw[accent, thick] (2.6,0) rectangle (3.6,3.2);
+  \fill (3.1,3.2) circle (1.6pt); \node[font=\small, anchor=west] at (3.2,3.35) {$\bm p_1$};
+  \draw[arr] (3.1,3.2) -- (3.1,4.2); \node[sub, anchor=west] at (3.2,3.9) {$\bm n_1$};
+  \draw[dashed] (3.1,3.15) -- (3.1,0.05);
+  \fill (3.1,0) circle (1.6pt); \node[font=\small, anchor=west] at (3.2,-0.25) {$\bm p_2$};
+  \fill[accent] (3.1,1.6) circle (1.5pt); \node[font=\small, accent, anchor=west] at (3.2,1.6) {$\bm c$};
+  \draw[black!60] (2.1,0) -- (2.1,3.2); \draw[black!60] (2.0,0) -- (2.2,0); \draw[black!60] (2.0,3.2) -- (2.2,3.2);
+  \node[sub, anchor=east] at (2.0,1.6) {$w$};
+  % gripper
+  \draw[thick, fill=white] (2.1,5.3) rectangle (4.1,5.65); \node[sub, above] at (3.1,5.65) {gripper base};
+  \draw[thick, fill=white] (2.2,1.6) rectangle (2.42,5.3);
+  \draw[thick, fill=white] (3.78,1.6) rectangle (4.0,5.3);
+  \draw[karr] (4.6,5.2) -- (4.6,3.9); \node[sub, accent, anchor=west] at (4.7,4.55) {approach $\bm g_{\mathrm{app}}$};
+  \draw[black!60] (1.5,1.6) -- (1.5,5.3); \draw[black!60] (1.4,1.6) -- (1.6,1.6); \draw[black!60] (1.4,5.3) -- (1.6,5.3);
+  \node[sub, anchor=east, align=right] at (1.4,3.45) {$d_0$, the\\ finger offset};
+  \draw[black!50, densely dotted] (2.42,1.6) -- (3.78,1.6); \node[sub, anchor=west] at (4.05,1.6) {$j=0$: tips at $\bm c$};
+  \draw[black!50, densely dotted] (2.42,2.5) -- (3.78,2.5); \node[sub, anchor=west] at (4.05,2.5) {larger $j$};
+  \draw[black!50, densely dotted] (2.42,3.4) -- (3.78,3.4); \node[sub, anchor=west] at (4.05,3.4) {tips rise past $\bm p_1$};
+  % inset: top view
+  \begin{scope}[shift={(9.4,2.7)}]
+    \draw[black!25, rounded corners=2pt] (-1.9,-2.0) rectangle (1.9,2.3);
+    \node[font=\small\bfseries] at (0,1.95) {Top view, along the line};
+    \fill[accentsoft] (0,0) circle (0.55); \draw[accent, thick] (0,0) circle (0.55);
+    \foreach \ang in {0,22.5,...,157.5} { \draw[black!55] (\ang:1.1) -- (\ang+180:1.1); }
+    \fill (-1.15,-0.1) rectangle (-0.95,0.1); \fill (0.95,-0.1) rectangle (1.15,0.1);
+    \node[sub, align=center] at (0,-1.55) {16 closing directions $\theta_k$\\ about the approach line};
+  \end{scope}
+\end{tikzpicture}
+\caption{The antipodal construction on a standing peg. The sample $\bm p_1$ on the top cap casts a ray along its inward normal to $\bm p_2$ on the bottom. The gripper approaches along that line, its fingers close across it, the standoffs slide the fingertips from the centre upward, and the inset shows the sixteen closing directions sampled about the line.}
+\label{fig:antipodal}
+\end{figure}
+
+\begin{figure}[t]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[x=1cm, y=1cm]
+  % left panel: cap grasp on a lying peg
+  \fill[warnsoft, rounded corners=2pt] (0,0) rectangle (6.6,4.6);
+  \node[font=\small\bfseries] at (3.3,4.25) {Top-biased sample on a lying peg};
+  \node[sub, align=center] at (3.3,3.55) {cap grasp: the line $\bm p_1\bm p_2$ runs along the peg axis\\ rejected later: approach not within $60^\circ$ of down};
+  \draw[black!30, thick] (0.4,0.6) -- (6.2,0.6);
+  \fill[accentsoft] (1.6,0.6) rectangle (4.6,1.5); \draw[accent, thick] (1.6,0.6) rectangle (4.6,1.5);
+  \fill (4.6,1.05) circle (1.6pt); \node[font=\small, above] at (4.6,1.2) {$\bm p_1$};
+  \draw[dashed] (4.55,1.05) -- (1.65,1.05); \fill (1.6,1.05) circle (1.6pt);
+  \draw[thick, fill=white] (5.5,0.35) rectangle (5.85,1.75);
+  \draw[thick, fill=white] (4.7,1.6) rectangle (5.5,1.78); \draw[thick, fill=white] (4.7,0.32) rectangle (5.5,0.5);
+  \draw[-{Latex[length=2mm]}, thick, warn] (6.2,2.5) -- (5.1,2.5); \node[sub, warn, anchor=south east] at (6.25,2.6) {approach is horizontal};
+  % right panel: side sample
+  \fill[accentsoft, rounded corners=2pt] (7.0,0) rectangle (13.6,4.6);
+  \node[font=\small\bfseries] at (10.3,4.25) {Uniform sample on the upper side};
+  \node[sub, align=center] at (10.3,3.55) {side grasp: the line $\bm p_1\bm p_2$ is the diameter\\ fingers close across the peg, approach from above};
+  \draw[black!30, thick] (7.4,0.6) -- (13.2,0.6);
+  \fill[white] (8.8,0.6) rectangle (11.8,1.5); \draw[accent, thick] (8.8,0.6) rectangle (11.8,1.5);
+  \fill (10.3,1.5) circle (1.6pt); \node[font=\small, anchor=west] at (10.4,1.65) {$\bm p_1$};
+  \draw[dashed] (10.3,1.45) -- (10.3,0.65); \fill (10.3,0.6) circle (1.6pt);
+  \draw[thick, fill=white] (9.5,2.75) rectangle (11.1,3.0);
+  \draw[thick, fill=white] (9.6,1.0) rectangle (9.78,2.75); \draw[thick, fill=white] (10.82,1.0) rectangle (11.0,2.75);
+  \draw[karr] (12.2,3.1) -- (12.2,1.9); \node[sub, accent, anchor=west] at (12.3,2.5) {approach down};
+\end{tikzpicture}}
+\caption{Why the Dex1 sampler takes half of its surface points uniformly. The top-bias score of Eq.~\eqref{eq:topbias}, computed in the object frame, prefers the end caps of the peg. Those grasps approach along the peg axis, which is horizontal for a peg lying on the table, and the reset-state test rejects any hand that does not point within $60^\circ$ of down. A sample on the upper side of the lying peg gives a vertical approach with the fingers across the diameter.}
+\label{fig:sidegrasp}
+\end{figure}
+
 Every candidate is a rigid transform $\Tf{\obj}{\grip}$ of the gripper in the object frame. At each reset the environment opens the fingers, teleports the anchored gripper to a random candidate around the object, and commands the fingers closed. Gravity is switched on after one second and small disturbance forces are applied. The episode lasts four seconds. A candidate becomes a recorded grasp when, at the end, the object has moved less than a quarter metre from where it started, is still above half the spawn height, is not interpenetrating the gripper, has settled, and the fingers have travelled at least ten percent of the way from open to closed. The last clause rejects an object that merely rests across fully open fingers. The recorder saves the gripper pose in the object frame and the finger joint positions.
+
+\paragraph{Physical validation.}
+Geometry proposes and physics disposes. Each candidate is tried in simulation, and the grasp recorder keeps it only if, at the end of the four-second episode, every one of the following holds: the object's centre has moved less than $25$\,cm from where it started, it is still above $25$\,cm (half the spawn height), neither body is moving, the gripper's point cloud is at least half a millimetre clear of the object, and the fingers have travelled at least a tenth of their range,
+\begin{equation}
+  f_{\mathrm{close}} = \frac{\theta-\theta_{\mathrm{open}}}{\theta_{\mathrm{closed}}-\theta_{\mathrm{open}}} > 0.1 .
+\end{equation}
+Only a small fraction of the geometric candidates survive. On the peg with the Dex1, one run of the recorder with $256$ environments collected $97$ grasps, $80$ of them on the caps and $17$ across the body, and $8$ of those $17$ were later dropped at load time because the fingers had stayed open.
+
+\paragraph{No learned grasp model is involved.}
+There is no GraspNet, Contact-GraspNet, AnyGrasp or Dex-Net anywhere in this pipeline. Candidates come from the antipodal construction above and are filtered by simulation alone. This is a deliberate fit for the task: the objects are few, their meshes are exact, and a full physics engine is available to try every candidate, so a learned prior would add a dependency without adding information. The dataset format is nothing more than a list of gripper poses in the object frame with finger positions, so a learned planner could be dropped in as an alternative candidate source without touching the reset-state generator.
+
+\subsection{A Worked Run on the Peg, Stage by Stage}
+\label{sec:worked}
+
+The equations above are easier to believe once the stages have been seen. The figures in this subsection come from re-running the sampler's own code on \path{Props/Custom/Peg/peg.usd} with the Dex1 metadata, and from the grasp file the recorder wrote for that peg. The peg is a plain block of $3\times3\times6$\,cm with $z$ along its length, and everything is drawn in the peg's own frame because that is the frame the grasp file uses. Figure~\ref{fig:graspblocks} shows the whole procedure as blocks with the counts from this run.
+
+\begin{figure}[tp]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[x=1cm, y=1cm,
+  st/.style={draw=accent, thick, fill=white, rounded corners=2pt, align=center, inner sep=4pt, font=\small, minimum height=14mm},
+  io/.style={draw=black!40, fill=white, rounded corners=2pt, align=center, inner sep=4pt, font=\small, minimum height=14mm},
+  bad/.style={draw=warn, fill=warnsoft, rounded corners=2pt, align=center, inner sep=4pt, font=\small}]
+  \node[io, minimum width=28mm] (in) at (1.5,3) {\textbf{Inputs}\\ \subl{peg mesh, 12 triangles}\\ \subl{gripper \code{metadata.yaml}}};
+  \node[st, minimum width=34mm] (s1) at (5.0,3) {\textbf{1 Surface samples}\\ \subl{19\,530 drawn, scored,}\\ \subl{1\,953 kept (half top-biased)}};
+  \node[st, minimum width=34mm] (s2) at (8.8,3) {\textbf{2 Antipodal pairs}\\ \subl{ray along the inward normal}\\ \subl{1\,953 pairs, 0 rejected}};
+  \node[st, minimum width=34mm] (s3) at (12.6,3) {\textbf{3 Pose family}\\ \subl{16 angles $\times$ 32 standoffs}\\ \subl{999\,936 candidate poses}};
+  \node[st, minimum width=40mm] (s4) at (12.3,0.3) {\textbf{4 Physics trial, 4\,s each}\\ \subl{open, teleport to a candidate, close,}\\ \subl{gravity on at 1\,s, shake 1--2\,s, settle}};
+  \node[st, minimum width=40mm] (s5) at (7.5,0.3) {\textbf{5 Success checks}\\ \subl{moved $<25$\,cm, above $25$\,cm, at rest,}\\ \subl{no interpenetration, fingers travelled $>10\%$}};
+  \node[io, minimum width=40mm] (out) at (2.6,0.3) {\textbf{\code{grasps.pt}}\\ \subl{3\,328 trials in 29\,s with 256 envs}\\ \subl{97 kept (2.9\%): 80 cap, 17 side}};
+  \node[bad, minimum width=60mm] (filt) at (2.6,-1.7) {\textbf{Load-time filter}\\ \subl{8 grasps with fingers $>90\%$ open dropped, 89 placed}};
+  \draw[arr] (in) -- (s1); \draw[karr] (s1) -- (s2); \draw[karr] (s2) -- (s3);
+  \draw[karr] (s3.south) -- (s4.north);
+  \draw[karr] (s4) -- (s5); \draw[karr] (s5) -- (out);
+  \draw[arr] (out) -- (filt);
+  \draw[darr] (s5.south) -- ++(0,-0.6) -| (s4.south);
+  \node[sub] at (9.9,-0.75) {failed: reset, try another};
+  \node[sub] at (8.8,4.25) {geometry only, computed once at the first reset};
+\end{tikzpicture}}
+\caption{Grasp generation as blocks, with the counts from the peg run. Steps 1 to 3 are pure geometry and run once; steps 4 and 5 run in the simulator, one candidate per environment per episode, until the requested number of grasps has been recorded.}
+\label{fig:graspblocks}
+\end{figure}
+
+\paragraph{Sampling the surface.}
+``Sample points on the mesh surface'' means picking random points on the triangles, weighted by triangle area, each carrying the outward normal of its triangle. The sampler draws ten times the $1\,953$ it will keep. Figure~\ref{fig:wsamples} shows the samples and their normals; on a box the normals fall into six families. Figure~\ref{fig:wtopbias} shows the top-bias score of Eq.~\eqref{eq:topbias} and the two selections, Dex1 with half of the samples from the top of the ranking and Robotiq with all of them.
+
+\begin{figure}[tp]
+\centering
+\includegraphics[width=\linewidth]{figures/grasp_f1_samples.png}
+\caption{Left: 260 of the 19\,530 uniform surface samples. Right: 70 of them with their outward normals.}
+\label{fig:wsamples}
+\end{figure}
+
+\begin{figure}[tp]
+\centering
+\includegraphics[width=\linewidth]{figures/grasp_f2_topbias.png}
+\caption{Left: the top-bias score, from 0 at the bottom to 2 on the top face. Middle: the Dex1 selection, 976 top-biased samples on the cap (blue) and 977 uniform samples (grey). Right: the Robotiq selection, the cap alone. This single difference is why the Dex1 file contains side grasps and the Robotiq file does not.}
+\label{fig:wtopbias}
+\end{figure}
+
+\paragraph{Casting the ray.}
+From a cap sample the ray runs the full $6$\,cm down the peg's axis; from a side sample it crosses the $3$\,cm width. Both are far inside the $9.48$\,cm aperture, so on this peg no sample is rejected (Figure~\ref{fig:wrays}). A longer object would lose its end-cap samples at this step.
+
+\begin{figure}[tp]
+\centering
+\includegraphics[width=\linewidth]{figures/grasp_f3_rays.png}
+\caption{Left and middle: one cap and one side sample, with the ray, the hits, the farthest admissible hit $\bm p_2$ and the centre $\bm c$. Right: the segment lengths of all 1\,953 samples against the aperture.}
+\label{fig:wrays}
+\end{figure}
+
+\paragraph{Orientations and standoffs.}
+Figure~\ref{fig:wstandoff} takes the cap pair of Figure~\ref{fig:wrays} and shows the two sweeps of Eq.~\eqref{eq:candidate}: the 32 gripper-base positions along the approach line, from fingertips at the centre to fingertips $10.6$\,cm above the top of the peg, and the 16 finger-closing directions seen down the line, only two of which can pinch a square peg. Figure~\ref{fig:wcloud} shows all 999\,936 candidates at once. They form six blocks around the peg, above and below it from the cap samples and on four sides from the side samples. Nothing has been tested yet, and the geometry has no notion of up.
+
+\begin{figure}[tp]
+\centering
+\includegraphics[width=\linewidth]{figures/grasp_f4_orient_standoff.png}
+\caption{Left: the standoff sweep for the cap pair, with the gripper drawn at the nearest standoff, fingertips at $\bm c$, and at the farthest. Middle: the 16 closing directions through $\bm c$. Right: the standoff schedule $d_j$.}
+\label{fig:wstandoff}
+\end{figure}
+
+\begin{figure}[tp]
+\centering
+\includegraphics[width=\linewidth]{figures/grasp_f5_candidates.png}
+\caption{Every candidate gripper-base position, coloured by standoff index on the left and by sample type in the side view.}
+\label{fig:wcloud}
+\end{figure}
+
+\paragraph{The trial and the survivors.}
+Each candidate is tested in a four-second episode (Figure~\ref{fig:trial}): the fingers open, the anchored gripper is teleported to the candidate with gravity off, the close command is held, gravity comes on at one second, a random force and torque of $0.01$\,N and $0.01$\,N\,m shake the peg between one and two seconds, and the peg then settles or falls away. The recorder tried $3\,328$ candidates in $29$ seconds and kept $97$ (Figure~\ref{fig:wsurvivors}). The survivors cluster at the standoffs where the fingertips straddle the peg. Five of the cap grasps approach from below; they are valid in free space but useless on a table, and the reset-state test later rejects them with its ``approach within $60^\circ$ of down'' clause. Eight grasps ended with the fingers more than $90\%$ open, meaning they closed on nothing, and those are dropped when the file is loaded.
+
+\begin{figure}[tp]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[x=1cm, y=1cm, ph/.style={fill=accentsoft, rounded corners=2pt, align=center, inner sep=4pt, font=\small, minimum height=13mm}]
+  \node[ph, minimum width=30mm] (a) at (1.6,0) {\textbf{Reset}\\ \subl{open the fingers, gravity off}\\ \subl{teleport to a random candidate}};
+  \node[ph, minimum width=30mm] (b) at (4.9,0) {\textbf{0 to 1\,s}\\ \subl{fingers close on whatever}\\ \subl{is between them, no gravity}};
+  \node[ph, minimum width=32mm] (c) at (8.3,0) {\textbf{1 to 2\,s}\\ \subl{gravity on, random force and}\\ \subl{torque of 0.01\,N and 0.01\,N\,m}};
+  \node[ph, minimum width=30mm] (d) at (11.6,0) {\textbf{2 to 4\,s}\\ \subl{gravity only, the peg}\\ \subl{settles or falls away}};
+  \node[ph, draw=accent, minimum width=32mm] (e) at (15.0,0) {\textbf{4\,s: success checks}\\ \subl{pass: write pose and fingers}\\ \subl{fail: nothing, reset}};
+  \draw[black!50] (0,-1.1) -- (16.7,-1.1);
+  \foreach \x/\l in {3.25/{$t=0$}, 6.6/{1\,s}, 10.0/{2\,s}, 16.7/{4\,s, 40 control steps}} {\draw[black!70] (\x,-1.2) -- (\x,-1.0); \node[sub, below] at (\x,-1.2) {\l};}
+  \node[sub] at (8.3,-1.9) {gripper anchored to the world, action held at the close command throughout, 256 trials in parallel};
+\end{tikzpicture}}
+\caption{One grasp trial. Gravity is off while the fingers close so that the peg is not already falling when contact is made, then on for three seconds with a one-second shake in the middle.}
+\label{fig:trial}
+\end{figure}
+
+\begin{figure}[tp]
+\centering
+\includegraphics[width=\linewidth]{figures/grasp_f6_survivors.png}
+\caption{The 97 recorded grasps: 80 cap grasps (blue) and 17 side grasps (orange). Left and middle: gripper-base positions and approach lines. Right: finger opening at the end of the trial; most stopped at 25 to 45 percent open, which is a 3\,cm peg between fingers that open to 4.45\,cm.}
+\label{fig:wsurvivors}
+\end{figure}
 
 \subsection{Reset States}
 The reset-state generator combines these two files with a full robot and a table. The remainder of these notes is about it.
@@ -238,37 +521,34 @@ The recorder manager is configured with a single term that fires just before an 
 \begin{figure}[t]
 \centering
 \resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[x=1cm, y=1cm]
-  % bands
-  \fill[accentsoft, rounded corners=2pt] (0,0) rectangle (2.8,1.6);
-  \fill[accentsoft, rounded corners=2pt] (3.0,0) rectangle (8.8,1.6);
-  \fill[accentsoft, rounded corners=2pt] (9.0,0) rectangle (11.8,1.6);
-  \node[font=\small\bfseries] at (1.4,1.3) {Reset events};
-  \node[sub] at (1.4,0.85) {place object};
-  \node[sub] at (1.4,0.5) {IK the hand, write fingers};
-  \node[font=\small\bfseries] at (5.9,1.3) {Hold under physics};
-  \node[sub] at (5.9,0.85) {arm action $0$, gripper command held};
-  \node[sub] at (5.9,0.5) {object may fall, roll, or stay in the hand};
-  \node[font=\small\bfseries] at (10.4,1.3) {Success test};
-  \node[sub] at (10.4,0.85) {all clauses at once};
-  \node[sub] at (10.4,0.5) {then export or discard};
-  % time axis
-  \draw[black!40] (0,-0.3) -- (11.8,-0.3);
-  \draw[black!60] (3.0,-0.4) -- (3.0,-0.2);  \node[sub, below] at (3.0,-0.4) {$t=0$};
-  \draw[black!60] (3.29,-0.36) -- (3.29,-0.24); \node[sub, anchor=west] at (3.45,-0.55) {step 1};
-  \draw[black!60] (8.8,-0.4) -- (8.8,-0.2);  \node[sub, anchor=north east] at (8.9,-0.42) {$t=2$\,s, step 20};
-  % early out
-  \fill[warnsoft, rounded corners=2pt] (3.0,1.9) rectangle (7.0,2.7);
-  \node[font=\small] at (5.0,2.45) {Early out at step 1};
-  \node[sub] at (5.0,2.1) {IK missed the grasp pose, or joints exploded};
-  \draw[arr] (3.29,1.6) -- (3.29,1.9);
-  % outcomes
-  \draw[karr] (9.9,0) -- (9.9,-1.15) -- (7.7,-1.15);
-  \node[font=\small, anchor=east] at (7.6,-1.15) {Success: the recorder saves the settled state, then reset};
-  \draw[arr] (11.0,0) -- (11.0,-1.8) -- (7.7,-1.8);
-  \node[sub, anchor=east] at (7.6,-1.8) {Failure: nothing saved, reset};
+\begin{tikzpicture}[x=1cm, y=1cm,
+  phase/.style={draw=accent, fill=accentsoft, rounded corners=2pt, align=center, inner sep=4pt, font=\small},
+  good/.style={draw=accent, fill=accentsoft, rounded corners=2pt, align=center, inner sep=4pt, font=\small},
+  bad/.style={draw=warn, fill=warnsoft, rounded corners=2pt, align=center, inner sep=4pt, font=\small}]
+  % main flow
+  \node[phase, minimum width=26mm, minimum height=16mm] (reset) at (1.3,0.8) {\textbf{Reset events}\\ \subl{place object}\\ \subl{IK the hand, write fingers}};
+  \node[phase, minimum width=48mm, minimum height=16mm] (hold) at (5.6,0.8) {\textbf{Hold under physics}\\ \subl{arm action $0$, gripper command held}\\ \subl{object may fall, roll, or stay in the hand}};
+  \node[phase, minimum width=22mm, minimum height=16mm] (test) at (9.7,0.8) {\textbf{Success test}\\ \subl{all clauses at once}};
+  \node[good, minimum width=23mm, minimum height=10mm] (export) at (12.75,1.1) {\textbf{Export}\\ \subl{settled state saved}};
+  \node[bad, minimum width=23mm, minimum height=10mm] (discard) at (12.75,-1.4) {\textbf{Discard}\\ \subl{nothing saved}};
+  \node[bad, minimum width=38mm, minimum height=10mm] (early) at (5.1,-1.4) {\textbf{Early out at step 1}\\ \subl{IK missed the grasp pose, or joints exploded}};
+  \draw[arr] (reset) -- (hold);
+  \draw[arr] (hold) -- (test);
+  \draw[karr] (test.east) -- (export.west);
+  \draw[arr] (test.south) -- ++(0,-0.5) -| (discard.north);
+  \draw[arr] ([xshift=-20mm]hold.south) -- ([xshift=-20mm]hold.south |- early.north);
+  \draw[arr] (early.east) -- (discard.west);
+  \node[sub, anchor=west] at ([xshift=1mm]export.east) {then reset};
+  \node[sub, anchor=west] at ([xshift=1mm]discard.east) {then reset};
+  % time axis over the hold phase
+  \draw[black!50] (3.2,2.15) -- (8.0,2.15);
+  \foreach \x in {3.2,3.44,...,8.0} {\draw[black!40] (\x,2.1) -- (\x,2.2);}
+  \draw[black!70] (3.2,2.0) -- (3.2,2.3); \node[sub, anchor=south] at (3.2,2.32) {$t=0$};
+  \draw[black!70] (3.44,2.05) -- (3.44,2.25); \node[sub, anchor=north] at (3.44,1.98) {step 1};
+  \draw[black!70] (8.0,2.0) -- (8.0,2.3); \node[sub, anchor=south east] at (8.1,2.32) {step 20, $t=2$\,s};
+  \node[sub, anchor=south] at (5.6,2.72) {20 control steps, 240 physics steps};
 \end{tikzpicture}}
-\caption{Timeline of one recording attempt in one environment. Thousands of these run in parallel, each on its own schedule, and the script counts exported episodes until it reaches the requested number.}
+\caption{One recording attempt in one environment. The hold lasts twenty control steps, and the success test runs only at the last one. A placement that missed the grasp pose, or a solver blow-up, leaves at step one without waiting. Thousands of these attempts run in parallel, and the script counts exported episodes until it reaches the requested number.}
 \label{fig:timeline}
 \end{figure}
 
