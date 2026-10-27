@@ -47,7 +47,7 @@ git ls-files -co --exclude-standard -z \
 printf '.forge-code-stamp\0' >> "${TMP}/files"
 N=$(tr -cd '\0' < "${TMP}/files" | wc -c | tr -d ' ')
 COPYFILE_DISABLE=1 tar -czf "${TMP}/${TAR_NAME}" --null -T "${TMP}/files"
-SIZE_MB=$(( $(stat -f %z "${TMP}/${TAR_NAME}" 2>/dev/null || stat -c %s "${TMP}/${TAR_NAME}") / 1048576 ))
+SIZE_MB=$(( $(wc -c < "${TMP}/${TAR_NAME}") / 1048576 ))   # portable (GNU stat -f means file system)
 echo "[push_code] ${N} files, ${SIZE_MB} MB: ${STAMP}"
 (( SIZE_MB < 300 )) || { echo "[push_code] tarball is ${SIZE_MB} MB; something untracked and large is in the tree (git status)" >&2; exit 1; }
 LOCAL_MD5="$( (md5 -q "${TMP}/${TAR_NAME}" 2>/dev/null || md5sum "${TMP}/${TAR_NAME}" | cut -d' ' -f1) )"
