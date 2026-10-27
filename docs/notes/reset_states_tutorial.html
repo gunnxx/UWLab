@@ -1,5 +1,9 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Generating Reset States</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <script>
 window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] }, svg: { fontCache: 'global' }, options: { skipHtmlTags: ['script','noscript','style','textarea','pre','code'] } };
@@ -36,13 +40,16 @@ window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\
   --warn-soft: #2d2518; --warn: #e0b36a; color-scheme: dark;
 }
 * { box-sizing: border-box; }
+html { color-scheme: light; }
 body {
+  margin: 0;
   background: var(--bg); color: var(--fg);
   font-family: var(--font-body); font-size: 1.125rem; line-height: 1.6;
   padding-left: max(16px, env(safe-area-inset-left, 0px));
   padding-right: max(16px, env(safe-area-inset-right, 0px));
-  padding-block: 0 4rem;
+  padding-block: env(safe-area-inset-top, 0px) calc(4rem + env(safe-area-inset-bottom, 0px));
 }
+img { max-width: 100%; }
 .page { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 1fr; gap: 0 3rem; }
 @media (min-width: 960px) { .page { grid-template-columns: 200px minmax(0, 1fr); } }
 nav.rail { display: none; }
@@ -104,6 +111,8 @@ footer { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var(--rule);
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 html { scroll-behavior: smooth; }
 </style>
+</head>
+<body>
 
 <div class="page">
 <nav class="rail" aria-label="Chapters">
@@ -482,7 +491,7 @@ done</code></pre>
 
 <h3>Inspecting the result</h3>
 
-<p>Three tools look at a finished file. <code>visualize_reset_states.py</code> cycles through states in a window. <code>render_reset_states.py</code> writes one image per state headlessly and, with <code>--settle_steps 240 --gripper close</code>, shows the same state after a further two seconds with the gripper commanded closed, which is the fairest picture of what a policy will inherit. <code>debug_reset_env.py --funnel --close_gripper</code> runs the recording environment and prints the clause-by-clause funnel from Chapter 7.</p>
+<p>Three tools look at a finished file. <code>visualize_reset_states.py</code> cycles through states in a window. <code>render_reset_states.py</code> writes one image per state headlessly and, with <code>--settle_steps 240 --gripper close</code>, shows the same state after a further two seconds with the task's own controller holding the arm and the gripper commanded closed, which is the fairest picture of what a policy will inherit. <code>debug_reset_env.py --funnel --close_gripper</code> runs the recording environment and prints the clause-by-clause funnel from Chapter 7.</p>
 
 <h2 id="ch9"><span class="num">Chapter 9</span>What goes wrong, and what it looks like</h2>
 
@@ -531,3 +540,5 @@ done</code></pre>
 </footer>
 </main>
 </div>
+</body>
+</html>

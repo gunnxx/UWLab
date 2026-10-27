@@ -1,0 +1,442 @@
+\documentclass{article}
+
+\usepackage[preprint]{corl_2026}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,fit,backgrounds}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{microtype}
+\usepackage{enumitem}
+
+% ---------- notation ----------
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Tf}[2]{T^{#1}_{#2}}
+\newcommand{\w}{\mathrm{w}}
+\newcommand{\obj}{\mathrm{obj}}
+\newcommand{\grip}{\mathrm{grip}}
+\newcommand{\base}{\mathrm{b}}
+\newcommand{\tgt}{\mathrm{target}}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\subl}[1]{{\scriptsize\color{black!60}#1}}
+\newcommand{\clamp}{\operatorname{clamp}}
+
+% ---------- colours used in figures ----------
+\definecolor{accent}{HTML}{1E6B86}
+\definecolor{accentsoft}{HTML}{E2EEF2}
+\definecolor{warnsoft}{HTML}{F6ECDC}
+\definecolor{warn}{HTML}{8A5A12}
+\definecolor{codebg}{HTML}{F4F5F4}
+
+\lstset{
+  basicstyle=\ttfamily\scriptsize,
+  commentstyle=\color{black!55}\itshape,
+  keywordstyle=\bfseries,
+  backgroundcolor=\color{codebg},
+  frame=single, framerule=0pt, framesep=4pt,
+  columns=fullflexible, keepspaces=true,
+  breaklines=true, showstringspaces=false,
+  xleftmargin=4pt, xrightmargin=4pt,
+}
+
+\tikzset{
+  blk/.style={draw, rounded corners=2pt, minimum height=8mm, minimum width=18mm, align=center, font=\small, inner sep=3pt},
+  key/.style={draw=accent, thick},
+  sub/.style={font=\scriptsize\color{black!60}},
+  arr/.style={-{Latex[length=2mm]}, thick},
+  karr/.style={-{Latex[length=2mm]}, thick, accent},
+  darr/.style={-{Latex[length=2mm]}, thick, dashed},
+}
+
+\title{Discovering Where Episodes Begin:\\ How OmniReset Generates Its Reset-State Datasets}
+
+\author{
+  Tri Wahyu Guntara\\
+  Tutorial notes on the UWLab OmniReset code base\\
+}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+A reinforcement-learning policy for peg insertion can only become competent in the situations it has been placed in. OmniReset therefore begins each training episode from a library of \emph{reset states}, complete snapshots of the scene that physics has already accepted as stable, organised into four families: the object anywhere with the hand anywhere, the object resting with the hand grasping it, the object held in the air, and the object partly inserted with the hand on it. This tutorial explains how that library is produced. We define what a reset state is and how it is stored, describe the two auxiliary datasets of grasps and partial assemblies on which the grasped families depend, walk through one recording attempt from the reset events to the export decision, derive the inverse-kinematics placement of the hand on a sampled grasp, and examine the success test clause by clause. We close with the commands that run the generator, the failure modes that motivated each clause, and exercises for the reader. Every statement is tied to the implementation on the \code{feature/forge-omnireset} branch.
+\end{abstract}
+
+\keywords{Reset-state distributions, Reinforcement learning, Simulation, Grasp sampling, Inverse kinematics}
+
+%==============================================================================
+\section{Why Reset States Exist}
+\label{sec:why}
+
+A reinforcement-learning agent learns from episodes, and every episode begins somewhere. If every episode of a peg-insertion task began with the peg lying on the table and the hand hovering far away, the policy would learn to approach, grasp, lift, and insert in that one order. It would never practise recovering from a peg that is already half inserted, or from a grasp that is slightly off centre, because it would never start there.
+
+OmniReset~\cite{omnireset2026} addresses this by beginning episodes from a large library of reset states. A reset state is a complete snapshot of the scene, a configuration that physics has already accepted as stable. The library is organised into the four families of Table~\ref{tab:families}, each describing where the object is and what the hand is doing. During training the environment draws each new episode's starting state from one of the four files, with probability one quarter each. Evaluation uses the first family alone, so that a reported success rate always means ``from scratch''. Because every state in the library has been simulated and checked before it was saved, the policy never starts inside a wall, with the peg floating, or with the arm folded through itself.
+
+\begin{table}[t]
+\centering
+\caption{The four families of reset states. The identifiers are the strings that appear in the task names and in the dataset file names.}
+\label{tab:families}
+\small
+\begin{tabular}{@{}p{3.6cm}p{3.0cm}p{3.0cm}p{2.9cm}@{}}
+\toprule
+Family & Object & Hand & What it teaches\\
+\midrule
+\code{ObjectAnywhere\-EEAnywhere} & Dropped from a random pose, lands where it may & Random pose in the workspace, fingers open or closed & Approaching and grasping from scratch\\
+\code{ObjectResting\-EEGrasped} & Resting on the table, taken from the first family & Closed on the object at a sampled grasp & Lifting and carrying a grasped object\\
+\code{ObjectAnywhere\-EEGrasped} & Held in the air & Closed on the object at a sampled grasp & Transport and alignment above the hole\\
+\code{ObjectPartially\-Assembled\-EEGrasped} & Partly inserted, taken from the partial-assembly dataset & Closed on the object at a sampled grasp & Finishing an insertion, or recovering from a jam\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The central idea is that reset states are not drawn from a formula. They are \emph{discovered}. Thousands of simulated environments guess a configuration, hold it for two seconds under physics, and keep only the guesses that survive a strict test. The dataset is the collection of survivors.
+
+%==============================================================================
+\section{What a Reset State Is}
+\label{sec:what}
+
+Formally, a reset state is the output of the scene's own state query, taken relative to the environment origin. For one environment it contains, for every articulation (here only the robot), the root pose $(\bm p,\bm q)\in\R^7$, the root velocity in $\R^6$, one position per joint, and one velocity per joint; and for every rigid object (the insertive object, the receptive object, and the table), the root pose in $\R^7$ and the root velocity in $\R^6$.
+
+Everything that physics needs to continue the simulation is included. Nothing about the controller is included, and this matters for the grasped families. The recorded finger positions already sit at the grasp, but the clamping force of a gripper comes from the controller commanding a position \emph{past} the contact. Restoring the state therefore restores the geometry of a grasp but not its squeeze. The first gripper action of the policy decides whether the object stays in the hand.
+
+\paragraph{Where the file lives and how it is named.}
+Each object pair gets a directory named after the two assets. The name is formed from the parent folder of each USD file, sorted alphabetically and joined by two underscores, so the peg and its hole become \code{Peg\_\_PegHole}. Inside that directory the four families are stored as \code{resets\_<Family>.pt}, written by \code{torch.save}:
+
+\begin{lstlisting}
+Datasets/OmniReset_g1d/
+|-- Grasps/
+|   `-- Peg/grasps.pt                  gripper pose in the object frame, finger joints
+`-- Resets/
+    `-- Peg__PegHole/
+        |-- partial_assemblies.pt      object pose in the hole frame, partly inserted
+        |-- resets_ObjectAnywhereEEAnywhere.pt
+        |-- resets_ObjectRestingEEGrasped.pt
+        |-- resets_ObjectAnywhereEEGrasped.pt
+        `-- resets_ObjectPartiallyAssembledEEGrasped.pt
+\end{lstlisting}
+
+A reset file is a nested dictionary. The top key is \code{initial\_state}; below it come \code{articulation} and \code{rigid\_object}, then the asset name, and finally the quantity. Each leaf is a list with one tensor per saved state, and the loader counts states by the length of the robot's \code{joint\_position} list. Every file also carries the entry \code{quat\_convention: "xyzw"}. The loader refuses a file without it, because datasets recorded under Isaac Lab~2 used the other quaternion order, and loading one silently rotates every pose by $180^\circ$ about the $x$ axis.
+
+%==============================================================================
+\section{The Three Datasets and Their Dependencies}
+\label{sec:three}
+
+Reset states are the last of three datasets. The other two provide the raw material for the grasped and partially assembled families. Figure~\ref{fig:deps} shows what depends on what, and it also fixes the order in which the generator must run.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[x=1cm, y=1cm]
+  \node[blk, minimum width=44mm] (mesh) at (6.9,4.2) {Object USD meshes\\ \subl{plus \code{metadata.yaml} per asset}};
+  \node[blk, minimum width=38mm] (grasp) at (3.6,2.6) {Grasps\\ \subl{\code{Grasps/Peg/grasps.pt}}};
+  \node[blk, minimum width=36mm] (part) at (11.9,2.6) {Partial assemblies\\ \subl{\code{partial\_assemblies.pt}}};
+  \node[blk, key, minimum width=30mm] (f1) at (1.6,0.8) {1\quad Anywhere /\\ EE anywhere};
+  \node[blk, key, minimum width=30mm] (f2) at (5.0,0.8) {2\quad Resting /\\ EE grasped};
+  \node[blk, key, minimum width=30mm] (f3) at (8.4,0.8) {3\quad Anywhere /\\ EE grasped};
+  \node[blk, key, minimum width=30mm] (f4) at (11.9,0.8) {4\quad Partially assembled /\\ EE grasped};
+  \node[blk, minimum width=60mm] (train) at (6.9,-1.1) {Training environment, one family per episode};
+  % meshes feed grasps, partial assemblies and family 1
+  \draw[arr] ([yshift=-2.5mm]mesh.west) -| (grasp.north);
+  \draw[arr] (mesh.east) -| (part.north);
+  \draw[arr] ([yshift=2.5mm]mesh.west) -| ([xshift=-6mm]f1.north);
+  % grasps feed every grasped family
+  \draw[karr] (grasp.south) -- ++(0,-0.55) -| (f2.north);
+  \draw[karr] ([xshift=10mm]grasp.south) -- ++(0,-0.35) -| (f3.north);
+  \draw[karr] ([xshift=16mm]grasp.south) -- ++(0,-0.15) -| ([xshift=-8mm]f4.north);
+  % family 1 feeds family 2; partial assemblies feed family 4
+  \draw[karr] (f1.east) -- (f2.west);
+  \draw[arr] (part.south) -- (f4.north);
+  % all four feed training
+  \draw[arr] (f1.south) -- ++(0,-0.5) -| ([xshift=-24mm]train.north);
+  \draw[arr] (f2.south) -- ++(0,-0.5) -| ([xshift=-8mm]train.north);
+  \draw[arr] (f3.south) -- ++(0,-0.5) -| ([xshift=8mm]train.north);
+  \draw[arr] (f4.south) -- ++(0,-0.5) -| ([xshift=24mm]train.north);
+\end{tikzpicture}
+\caption{Dependency graph of the three datasets and the four reset families. Grasps (blue arrows) feed every grasped family. Family~2 additionally draws its object poses from family~1, so family~1 must be recorded first. The pipeline script runs partial assemblies, then grasps, then the four families in numerical order.}
+\label{fig:deps}
+\end{figure}
+
+\subsection{Partial Assemblies}
+\label{sec:partial}
+
+The partial-assembly dataset answers the question ``what does a half-finished insertion look like?'' The procedure places the insertive object exactly at its assembled pose, which the asset metadata provides as an offset relative to the receptive object. It then applies a tiny random force and torque to the object on every physics step, so that the object jiggles out of the hole along whatever directions the geometry allows. At each physics step the pose of the insertive object expressed in the frame of the receptive object is logged. A pose is kept when the objects are collision-free at that instant and when it differs from every pose already kept by more than a position and an orientation threshold. The result is a set of relative poses $(\bm p^{\mathrm{rec}}_{\mathrm{ins}},\bm q^{\mathrm{rec}}_{\mathrm{ins}})$ that span the insertion path. The file does not store a robot state. It stores only where the object may sit in the hole.
+
+\subsection{Grasps}
+\label{sec:grasps}
+
+The grasp dataset answers ``how can this gripper hold this object?'' It is recorded with a gripper alone, anchored to the world, and the object floating in front of it. Candidate grasps are generated geometrically by antipodal sampling on the object mesh~\cite{nguyen1988constructing}.
+\begin{enumerate}[leftmargin=*, itemsep=2pt]
+  \item Sample points on the mesh surface, together with their outward normals. A share of the samples is taken from the highest points with upward-facing normals; the rest are uniform over the surface. For the Dex1 gripper this share is one half, so that a peg lying on its side also receives grasps across its diameter.
+  \item From each sample, cast a ray into the object along the negative normal. The farthest hit that lies within the gripper's maximum aperture becomes the opposing contact. The segment between the two contacts is the \emph{grasp axis}, and its midpoint is the \emph{grasp centre}.
+  \item Align the gripper's closing axis with the grasp axis, rotate about the gripper's approach direction through sixteen equally spaced angles, and for each angle retreat the gripper along its approach direction through thirty-two standoff distances between the finger offset and the finger offset plus the mesh diagonal.
+\end{enumerate}
+Every candidate is a rigid transform $\Tf{\obj}{\grip}$ of the gripper in the object frame. At each reset the environment opens the fingers, teleports the anchored gripper to a random candidate around the object, and commands the fingers closed. Gravity is switched on after one second and small disturbance forces are applied. The episode lasts four seconds. A candidate becomes a recorded grasp when, at the end, the object has moved less than a quarter metre from where it started, is still above half the spawn height, is not interpenetrating the gripper, has settled, and the fingers have travelled at least ten percent of the way from open to closed. The last clause rejects an object that merely rests across fully open fingers. The recorder saves the gripper pose in the object frame and the finger joint positions.
+
+\subsection{Reset States}
+The reset-state generator combines these two files with a full robot and a table. The remainder of these notes is about it.
+
+%==============================================================================
+\section{The Recording Environment}
+\label{sec:env}
+
+Reset states are recorded by an ordinary Isaac Lab~\cite{mittal2023orbit} manager-based environment that has no observations and no rewards. It has a scene, a set of reset events, a set of termination terms, and a recorder. The script that drives it is \path{scripts_v2/tools/record_reset_states.py}. Each family is a separate registered task, for example \code{OmniReset-G1dDex1-ObjectRestingEEGrasped-v0}.
+
+\paragraph{The scene.}
+The scene holds the robot, the insertive object, the receptive object, a table, and a ground plane. The insertive object is a dynamic rigid body with a mass of one gram, so that it does not drag the arm down while held. The receptive object is kinematic, so it never moves. Friction on every body is fixed at a low value by a start-up event. For the G1-D the table is a plain block with the Vention table's footprint and top height.
+
+\paragraph{Timing.}
+Physics runs at $120$\,Hz and the environment steps every twelve physics steps, so the control rate is $10$\,Hz. The episode length is two seconds. One recording attempt therefore lasts
+\begin{equation}
+  N_{\text{steps}} = \frac{T_{\text{episode}}}{\Delta t\, d} = \frac{2.0\ \text{s}}{(1/120\ \text{s})\times 12} = 20\ \text{control steps} = 240\ \text{physics steps}.
+\end{equation}
+
+\paragraph{Reset events, by family.}
+When an environment resets, its event terms run in declaration order. Every family first restores the scene to its default and places the receptive object at a random pose on the table within a small yaw range. What happens next depends on the family (Table~\ref{tab:events}). Notice that family~2 loads family~1's file through the same \code{MultiResetManager} that training uses. The dependency is literal: if family~1 contains a peg that rolled off the table, family~2 will attempt grasps on the floor.
+
+\begin{table}[t]
+\centering
+\caption{What the reset events do in each family. ``IK'' is the iterative inverse-kinematics placement of Section~\ref{sec:place}.}
+\label{tab:events}
+\small
+\begin{tabular}{@{}p{3.1cm}p{4.4cm}p{5.4cm}@{}}
+\toprule
+Family & Insertive object & End effector and fingers\\
+\midrule
+1 Anywhere / EE anywhere & Uniform pose above the table, up to $25$\,cm high, any orientation & IK to a uniform pose in the workspace, pointing roughly down. Fingers follow the gripper command, drawn at random to be open or closed.\\
+2 Resting / EE grasped & A state sampled from the \emph{family~1} file, so the object is already resting as physics left it & IK to a sampled grasp on the object, perturbed by up to $2$\,cm and $11^\circ$. Fingers written to the recorded grasp positions.\\
+3 Anywhere / EE grasped & Uniform pose above the table, as in family~1 & IK to a sampled grasp on the object, no perturbation. Fingers written to the recorded grasp positions.\\
+4 Partially assembled / EE grasped & A relative pose sampled from the partial-assembly file, composed with the hole's pose & IK to a sampled grasp, perturbed by up to $1$\,cm and $6^\circ$. Fingers written to the recorded grasp positions.\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Termination terms.}
+Four terms can end an episode. Their names matter, because the recorder looks for a term called \code{success}.
+\begin{description}[leftmargin=*, itemsep=2pt]
+  \item[\code{time\_out}] ends the episode after twenty steps. Nothing is saved.
+  \item[\code{abnormal\_robot}] ends the episode at once if any joint moves faster than twice its velocity limit, which indicates a solver explosion.
+  \item[\code{grasp\_placement\_failed}] applies to the grasped families only. It ends the episode at the first step if the IK placement ended more than $1$\,cm or $10^\circ$ from the sampled grasp pose. Such an attempt can never pass the success test, so holding it for two seconds would only cost time. Families without a grasp event never trigger it.
+  \item[\code{success}] is evaluated every step but can only be true on the final step, as Section~\ref{sec:test} explains. When it is true the episode is exported.
+\end{description}
+
+\paragraph{Actions during the hold.}
+The arm action is zero. The operational-space controller therefore holds the end effector where the reset placed it, with its own stiffness and damping. The gripper action is the last element of the action vector. For any family whose name contains \code{EEGrasped} it is held at $-1$, the close command, for the whole run. For the other families it is drawn at random from $\{-1,+1\}$ per environment and redrawn whenever that environment resets, so the first family contains both open and closed hands.
+
+\paragraph{The recorder.}
+The recorder manager is configured with a single term that fires just before an environment resets. The term calls the scene's state query for the environments that are about to reset and returns it under the key \code{initial\_state}. The export mode is ``succeeded only''. Isaac Lab's reset routine reads the \code{success} termination term for the resetting environments, marks their episodes accordingly, and the manager appends only the marked ones to the file. A reset state is therefore the scene \emph{as it stands after the two-second hold}, not as the events placed it. It is already settled.
+
+%==============================================================================
+\section{One Episode, Step by Step}
+\label{sec:episode}
+
+\begin{figure}[t]
+\centering
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[x=1cm, y=1cm]
+  % bands
+  \fill[accentsoft, rounded corners=2pt] (0,0) rectangle (2.8,1.6);
+  \fill[accentsoft, rounded corners=2pt] (3.0,0) rectangle (8.8,1.6);
+  \fill[accentsoft, rounded corners=2pt] (9.0,0) rectangle (11.8,1.6);
+  \node[font=\small\bfseries] at (1.4,1.3) {Reset events};
+  \node[sub] at (1.4,0.85) {place object};
+  \node[sub] at (1.4,0.5) {IK the hand, write fingers};
+  \node[font=\small\bfseries] at (5.9,1.3) {Hold under physics};
+  \node[sub] at (5.9,0.85) {arm action $0$, gripper command held};
+  \node[sub] at (5.9,0.5) {object may fall, roll, or stay in the hand};
+  \node[font=\small\bfseries] at (10.4,1.3) {Success test};
+  \node[sub] at (10.4,0.85) {all clauses at once};
+  \node[sub] at (10.4,0.5) {then export or discard};
+  % time axis
+  \draw[black!40] (0,-0.3) -- (11.8,-0.3);
+  \draw[black!60] (3.0,-0.4) -- (3.0,-0.2);  \node[sub, below] at (3.0,-0.4) {$t=0$};
+  \draw[black!60] (3.29,-0.36) -- (3.29,-0.24); \node[sub, anchor=west] at (3.45,-0.55) {step 1};
+  \draw[black!60] (8.8,-0.4) -- (8.8,-0.2);  \node[sub, anchor=north east] at (8.9,-0.42) {$t=2$\,s, step 20};
+  % early out
+  \fill[warnsoft, rounded corners=2pt] (3.0,1.9) rectangle (7.0,2.7);
+  \node[font=\small] at (5.0,2.45) {Early out at step 1};
+  \node[sub] at (5.0,2.1) {IK missed the grasp pose, or joints exploded};
+  \draw[arr] (3.29,1.6) -- (3.29,1.9);
+  % outcomes
+  \draw[karr] (9.9,0) -- (9.9,-1.15) -- (7.7,-1.15);
+  \node[font=\small, anchor=east] at (7.6,-1.15) {Success: the recorder saves the settled state, then reset};
+  \draw[arr] (11.0,0) -- (11.0,-1.8) -- (7.7,-1.8);
+  \node[sub, anchor=east] at (7.6,-1.8) {Failure: nothing saved, reset};
+\end{tikzpicture}}
+\caption{Timeline of one recording attempt in one environment. Thousands of these run in parallel, each on its own schedule, and the script counts exported episodes until it reaches the requested number.}
+\label{fig:timeline}
+\end{figure}
+
+Follow one environment through Figure~\ref{fig:timeline}.
+\begin{enumerate}[leftmargin=*, itemsep=2pt]
+  \item \textbf{Reset.} The scene returns to its defaults. The receptive object is placed. The insertive object is placed by the family's rule. For a grasped family, a grasp is drawn, the end-effector target is composed, the iterative IK writes the arm joints, and the finger joints are written to the recorded values. The success term records the end-effector position and each object's position as the reference for the deviation test, and the stability counter is zeroed.
+  \item \textbf{Step 1.} Physics runs twelve substeps. If the IK residual from the reset was too large, or any joint velocity is abnormal, the episode ends here. Otherwise the hold begins.
+  \item \textbf{Steps 2 through 19.} The arm holds. The gripper tracks its command. Whatever is not physically consistent falls, slides, or settles. On every step the success term checks whether all bodies are nearly at rest and increments a counter, resetting it to zero whenever anything moves. At least five consecutive quiet steps are required at the end.
+  \item \textbf{Step 20.} The time-out flag becomes true, and only now can the success term return true. Every clause of Section~\ref{sec:test} is evaluated on the state as it stands.
+  \item \textbf{Export.} If successful, the recorder copies the environment's full state into the dataset file. In both cases the environment resets and the cycle restarts.
+\end{enumerate}
+
+The script tracks the recorder's count of exported episodes and stops when it reaches \code{--num\_reset\_states}. Because attempts are cheap and failures are common, the yield is best thought of as a rate. If an attempt succeeds with probability $p$ and $E$ environments run in parallel, the expected number of control steps needed to collect $n$ states is
+\begin{equation}
+  \E[\text{steps}] \approx \frac{n}{p\,E}\times 20 .
+  \label{eq:cost}
+\end{equation}
+At the smoke-test scale used in the repository, $256$ environments and $8$ states per family, the grasped families succeed in between $0.01$ and $0.06$ percent of attempts and take between two and seven minutes. The first family succeeds far more often because it asks for much less.
+
+%==============================================================================
+\section{Placing the Hand on a Grasp}
+\label{sec:place}
+
+The grasped families reuse a grasp that was recorded with a bare gripper. The event \code{reset\_end\_effector\_from\_grasp\_dataset} must turn that relative pose into joint angles for the whole arm. The computation has three parts.
+
+\paragraph{Composing the target.}
+Write $\Tf{A}{B}$ for the pose of frame $B$ expressed in frame $A$. The dataset stores the gripper in the object frame, $\Tf{\obj}{\grip}$, and the object has just been placed at $\Tf{\w}{\obj}$ in the world. The desired gripper pose in the world is therefore
+\begin{equation}
+  \Tf{\w}{\grip} = \Tf{\w}{\obj}\,\Tf{\obj}{\grip}.
+\end{equation}
+The IK solver works in the robot's base frame, so the target is expressed there, and an optional perturbation $T_\delta$, drawn uniformly from the family's \code{pose\_range\_b}, is applied on the right, that is, in the gripper's own frame:
+\begin{equation}
+  \Tf{\base}{\tgt} = \big(\Tf{\w}{\base}\big)^{-1}\,\Tf{\w}{\grip}\,T_\delta .
+  \label{eq:target}
+\end{equation}
+The event also stores the target back in the object frame, $\Tf{\obj}{\tgt}=(\Tf{\w}{\obj})^{-1}\,\Tf{\w}{\base}\,\Tf{\base}{\tgt}$, perturbation included. Section~\ref{sec:test} compares the end effector against this quantity after the hold, which is how the test knows that the hand is on the object rather than merely near it.
+
+\paragraph{Iterating the inverse kinematics.}
+Isaac Lab's differential IK with damped least squares~\cite{buss2004introduction,lynch2017modern} gives, from the current joint vector $\bm q_k$ and the pose error, a joint target $\bm q^{*}_k$. Rather than jumping to it, the event takes a quarter step, clamps to the joint limits, and writes the result straight into the simulation without stepping physics:
+\begin{equation}
+  \bm q_{k+1} = \clamp\!\Big(\bm q_k + \tfrac14\,(\bm q^{*}_k-\bm q_k),\ \bm q_{\min},\ \bm q_{\max}\Big), \qquad k=0,\dots,24 .
+  \label{eq:ik}
+\end{equation}
+Twenty-five iterations at a quarter step each drive the pose error down by a factor of roughly $0.75^{25}\approx10^{-3}$ whenever the target is reachable. Writing the joint state, rather than commanding it, means that the forward kinematics are refreshed on the next read, so each iteration sees the new pose. The clamp is essential. Without it the wrist roll and yaw were routinely written several radians beyond their limits; PhysX snapped them back on the first physics step, and the hand was thrown away from the object it had been placed on.
+
+\paragraph{Recording the residual.}
+After the last iteration the event measures how far the end effector ended from the target, in position and in angle, and stores the two numbers per environment. The \code{grasp\_placement\_failed} termination reads them and discards any attempt beyond $1$\,cm or $10^\circ$ at step one. Every twentieth call the event prints the fraction of environments that reached the target together with the median and ninetieth-percentile errors, which is the quickest way to see whether a layout is reachable at all. Finally the finger joints are written to the positions recorded in the grasp. Grasps whose fingers were recorded nearly fully open, more than ninety percent of the way from the close command to the open command, are dropped when the file is loaded, because such a ``grasp'' was an object lying across open fingers.
+
+\paragraph{Reach is a property of the layout.}
+An offline probe of the G1-D with the Dex1 gripper found that only about $28\%$ of resting-peg and grasp pairs are reachable within $1$\,cm and $10^\circ$, and that neither more iterations nor other random seeds change that number. Reachability falls sharply beyond $36$\,cm from the robot, because the grasp centre of a top-down Dex1 grasp sits $16$\,cm below the wrist. The remedy is to move the robot closer to the table or to narrow the spawn ranges in the layout file, not to tune the IK.
+
+%==============================================================================
+\section{The Success Test, Clause by Clause}
+\label{sec:test}
+
+The term \code{check\_reset\_state\_success} returns the conjunction of several boolean clauses. A state is saved only if every clause holds at the final step. Table~\ref{tab:clauses} lists them in the order the code evaluates them, with the values used for the G1-D peg task.
+
+\begin{table}[t]
+\centering
+\caption{The clauses of the success test. Clauses marked (G) apply to the grasped families only; the last applies to family~4 only.}
+\label{tab:clauses}
+\small
+\begin{tabular}{@{}p{2.4cm}p{6.0cm}p{4.5cm}@{}}
+\toprule
+Clause & Condition & Why it is there\\
+\midrule
+Time out & Step counter has reached $20$ & The state must have survived the full hold.\\
+No abnormal gripper & No joint faster than twice its velocity limit & Rejects solver blow-ups.\\
+Approach points down & The gripper approach axis, rotated into the world, has $z<-0.5$, i.e.\ within $60^\circ$ of straight down & Keeps hand orientations in the range a top-down insertion policy will see.\\
+Stable & Five consecutive steps with robot joint speeds summing below $5$\,rad/s and each object's linear speed below $0.1$\,m/s and angular speed below $1$\,rad/s & The scene has settled; starting mid-fall would be unfair.\\
+Small deviation & End effector moved less than $10$\,cm since reset; each object moved less than the family's limit: unbounded for family~1, $1$\,cm for~2, $5$\,cm for~3, $2.5$\,cm for~4 & The state must be close to what was asked for. A grasped peg that slid $5$\,cm was not really grasped.\\
+Above the table & Every body above \code{pos\_z\_threshold}, for the G1-D $2$\,cm below the table top & A peg that rolled off the edge is not a usable start.\\
+Collision free & Three point-cloud distance checks pass & No interpenetration between robot and objects, or between the objects.\\
+Fingers blocked (G) & Every finger's open fraction lies strictly between $0.08$ and $0.9$ & Something is between the fingers, and the hand is not simply open.\\
+Object near the hand (G) & Object origin within $20$\,cm of the end-effector body & Coarse sanity check.\\
+At the grasp pose (G) & End effector, in the object frame, within $1.5$\,cm and $15^\circ$ of the target stored at reset & Tells a hand closed on the peg from one closed on the hole, the table edge, or thin air nearby.\\
+Assembly match (4) & Half of the environments must be within $1.5$ times the assembly success threshold, the other half must not be & Keeps a balance of ``nearly done'' and ``still jammed'' starts.\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{The open fraction.}
+Several clauses need to know how closed a gripper is without knowing its mechanism. The code reads the open and close command dictionaries of the task's binary gripper action and, for each commanded joint with position $\theta$, computes
+\begin{equation}
+  f_{\text{open}} = \left|\frac{\theta-\theta_{\text{closed}}}{\theta_{\text{open}}-\theta_{\text{closed}}}\right| ,
+  \label{eq:open}
+\end{equation}
+which is zero at the close command and one at the open command. A gripper that closes on nothing reaches $f_{\text{open}}\approx0$; one that closes on a $2$\,cm peg stops partway; one that was never commanded closed sits at $f_{\text{open}}\approx1$. The same quantity, with the roles reversed, is used by the grasp recorder's ``fingers travelled at least ten percent'' clause.
+
+\paragraph{The collision analyzer.}
+Interpenetration is measured, not inferred from contacts. At start-up the analyzer samples $1024$ points on the surface of each link of the asset being checked and builds a signed-distance representation of each obstacle from its collision meshes. On every call it transforms the point cloud into each obstacle's frame and queries the signed distance of every point. The clause holds when the smallest distance is at or above a per-pair minimum: half a millimetre of allowed penetration between robot and insertive object, none between robot and receptive object, and one millimetre between the two objects. The small negative allowances absorb solver tolerance in a grasp without accepting a finger inside a peg.
+
+\paragraph{Reading the funnel.}
+With the optional \code{collect\_funnel} parameter the term counts, over all environments whose hold just ended, how many passed each clause, and the debug tool prints the table. It is the first thing to look at when a family yields nothing, because it says which clause is doing the rejecting. In the resting family, before the fixes of Section~\ref{sec:failures}, $73\%$ of holds failed the deviation clause alone, and the grasp-pose clause then removed almost everything that remained.
+
+%==============================================================================
+\section{Running the Generator}
+\label{sec:run}
+
+The generator runs inside the project's Docker image. Locally the wrapper \path{docker/forge/run_local.sh} mounts the working copy and runs any command; the cluster pipeline \path{docker/forge/g1d_pipeline.sh} runs the same commands in its \code{datasets} stage, in the order fixed by Figure~\ref{fig:deps}:
+
+\begin{lstlisting}[language=bash]
+# 1. partial assemblies for the object pair
+python scripts_v2/tools/record_partial_assemblies.py --task OmniReset-PartialAssemblies-v0 \
+    --num_envs 10 --num_trajectories 10 --dataset_dir $DATA_DIR \
+    env.scene.insertive_object=peg env.scene.receptive_object=peghole
+
+# 2. grasps on the insertive object with the Dex1 gripper
+python scripts_v2/tools/record_grasps.py --task OmniReset-Dex1-GraspSampling-v0 \
+    --num_envs 8192 --num_grasps 1000 --dataset_dir $DATA_DIR \
+    --gripper_body_name right_dex1_base_link env.scene.object=peg
+
+# 3. the four families, in this order
+for RT in ObjectAnywhereEEAnywhere ObjectRestingEEGrasped \
+          ObjectAnywhereEEGrasped ObjectPartiallyAssembledEEGrasped; do
+  python scripts_v2/tools/record_reset_states.py --task OmniReset-G1dDex1-${RT}-v0 \
+      --num_envs 2048 --num_reset_states 10000 --dataset_dir $DATA_DIR \
+      env.scene.insertive_object=peg env.scene.receptive_object=peghole
+done
+\end{lstlisting}
+
+The pipeline's defaults are $2048$ environments and $10\,000$ states per family; the environment variables \code{RESET\_ENVS}, \code{NUM\_RESETS}, \code{GRASP\_ENVS} and \code{NUM\_GRASPS} override them. The stage is cached on the shared disk and skipped when the last family's file already exists, so a regeneration after a code change needs \code{FORCE=1}. The script itself does three things for the user: it sets the seed to \code{None}, so that every run explores different configurations; it infers the family from the task name and derives the pair directory from the two USD paths, so that the output lands where the training environment will look for it; and it fixes the gripper command, closed for any \code{EEGrasped} task and random otherwise.
+
+Three tools look at a finished file. \code{visualize\_reset\_states.py} cycles through states in a window. \code{render\_reset\_states.py} writes one image per state headlessly and, with \code{--settle\_steps 240 --gripper close}, shows the same state after a further two seconds with the task's own controller holding the arm and the gripper commanded closed, which is the fairest picture of what a policy will inherit. \code{debug\_reset\_env.py --funnel --close\_gripper} runs the recording environment and prints the clause-by-clause funnel.
+
+%==============================================================================
+\section{What Goes Wrong, and What It Looks Like}
+\label{sec:failures}
+
+Each clause of the success test exists because some plausible-looking state passed without it. The following failures were all observed on the G1-D peg task.
+\begin{description}[leftmargin=*, itemsep=3pt]
+  \item[The hand is closed on the hole, or on the table, and the peg lies nearby.] The older test required only that the fingers be stopped and the peg within $20$\,cm. A hand that closed on the rim of the hole satisfied both. The grasp-pose clause, which compares the end effector with the stored target in the object frame, is the fix.
+  \item[An open hand hovers above a partly inserted peg.] The recorder once commanded the gripper closed only for two families by name, and the partially assembled family was not among them. Half of its environments held with open fingers, and an open hand trivially satisfies ``not fully closed''. The recorder now closes for every grasped family, and the test rejects a hand more than ninety percent open.
+  \item[The hand jumps away on the first physics step.] IK solutions beyond the joint limits were snapped back by PhysX. Clamping each iterate, Eq.~\eqref{eq:ik}, removed most of the $10$\,cm deviations.
+  \item[No grasp fits a peg lying on its side.] With all surface samples biased to the top of the mesh, every grasp approached along the peg's axis. A lying peg then needed a horizontal approach, which the ``points down'' clause rejects. Mixing in uniform surface samples produced grasps across the diameter.
+  \item[A peg on the floor.] Family~1's original height threshold was inherited from the UR5e, whose mounting plate sits near the origin. For the floor-standing G1-D it had to be raised to just below the table top.
+  \item[Everything is slow.] Most grasped attempts are unreachable and were held for the full two seconds. Ending them at step one made recording three to six times faster.
+\end{description}
+
+%==============================================================================
+\section{Exercises}
+\label{sec:exercises}
+
+Solutions are given in Appendix~\ref{app:solutions}.
+\begin{enumerate}[leftmargin=*, itemsep=3pt, label=\textbf{E\arabic*.}]
+  \item Why can the \code{success} term never be true before the last step, even though it is evaluated every step?
+  \item A recorded grasped state is restored at the start of a training episode and the peg immediately falls. Nothing is wrong with the dataset. Explain.
+  \item Family~2 yields nothing. The funnel shows almost every attempt failing the deviation clause for the robot. Where do you look first?
+  \item Why is the perturbation $T_\delta$ in Eq.~\eqref{eq:target} applied in the gripper frame rather than in the object frame?
+  \item Equation~\eqref{eq:cost} says that doubling the number of environments halves the time. When does that stop being true?
+\end{enumerate}
+
+%==============================================================================
+\section{Limitations}
+
+These notes describe the generator as implemented on the \code{feature/forge-omnireset} branch of the UWLab repository on 27~October 2026 and may drift from later revisions. The thresholds quoted are those of the G1-D peg task; the UR5e configurations share the code but differ in several numbers, most visibly the height threshold. The yields quoted were measured at smoke-test scale and will differ on the cluster. The reachability figure comes from an offline kinematic probe, not from the simulator, and depends on the layout file at the time of writing.
+
+\bibliography{references}
+
+\appendix
+\section{Solutions to the Exercises}
+\label{app:solutions}
+\begin{enumerate}[leftmargin=*, itemsep=3pt, label=\textbf{E\arabic*.}]
+  \item Because the time-out flag, which is true only when the step counter has reached the episode length, is one of the conjuncts. Every other clause may hold at step~7, but the conjunction is false until step~20. This guarantees that each saved state has survived the complete hold.
+  \item The dataset stores finger \emph{positions}, not finger \emph{commands}. The recorder held the gripper closed, so the fingers pressed on the peg. On restore the positions are the same but no command is active until the policy's first action. If that action opens the gripper, or the controller's default target is the open position, the squeeze disappears and the peg drops. The grasp was valid; the policy has to keep it.
+  \item At the IK placement, not at the success test. A robot that moves more than $10$\,cm during a hold with a zero arm action was placed somewhere physics would not accept, most often beyond a joint limit or in collision. Check the IK print-out for the fraction of environments reaching the target, then whether the placement respects joint limits, then whether the layout is within reach at all.
+  \item Because the perturbation models imprecision of the hand, such as a grasp a centimetre further along the fingers or rotated slightly about the approach axis. Those are naturally expressed in the gripper's own axes. The same numbers applied in the object frame would mean something different for every grasp orientation.
+  \item When the GPU is saturated. Each environment adds physics bodies, contact pairs and a $1024$-point collision cloud per link. Past the point where a single step no longer takes constant time, more environments make each step slower and the gain flattens. The formula also assumes that the success probability is independent of the batch, which holds here because environments do not interact.
+\end{enumerate}
+
+\end{document}
