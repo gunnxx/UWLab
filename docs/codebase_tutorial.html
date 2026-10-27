@@ -1,0 +1,618 @@
+<title>UWLab Codebase Tour</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* layout: a single reading column with full-width figure bands; a sticky chapter rail on wide screens */
+:root {
+  --bg: #f6f5f1; --fg: #1f2420; --muted: #5f6a63; --rule: #d9dcd4; --panel: #ffffff; --panel-2: #eceee7;
+  --accent: #1f6f8b; --accent-2: #b2552a; --ok: #2f7d5b; --code-bg: #eef0ea;
+  --display: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --body: "Source Sans 3", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #171a18; --fg: #e6e8e2; --muted: #9ba59d; --rule: #2d332f; --panel: #1e2320; --panel-2: #242a26;
+  --accent: #7cc1d8; --accent-2: #e2966b; --ok: #79c89f; --code-bg: #20262300; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #171a18; --fg: #e6e8e2; --muted: #9ba59d; --rule: #2d332f; --panel: #1e2320; --panel-2: #242a26;
+  --accent: #7cc1d8; --accent-2: #e2966b; --ok: #79c89f; --code-bg: #20262300; color-scheme: dark }
+
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 17px; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 64px; }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 48px; }
+@media (max-width: 860px) { .wrap { grid-template-columns: minmax(0, 1fr); gap: 0; } .rail { display: none; } }
+.rail { position: sticky; top: env(safe-area-inset-top, 0px); align-self: start; padding-top: 40px; font-size: 14px; }
+.rail ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; border-left: 2px solid var(--rule); }
+.rail a { color: var(--muted); text-decoration: none; display: block; padding: 2px 0 2px 12px; margin-left: -2px; border-left: 2px solid transparent; }
+.rail a:hover, .rail a:focus-visible { color: var(--accent); border-left-color: var(--accent); outline: none; }
+.rail .num { font-family: var(--mono); font-size: 12px; margin-right: 6px; }
+article { min-width: 0; padding-top: 40px; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; text-wrap: balance; margin: 0; line-height: 1.2; }
+h1 { font-size: clamp(34px, 5vw, 50px); letter-spacing: -0.01em; }
+h2 { font-size: clamp(26px, 3.4vw, 34px); margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--rule); }
+h3 { font-size: clamp(20px, 2.4vw, 24px); margin-top: 36px; }
+.kicker { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); margin: 0 0 10px; }
+.lede { font-size: 20px; color: var(--muted); max-width: 62ch; margin: 16px 0 0; }
+p { max-width: 68ch; margin: 14px 0 0; }
+ul, ol { max-width: 68ch; margin: 12px 0 0; padding-left: 24px; }
+li { margin-top: 6px; }
+li::marker { color: var(--accent); }
+code { font-family: var(--mono); font-size: 0.86em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+pre { font-family: var(--mono); font-size: 13.5px; line-height: 1.5; background: var(--panel); border: 1px solid var(--rule); border-left: 3px solid var(--accent);
+  padding: 14px 16px; margin: 16px 0 0; overflow-x: auto; max-width: 100%; }
+pre code { background: none; padding: 0; font-size: inherit; }
+figure { margin: 24px 0 0; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 16px; overflow-x: auto; }
+figure svg { display: block; width: 100%; height: auto; max-width: 100%; font-family: var(--body); }
+figure svg text { fill: var(--fg); }
+figure svg .muted { fill: var(--muted); }
+figure svg .mono { font-family: var(--mono); }
+figure svg .box { fill: var(--panel-2); stroke: var(--rule); stroke-width: 1.2; }
+figure svg .box-accent { fill: color-mix(in srgb, var(--accent) 14%, var(--panel)); stroke: var(--accent); stroke-width: 1.4; }
+figure svg .box-warm { fill: color-mix(in srgb, var(--accent-2) 14%, var(--panel)); stroke: var(--accent-2); stroke-width: 1.4; }
+figure svg .box-ok { fill: color-mix(in srgb, var(--ok) 14%, var(--panel)); stroke: var(--ok); stroke-width: 1.4; }
+figure svg .edge { fill: none; stroke: var(--muted); stroke-width: 1.4; }
+figure svg .edge-accent { fill: none; stroke: var(--accent); stroke-width: 1.6; }
+figure svg .arrow { fill: var(--muted); }
+figure svg .arrow-accent { fill: var(--accent); }
+figcaption { font-size: 14px; color: var(--muted); margin-top: 10px; max-width: 72ch; }
+table { border-collapse: collapse; width: 100%; margin-top: 16px; font-size: 15px; }
+.tablewrap { overflow-x: auto; max-width: 100%; }
+th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-family: var(--mono); font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+td code { white-space: nowrap; }
+.note { margin-top: 18px; padding: 12px 16px; background: var(--panel); border: 1px solid var(--rule); border-left: 3px solid var(--accent-2); max-width: 72ch; font-size: 15.5px; }
+.note p { margin: 0; }
+.def { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 18px; margin-top: 14px; max-width: 72ch; font-size: 15.5px; }
+.def dt { font-family: var(--mono); font-size: 13px; color: var(--accent); padding-top: 3px; }
+.def dd { margin: 0; }
+@media (max-width: 520px) { .def { grid-template-columns: minmax(0, 1fr); } .def dt { padding-top: 10px; } }
+.formula { font-family: var(--display); font-size: 19px; font-style: italic; margin: 14px 0 0; padding: 10px 16px; background: var(--panel); border: 1px solid var(--rule); display: inline-block; }
+@media (prefers-reduced-motion: no-preference) { .rail a { transition: color .15s, border-color .15s; } }
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Source+Serif+4:wght@600&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;500&display=swap">
+
+<div class="wrap">
+<nav class="rail" aria-label="Chapters">
+  <ol>
+    <li><a href="#ch1"><span class="num">1</span>The repository</a></li>
+    <li><a href="#ch2"><span class="num">2</span>The environment</a></li>
+    <li><a href="#ch3"><span class="num">3</span>Reset-state datasets</a></li>
+    <li><a href="#ch4"><span class="num">4</span>The algorithm</a></li>
+    <li><a href="#ch5"><span class="num">5</span>The entry points</a></li>
+    <li><a href="#ch6"><span class="num">6</span>Adding a robot</a></li>
+    <li><a href="#ch7"><span class="num">7</span>Where to look</a></li>
+  </ol>
+</nav>
+
+<article>
+<p class="kicker">UWLab · OmniReset · Isaac Lab 3.0</p>
+<h1>UWLab Codebase Tour</h1>
+<p class="lede">How the repository is organised, how a reinforcement learning environment is assembled from configuration, how the policy is trained, and which script starts it all.</p>
+
+<p>This tutorial is written for someone who has used a reinforcement learning library before but is opening this repository for the first time. It follows the peg insertion task from the OmniReset project because that task exercises every part of the code. The same structure applies to the other five tasks and to the newer Unitree G1-D variant. Each chapter ends with the files you should open to see the ideas in code.</p>
+
+<!-- ====================================================================== -->
+<h2 id="ch1">1. The repository at a glance</h2>
+
+<p>UWLab is an extension layer on top of NVIDIA Isaac Lab, which is itself a layer on top of Isaac Sim. Nothing in this repository talks to the physics engine directly. Instead, the repository provides configuration objects and small Python terms that Isaac Lab's managers call during simulation. Understanding that division of labour is the single most useful idea for reading the code: Isaac Lab owns the loop, and UWLab owns what happens inside each step.</p>
+
+<figure>
+<svg viewBox="0 0 900 420" role="img" aria-label="Layer diagram from Isaac Sim at the bottom to scripts at the top">
+  <rect class="box" x="40" y="340" width="820" height="56" rx="6"/>
+  <text x="60" y="364" font-size="16" font-weight="600">Isaac Sim 6.1</text>
+  <text x="60" y="384" font-size="13" class="muted">PhysX GPU physics, RTX rendering, USD scene description, Kit application framework</text>
+
+  <rect class="box" x="40" y="268" width="820" height="56" rx="6"/>
+  <text x="60" y="292" font-size="16" font-weight="600">Isaac Lab 3.0 EA</text>
+  <text x="60" y="312" font-size="13" class="muted">ManagerBasedRLEnv, InteractiveScene, managers, actuator models, sensors, rsl_rl wrappers</text>
+
+  <rect class="box-accent" x="40" y="150" width="195" height="100" rx="6"/>
+  <text x="56" y="176" font-size="15" font-weight="600">source/uwlab</text>
+  <text x="56" y="196" font-size="12.5" class="muted">core extensions:</text>
+  <text x="56" y="212" font-size="12.5" class="muted">actuators, controllers,</text>
+  <text x="56" y="228" font-size="12.5" class="muted">converters, utilities</text>
+
+  <rect class="box-accent" x="248" y="150" width="195" height="100" rx="6"/>
+  <text x="264" y="176" font-size="15" font-weight="600">source/uwlab_assets</text>
+  <text x="264" y="196" font-size="12.5" class="muted">robot and prop configs,</text>
+  <text x="264" y="212" font-size="12.5" class="muted">URDF to USD builders,</text>
+  <text x="264" y="228" font-size="12.5" class="muted">data/ for local datasets</text>
+
+  <rect class="box-accent" x="456" y="150" width="195" height="100" rx="6"/>
+  <text x="472" y="176" font-size="15" font-weight="600">source/uwlab_tasks</text>
+  <text x="472" y="196" font-size="12.5" class="muted">environments: scene,</text>
+  <text x="472" y="212" font-size="12.5" class="muted">MDP terms, task configs,</text>
+  <text x="472" y="228" font-size="12.5" class="muted">gym registration</text>
+
+  <rect class="box-accent" x="664" y="150" width="196" height="100" rx="6"/>
+  <text x="680" y="176" font-size="15" font-weight="600">source/uwlab_rl</text>
+  <text x="680" y="196" font-size="12.5" class="muted">learning extensions:</text>
+  <text x="680" y="212" font-size="12.5" class="muted">rsl_rl algorithm configs,</text>
+  <text x="680" y="228" font-size="12.5" class="muted">exporters, skrl patches</text>
+
+  <rect class="box-warm" x="40" y="30" width="400" height="92" rx="6"/>
+  <text x="56" y="56" font-size="15" font-weight="600">scripts/ and scripts_v2/tools/</text>
+  <text x="56" y="76" font-size="12.5" class="muted">train.py, play.py, record_reset_states.py, record_grasps.py,</text>
+  <text x="56" y="92" font-size="12.5" class="muted">visualize_reset_states.py, render_reset_states.py</text>
+  <text x="56" y="108" font-size="12.5" class="muted">Each script launches the simulator and builds one environment.</text>
+
+  <rect class="box-warm" x="460" y="30" width="400" height="92" rx="6"/>
+  <text x="476" y="56" font-size="15" font-weight="600">docker/forge/</text>
+  <text x="476" y="76" font-size="12.5" class="muted">Dockerfile, g1d_pipeline.sh, submit_*.sh, run_local.sh</text>
+  <text x="476" y="92" font-size="12.5" class="muted">The same image runs on the cluster and on a workstation.</text>
+  <text x="476" y="108" font-size="12.5" class="muted">Pipelines chain the scripts above with a cache.</text>
+
+  <path class="edge" d="M240 122 V150"/><path class="edge" d="M660 122 V150"/>
+  <path class="edge" d="M450 250 V268"/><path class="edge" d="M450 324 V340"/>
+</svg>
+<figcaption>Figure 1. The dependency stack. Arrows point from a layer to the layer it imports. The four <code>source/</code> packages are installed in editable mode, so a change in the working copy is live on the next launch.</figcaption>
+</figure>
+
+<p>The four packages under <code>source/</code> are separate Python distributions with their own <code>pyproject.toml</code>. They are installed together by <code>uwlab.sh</code>, which is the repository's wrapper around Isaac Sim's bundled Python interpreter. When a script is started with <code>python</code> inside the Forge image, that interpreter is already the right one.</p>
+
+<div class="tablewrap"><table>
+<thead><tr><th>Package</th><th>What it contains</th><th>Open this first</th></tr></thead>
+<tbody>
+<tr><td><code>uwlab</code></td><td>Generic extensions of Isaac Lab that are not tied to a task: actuator models such as the delayed DC motor, controllers, asset converters, terrain tools, dataset utilities.</td><td><code>source/uwlab/uwlab/actuators/</code></td></tr>
+<tr><td><code>uwlab_assets</code></td><td>One module per robot with its articulation configuration, actuator gains, joint names, and action definitions. The <code>data/</code> folder holds locally generated USD files and datasets. Cloud assets are fetched from a pinned HuggingFace revision.</td><td><code>source/uwlab_assets/uwlab_assets/robots/ur5e_robotiq_gripper/</code></td></tr>
+<tr><td><code>uwlab_tasks</code></td><td>Every environment. The OmniReset family lives under <code>manager_based/manipulation/omnireset/</code> with an <code>mdp/</code> folder of reusable terms and a <code>config/</code> folder per robot.</td><td><code>.../omnireset/config/ur5e_robotiq_2f85/rl_state_cfg.py</code></td></tr>
+<tr><td><code>uwlab_rl</code></td><td>Learning-side additions: extended PPO configurations for rsl_rl, a policy exporter, and patches for skrl.</td><td><code>source/uwlab_rl/uwlab_rl/rsl_rl/rl_cfg.py</code></td></tr>
+</tbody></table></div>
+
+<p>Two directories hold executables. <code>scripts/</code> mirrors the layout of Isaac Lab's own scripts and contains the training and playback programs for several learning libraries. <code>scripts_v2/tools/</code> contains the OmniReset data tools that record grasps, partial assemblies, and reset states, and the tools that visualise or render them. Finally, <code>docker/forge/</code> packages everything into one image and provides shell pipelines that chain the tools together with a cache on a shared disk.</p>
+
+<!-- ====================================================================== -->
+<h2 id="ch2">2. The environment</h2>
+
+<h3>2.1 The manager-based pattern</h3>
+
+<p>Isaac Lab offers two ways to write an environment. A direct environment is a Python class whose author writes the step function by hand. A manager-based environment is assembled from configuration: the author declares a scene and a list of terms for each manager, and the generic <code>ManagerBasedRLEnv</code> class calls those terms in a fixed order. UWLab uses the manager-based pattern everywhere, which is why most task files contain almost no imperative code. They are dataclasses that name functions.</p>
+
+<p>Figure 2 shows one control step. The policy emits an action at the control rate. The action manager turns it into joint targets and writes them to the simulator, which then advances the physics several times. Afterwards the managers compute observations, rewards, and termination flags, and the event manager resets whichever environments finished. The ordering matters when you read a term: a reward term that reads <code>last_action</code> sees the action that was just applied, and an observation term runs after the physics has settled for the step.</p>
+
+<figure>
+<svg viewBox="0 0 900 470" role="img" aria-label="Data flow of one control step through the managers">
+  <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="arrow"/></marker>
+  <marker id="aha" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="arrow-accent"/></marker></defs>
+
+  <rect class="box-ok" x="30" y="190" width="150" height="90" rx="6"/>
+  <text x="105" y="225" font-size="15" font-weight="600" text-anchor="middle">Policy</text>
+  <text x="105" y="246" font-size="12.5" class="muted" text-anchor="middle">actor MLP</text>
+  <text x="105" y="262" font-size="12.5" class="muted" text-anchor="middle">runs at 10 Hz</text>
+
+  <rect class="box-accent" x="240" y="40" width="190" height="80" rx="6"/>
+  <text x="335" y="68" font-size="15" font-weight="600" text-anchor="middle">ActionManager</text>
+  <text x="335" y="88" font-size="12.5" class="muted" text-anchor="middle">arm: RelCartesianOSC</text>
+  <text x="335" y="104" font-size="12.5" class="muted" text-anchor="middle">gripper: binary joint target</text>
+
+  <rect class="box" x="500" y="40" width="200" height="80" rx="6"/>
+  <text x="600" y="68" font-size="15" font-weight="600" text-anchor="middle">Simulation</text>
+  <text x="600" y="88" font-size="12.5" class="muted" text-anchor="middle">PhysX at 120 Hz</text>
+  <text x="600" y="104" font-size="12.5" class="muted" text-anchor="middle">decimation 12 steps</text>
+
+  <rect class="box-accent" x="500" y="160" width="200" height="72" rx="6"/>
+  <text x="600" y="188" font-size="15" font-weight="600" text-anchor="middle">ObservationManager</text>
+  <text x="600" y="208" font-size="12.5" class="muted" text-anchor="middle">groups: policy, critic</text>
+
+  <rect class="box-accent" x="500" y="252" width="200" height="72" rx="6"/>
+  <text x="600" y="280" font-size="15" font-weight="600" text-anchor="middle">RewardManager</text>
+  <text x="600" y="300" font-size="12.5" class="muted" text-anchor="middle">weighted sum of terms</text>
+
+  <rect class="box-accent" x="500" y="344" width="200" height="72" rx="6"/>
+  <text x="600" y="372" font-size="15" font-weight="600" text-anchor="middle">TerminationManager</text>
+  <text x="600" y="392" font-size="12.5" class="muted" text-anchor="middle">time_out, abnormal_robot</text>
+
+  <rect class="box-warm" x="740" y="252" width="140" height="164" rx="6"/>
+  <text x="810" y="280" font-size="15" font-weight="600" text-anchor="middle">EventManager</text>
+  <text x="810" y="302" font-size="12.5" class="muted" text-anchor="middle">mode reset:</text>
+  <text x="810" y="318" font-size="12.5" class="muted" text-anchor="middle">MultiResetManager</text>
+  <text x="810" y="340" font-size="12.5" class="muted" text-anchor="middle">mode startup:</text>
+  <text x="810" y="356" font-size="12.5" class="muted" text-anchor="middle">material and mass</text>
+  <text x="810" y="372" font-size="12.5" class="muted" text-anchor="middle">randomisation</text>
+  <text x="810" y="396" font-size="12.5" class="muted" text-anchor="middle">CurriculumManager</text>
+
+  <rect class="box" x="240" y="344" width="190" height="72" rx="6"/>
+  <text x="335" y="372" font-size="15" font-weight="600" text-anchor="middle">CommandManager</text>
+  <text x="335" y="392" font-size="12.5" class="muted" text-anchor="middle">TaskCommand: thresholds</text>
+
+  <path class="edge-accent" marker-end="url(#aha)" d="M180 215 C 210 215, 210 80, 240 80"/>
+  <text x="190" y="140" font-size="12" class="muted">action</text>
+  <path class="edge-accent" marker-end="url(#aha)" d="M430 80 H500"/>
+  <text x="440" y="70" font-size="12" class="muted">joint targets</text>
+  <path class="edge" marker-end="url(#ah)" d="M600 120 V160"/>
+  <path class="edge" marker-end="url(#ah)" d="M600 232 V252"/>
+  <path class="edge" marker-end="url(#ah)" d="M600 324 V344"/>
+  <path class="edge-accent" marker-end="url(#aha)" d="M500 196 C 300 196, 250 235, 180 235"/>
+  <text x="300" y="186" font-size="12" class="muted">observation</text>
+  <path class="edge" marker-end="url(#ah)" d="M700 380 H740"/>
+  <text x="704" y="370" font-size="12" class="muted">done</text>
+  <path class="edge" marker-end="url(#ah)" d="M810 252 C 810 140, 720 130, 700 110"/>
+  <text x="760" y="150" font-size="12" class="muted">write reset state</text>
+  <path class="edge" marker-end="url(#ah)" d="M430 380 H500"/>
+  <path class="edge" d="M335 344 V300 H500"/>
+  <text x="340" y="330" font-size="12" class="muted">success thresholds</text>
+</svg>
+<figcaption>Figure 2. One control step in the OmniReset environment. With a physics step of 1/120 s and a decimation of 12, the policy acts every 0.1 s. An episode lasts 16 s, so 160 policy steps.</figcaption>
+</figure>
+
+<h3>2.2 Reading a task configuration file</h3>
+
+<p>Open <code>source/uwlab_tasks/uwlab_tasks/manager_based/manipulation/omnireset/config/ur5e_robotiq_2f85/rl_state_cfg.py</code>. It is long, but it is organised as a sequence of small dataclasses, one per manager, that are finally gathered into an environment configuration. The decorator <code>@configclass</code> turns each class into a dataclass whose mutable defaults are copied per instance, which is what allows configurations to be inherited and overridden safely.</p>
+
+<dl class="def">
+<dt>RlStateSceneCfg</dt><dd>Declares every prim in the scene: the robot, the insertive object (the peg), the receptive object (the hole), the table, the ground plane, and a dome light. Each entry is an asset configuration with a USD path and physics properties. The string <code>{ENV_REGEX_NS}</code> in a prim path is expanded to one path per parallel environment.</dd>
+<dt>BaseEventCfg</dt><dd>Startup-time randomisation of friction, mass, and gripper actuator gains, plus the reset term. <code>TrainEventCfg</code> adds <code>reset_from_reset_states</code>, which draws the initial state of every episode from the four recorded reset sets with equal probability. The evaluation variants draw only from the easiest set.</dd>
+<dt>CommandsCfg</dt><dd>A single <code>TaskCommand</code> term. It does not command a goal pose. Its job is to read the assembled-pose metadata of the two objects and expose the success thresholds to the reward terms.</dd>
+<dt>ObservationsCfg</dt><dd>Two groups. The <code>policy</code> group holds what a real robot can measure: previous action, joint positions, end effector pose, the two object poses, and the pose of the peg in the hole's frame. The <code>critic</code> group adds privileged quantities such as time left, velocities, masses, friction coefficients, and actuator gains.</dd>
+<dt>RewardsCfg</dt><dd>Four small safety penalties on action magnitude, action rate, joint velocity, and abnormal robot states, then the task rewards described in the next section.</dd>
+<dt>TerminationsCfg</dt><dd>Episodes end on time out or when the robot enters an abnormal state. Success does not end an episode, which lets the policy learn to hold the assembled pose.</dd>
+<dt>Ur5eRobotiq2f85RlStateCfg</dt><dd>The assembly point. It names one instance of each manager configuration and sets the simulation step, decimation, episode length, and the PhysX solver settings that the sim-to-real transfer was validated against.</dd>
+</dl>
+
+<p>The remaining classes in the file are thin variants of the base configuration. Figure 3 shows how they relate. The training configuration uses the implicit actuator model and the broad reset distribution. The finetune configuration swaps in the explicit actuator model, adds the system identification randomisation, and turns on the curricula. The two evaluation configurations mirror those but freeze the randomisation and sample only the simplest reset set.</p>
+
+<figure>
+<svg viewBox="0 0 900 300" role="img" aria-label="Inheritance of the UR5e environment configurations">
+  <defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="arrow"/></marker></defs>
+  <rect class="box-accent" x="300" y="20" width="300" height="70" rx="6"/>
+  <text x="450" y="48" font-size="15" font-weight="600" text-anchor="middle" class="mono">Ur5eRobotiq2f85RlStateCfg</text>
+  <text x="450" y="70" font-size="12.5" class="muted" text-anchor="middle">scene, observations, rewards, terminations, sim settings</text>
+
+  <rect class="box" x="20" y="170" width="200" height="110" rx="6"/>
+  <text x="120" y="196" font-size="14" font-weight="600" text-anchor="middle">…TrainCfg</text>
+  <text x="120" y="218" font-size="12.5" class="muted" text-anchor="middle">events: TrainEventCfg</text>
+  <text x="120" y="236" font-size="12.5" class="muted" text-anchor="middle">4 reset sets, 25 % each</text>
+  <text x="120" y="254" font-size="12.5" class="muted" text-anchor="middle">implicit actuator</text>
+  <text x="120" y="272" font-size="12.5" class="muted" text-anchor="middle">task id …-State-v0</text>
+
+  <rect class="box" x="240" y="170" width="200" height="110" rx="6"/>
+  <text x="340" y="196" font-size="14" font-weight="600" text-anchor="middle">…FinetuneCfg</text>
+  <text x="340" y="218" font-size="12.5" class="muted" text-anchor="middle">events: FinetuneEventCfg</text>
+  <text x="340" y="236" font-size="12.5" class="muted" text-anchor="middle">explicit actuator</text>
+  <text x="340" y="254" font-size="12.5" class="muted" text-anchor="middle">ADR curricula on</text>
+  <text x="340" y="272" font-size="12.5" class="muted" text-anchor="middle">task id …-State-Finetune-v0</text>
+
+  <rect class="box" x="460" y="170" width="200" height="110" rx="6"/>
+  <text x="560" y="196" font-size="14" font-weight="600" text-anchor="middle">…EvalCfg</text>
+  <text x="560" y="218" font-size="12.5" class="muted" text-anchor="middle">events: TrainEvalEventCfg</text>
+  <text x="560" y="236" font-size="12.5" class="muted" text-anchor="middle">1 reset set only</text>
+  <text x="560" y="254" font-size="12.5" class="muted" text-anchor="middle">no randomisation</text>
+  <text x="560" y="272" font-size="12.5" class="muted" text-anchor="middle">task id …-State-Play-v0</text>
+
+  <rect class="box" x="680" y="170" width="200" height="110" rx="6"/>
+  <text x="780" y="196" font-size="14" font-weight="600" text-anchor="middle">…FinetuneEvalCfg</text>
+  <text x="780" y="218" font-size="12.5" class="muted" text-anchor="middle">events: FinetuneEvalEventCfg</text>
+  <text x="780" y="236" font-size="12.5" class="muted" text-anchor="middle">fixed sysid and gains</text>
+  <text x="780" y="254" font-size="12.5" class="muted" text-anchor="middle">stiff OSC, small scale</text>
+  <text x="780" y="272" font-size="12.5" class="muted" text-anchor="middle">…-State-Finetune-Play-v0</text>
+
+  <path class="edge" marker-end="url(#ah2)" d="M120 170 V130 H450 V90"/>
+  <path class="edge" marker-end="url(#ah2)" d="M340 170 V130"/>
+  <path class="edge" marker-end="url(#ah2)" d="M560 170 V130"/>
+  <path class="edge" marker-end="url(#ah2)" d="M780 170 V130 H450"/>
+</svg>
+<figcaption>Figure 3. Each registered task id points at one of the leaf classes. A variant overrides only the fields that differ, so the physics and reward definitions are shared by construction.</figcaption>
+</figure>
+
+<h3>2.3 The action: relative Cartesian operational-space control</h3>
+
+<p>The policy does not output joint torques. It outputs a six-dimensional relative pose change for the end effector plus one scalar for the gripper. The <code>RelCartesianOSCAction</code> term scales each axis, integrates the change into a desired pose, and converts the pose error into joint torques with a task-space proportional-derivative law.</p>
+
+<p class="formula">τ = Jᵀ ( K<sub>p</sub> · e<sub>pose</sub> + K<sub>d</sub> · e<sub>vel</sub> ) + τ<sub>null</sub></p>
+
+<p>The Jacobian comes from an analytical kinematic model of the calibrated robot rather than from the simulator, so the controller in simulation matches the controller running on the real arm. There is no inertia decoupling. The per-axis scales are part of the configuration and are reduced by the finetune curriculum, which makes the policy's steps smaller as it becomes more reliable. The gripper action is binary: a positive value commands the open joint target and a negative value commands the closed target.</p>
+
+<h3>2.4 The reward: progress toward the assembled pose</h3>
+
+<p>Every object in a task ships with a <code>metadata.yaml</code> file beside its USD. It records a <code>bottom_offset</code>, used to place the object flush on a surface, an <code>assembled_offset</code>, which is the frame that must coincide with the partner's frame when the parts are assembled, and the position and orientation tolerances that define success. The reward code never hard codes a task. It reads these two frames and measures their distance.</p>
+
+<p>The <code>ProgressContext</code> term is unusual: its weight is nonzero but it always returns zero reward. It exists to compute shared quantities once per step and expose them as attributes. It transforms the peg's assembled frame into the hole's assembled frame, stores the translation distance and the roll-plus-pitch angular distance, and sets a boolean success flag when both are within tolerance. Yaw is ignored because the peg is symmetric about its axis. Two further terms read those attributes: <code>dense_success_reward</code> returns a smooth exponential of the two distances, and <code>success_reward</code> returns one whenever the flag is set. A fourth term rewards keeping the gripper near the peg. All terms are summed with the weights in <code>RewardsCfg</code>.</p>
+
+<div class="note"><p>Because success is computed from object frames and metadata, adding a new task does not require new reward code. It requires a new pair of USD files with a correct <code>assembled_offset</code>, which is what the project's "Create a New Task" guide walks through.</p></div>
+
+<!-- ====================================================================== -->
+<h2 id="ch3">3. Reset-state datasets</h2>
+
+<p>The idea behind OmniReset is that a policy can learn a long contact-rich task from a sparse success signal if its episodes start from a sufficiently diverse set of states, including states that are already partway through the task. Those states are not sampled at training time. They are recorded in advance by dedicated environments and stored as tensors, and the training environment's reset term simply writes one of them into the simulator.</p>
+
+<figure>
+<svg viewBox="0 0 900 400" role="img" aria-label="Pipeline that produces the reset-state datasets">
+  <defs><marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="arrow"/></marker></defs>
+  <rect class="box-warm" x="20" y="30" width="250" height="78" rx="6"/>
+  <text x="36" y="56" font-size="14" font-weight="600">record_partial_assemblies.py</text>
+  <text x="36" y="76" font-size="12.5" class="muted">pulls the peg out of the hole along</text>
+  <text x="36" y="92" font-size="12.5" class="muted">random trajectories, stores relative poses</text>
+
+  <rect class="box-warm" x="20" y="130" width="250" height="78" rx="6"/>
+  <text x="36" y="156" font-size="14" font-weight="600">record_grasps.py</text>
+  <text x="36" y="176" font-size="12.5" class="muted">floating gripper closes on the peg,</text>
+  <text x="36" y="192" font-size="12.5" class="muted">keeps grasps that survive a lift</text>
+
+  <rect class="box" x="330" y="30" width="230" height="52" rx="6"/>
+  <text x="345" y="52" font-size="13.5" font-weight="600">Resets/Peg__PegHole/</text>
+  <text x="345" y="70" font-size="12.5" class="mono muted">partial_assemblies.pt</text>
+  <rect class="box" x="330" y="156" width="230" height="52" rx="6"/>
+  <text x="345" y="178" font-size="13.5" font-weight="600">Grasps/Peg/</text>
+  <text x="345" y="196" font-size="12.5" class="mono muted">grasps.pt</text>
+
+  <rect class="box-warm" x="20" y="250" width="540" height="120" rx="6"/>
+  <text x="36" y="276" font-size="14" font-weight="600">record_reset_states.py, one run per set</text>
+  <text x="36" y="298" font-size="12.5" class="muted">1  ObjectAnywhereEEAnywhere: peg dropped at random, hand placed by IK at a random pose</text>
+  <text x="36" y="316" font-size="12.5" class="muted">2  ObjectRestingEEGrasped: peg from set 1, hand placed on it with a recorded grasp</text>
+  <text x="36" y="334" font-size="12.5" class="muted">3  ObjectAnywhereEEGrasped: peg in the air inside a recorded grasp</text>
+  <text x="36" y="352" font-size="12.5" class="muted">4  ObjectPartiallyAssembledEEGrasped: peg partly in the hole, hand grasping it</text>
+
+  <rect class="box-accent" x="620" y="250" width="260" height="120" rx="6"/>
+  <text x="636" y="276" font-size="14" font-weight="600">Resets/Peg__PegHole/</text>
+  <text x="636" y="298" font-size="12.5" class="mono muted">resets_ObjectAnywhereEEAnywhere.pt</text>
+  <text x="636" y="316" font-size="12.5" class="mono muted">resets_ObjectRestingEEGrasped.pt</text>
+  <text x="636" y="334" font-size="12.5" class="mono muted">resets_ObjectAnywhereEEGrasped.pt</text>
+  <text x="636" y="352" font-size="12.5" class="mono muted">resets_ObjectPartially…EEGrasped.pt</text>
+
+  <rect class="box-ok" x="620" y="30" width="260" height="78" rx="6"/>
+  <text x="636" y="56" font-size="14" font-weight="600">Training environment</text>
+  <text x="636" y="76" font-size="12.5" class="muted">MultiResetManager samples a set, then</text>
+  <text x="636" y="92" font-size="12.5" class="muted">a state, and writes it into the simulator</text>
+
+  <path class="edge" marker-end="url(#ah3)" d="M270 69 H330"/>
+  <path class="edge" marker-end="url(#ah3)" d="M270 169 H330"/>
+  <path class="edge" marker-end="url(#ah3)" d="M445 82 V250"/>
+  <path class="edge" marker-end="url(#ah3)" d="M445 208 V250"/>
+  <path class="edge" marker-end="url(#ah3)" d="M560 310 H620"/>
+  <path class="edge" marker-end="url(#ah3)" d="M750 250 V108"/>
+</svg>
+<figcaption>Figure 4. The dataset pipeline. Set 2 depends on set 1, and sets 2 to 4 depend on the grasps, so the order of the runs matters. On the cluster the pipeline script enforces it.</figcaption>
+</figure>
+
+<h3>3.1 How a reset set is recorded</h3>
+
+<p>Each set has its own registered task id and its own environment configuration in <code>reset_states_cfg.py</code>. These environments share the scene with the training environment but have no observations and no learned actions. Their event terms place the objects and the arm, and their single success termination decides whether the resulting state is worth keeping. An episode lasts two seconds. During that time the recorder holds the gripper command, and at the end the success term checks that the robot and both objects are at rest, that the gripper points roughly downward, that neither object has fallen below the table, that the objects did not drift from where they were placed, and that the robot does not interpenetrate the objects. For the sets in which the hand is supposed to be grasping, the check also requires that the fingers were stopped short of their closed position and that the peg is within reach of the end effector. States that pass are appended to the dataset.</p>
+
+<p>A recorded state is the full scene state: the robot's root pose and joint positions and the root pose of every rigid object, including the table. The reset term writes all of it back. This has a practical consequence. If you move or replace the table in the scene configuration, the recorded datasets still contain the old table pose and will teleport the table back to it. Regenerate the datasets after any scene change.</p>
+
+<h3>3.2 Why success rates differ so much between sets</h3>
+
+<p>Set 1 succeeds in roughly half of the attempts because it only needs the dropped peg to come to rest. The grasped sets succeed far less often, because a randomly chosen grasp pose must be reachable by inverse kinematics, must not collide with the table, and must hold the peg through the two-second settle. On the cluster the pipeline runs 2048 environments per set and asks for 10,000 states, so even a success rate below one percent finishes in reasonable time. On a workstation it is better to request a handful of states per set.</p>
+
+<!-- ====================================================================== -->
+<h2 id="ch4">4. The algorithm</h2>
+
+<p>The learning algorithm is proximal policy optimisation as implemented in the rsl_rl library. UWLab does not reimplement it. The repository contributes a configuration, a thin environment wrapper supplied by Isaac Lab, and a few extensions in <code>uwlab_rl</code>. Figure 5 shows the loop that <code>OnPolicyRunner.learn</code> executes.</p>
+
+<figure>
+<svg viewBox="0 0 900 330" role="img" aria-label="The PPO training loop">
+  <defs><marker id="ah4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="arrow"/></marker></defs>
+  <rect class="box-ok" x="20" y="40" width="250" height="110" rx="6"/>
+  <text x="36" y="66" font-size="14" font-weight="600">Rollout</text>
+  <text x="36" y="88" font-size="12.5" class="muted">32 steps in every parallel environment</text>
+  <text x="36" y="106" font-size="12.5" class="muted">actor samples a ~ N(μ(o), σ(o))</text>
+  <text x="36" y="124" font-size="12.5" class="muted">store o, a, r, done, value, log π</text>
+
+  <rect class="box" x="330" y="40" width="240" height="110" rx="6"/>
+  <text x="346" y="66" font-size="14" font-weight="600">Advantage estimation</text>
+  <text x="346" y="88" font-size="12.5" class="muted">bootstrap with the critic</text>
+  <text x="346" y="106" font-size="12.5" class="muted">generalised advantage estimation</text>
+  <text x="346" y="124" font-size="12.5" class="muted">γ = 0.99, λ = 0.95</text>
+
+  <rect class="box-accent" x="630" y="40" width="250" height="110" rx="6"/>
+  <text x="646" y="66" font-size="14" font-weight="600">Update</text>
+  <text x="646" y="88" font-size="12.5" class="muted">5 epochs × 4 mini-batches</text>
+  <text x="646" y="106" font-size="12.5" class="muted">clipped surrogate, clip 0.2</text>
+  <text x="646" y="124" font-size="12.5" class="muted">value loss, entropy bonus 0.006</text>
+
+  <rect class="box" x="330" y="200" width="240" height="90" rx="6"/>
+  <text x="346" y="226" font-size="14" font-weight="600">Adaptive learning rate</text>
+  <text x="346" y="248" font-size="12.5" class="muted">target KL 0.01 between old and</text>
+  <text x="346" y="266" font-size="12.5" class="muted">new policy, start at 1e-4</text>
+
+  <rect class="box" x="20" y="200" width="250" height="90" rx="6"/>
+  <text x="36" y="226" font-size="14" font-weight="600">Logging and checkpoints</text>
+  <text x="36" y="248" font-size="12.5" class="muted">model_&lt;iteration&gt;.pt every 100 iterations</text>
+  <text x="36" y="266" font-size="12.5" class="muted">TensorBoard or Weights &amp; Biases</text>
+
+  <path class="edge" marker-end="url(#ah4)" d="M270 95 H330"/>
+  <path class="edge" marker-end="url(#ah4)" d="M570 95 H630"/>
+  <path class="edge" marker-end="url(#ah4)" d="M755 150 V245 H570"/>
+  <path class="edge" marker-end="url(#ah4)" d="M330 245 H270"/>
+  <path class="edge" marker-end="url(#ah4)" d="M145 200 V150"/>
+  <text x="150" y="180" font-size="12" class="muted">next iteration</text>
+</svg>
+<figcaption>Figure 5. One PPO iteration. With 2048 environments and 32 steps each, one iteration consumes 65,536 transitions. The default budget is 40,000 iterations.</figcaption>
+</figure>
+
+<h3>4.1 The runner configuration</h3>
+
+<p>The configuration lives in <code>config/ur5e_robotiq_2f85/agents/rsl_rl_cfg.py</code> as the class <code>Base_PPORunnerCfg</code>. The G1-D variant subclasses it and changes only the experiment name. The table lists the settings that shape the learning problem.</p>
+
+<div class="tablewrap"><table>
+<thead><tr><th>Setting</th><th>Value</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td>Actor and critic networks</td><td>MLP 512, 256, 128, 64 with ELU</td><td>Separate networks with the same shape. Both normalise their inputs with running statistics.</td></tr>
+<tr><td>Action distribution</td><td>Heteroscedastic Gaussian, log standard deviation bounded to [0.001, 2.0]</td><td>The actor predicts a state-dependent standard deviation alongside the mean, so exploration can shrink where the policy is confident.</td></tr>
+<tr><td>Observation groups</td><td><code>actor: policy</code>, <code>critic: policy</code></td><td>The runner maps both networks to the policy group. The privileged critic group is defined in the environment and available for experiments.</td></tr>
+<tr><td>Rollout length</td><td>32 steps per environment</td><td>Short relative to the 160-step episode, which relies on the critic's bootstrap.</td></tr>
+<tr><td>Discount and GAE</td><td>γ 0.99, λ 0.95</td><td>Standard values for a 10 Hz control rate.</td></tr>
+<tr><td>PPO</td><td>clip 0.2, 5 epochs, 4 mini-batches, entropy 0.006, gradient norm 1.0</td><td>The learning rate adapts to keep the KL divergence near 0.01.</td></tr>
+</tbody></table></div>
+
+<h3>4.2 Two training stages</h3>
+
+<p>Training happens in two stages that differ in the environment rather than in the algorithm. Stage 1 uses the implicit actuator model of Isaac Lab and no system identification noise. It learns the task. Stage 2 resumes from the stage 1 checkpoint in the finetune environment, which uses the explicit delayed motor model, randomises the arm's identified parameters and the controller gains, and shrinks the action scale. Two curriculum terms manage how quickly those changes are introduced. Each watches the success rate reported by the reset manager and increases its progress by one percent when the rate exceeds 0.95, or decreases it when the rate drops below 0.9. The result is a policy that was first trained in an easy simulator and then hardened in one that resembles the real robot.</p>
+
+<h3>4.3 What uwlab_rl adds</h3>
+
+<p>The module <code>uwlab_rl/rsl_rl/rl_cfg.py</code> defines extended algorithm configurations such as <code>RslRlFancyPpoAlgorithmCfg</code>, which supports behaviour cloning and DAgger-style terms for the distillation stage, and <code>exporter.py</code> turns a trained actor into a deployable file. These are used by the later stages of the project and are not needed to understand stage 1.</p>
+
+<!-- ====================================================================== -->
+<h2 id="ch5">5. The entry points</h2>
+
+<p>Every program in this repository follows the same opening ritual: parse the command line, launch the simulator, and only then import anything that depends on it. The order is forced by Isaac Sim, whose Python modules do not exist until the application has started. Figure 6 traces <code>scripts/reinforcement_learning/rsl_rl/train.py</code> from the shell to the learning loop.</p>
+
+<figure>
+<svg viewBox="0 0 900 560" role="img" aria-label="Call chain of the training entry point">
+  <defs><marker id="ah5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="arrow"/></marker></defs>
+  <g>
+  <rect class="box-warm" x="20" y="20" width="860" height="56" rx="6"/>
+  <text x="36" y="44" font-size="13.5" class="mono">python scripts/reinforcement_learning/rsl_rl/train.py --task OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-v0 \</text>
+  <text x="36" y="64" font-size="13.5" class="mono">    --num_envs 2048 --viz none env.scene.insertive_object=peg env.scene.receptive_object=peghole</text>
+  </g>
+
+  <rect class="box" x="20" y="106" width="410" height="70" rx="6"/>
+  <text x="36" y="130" font-size="14" font-weight="600">1  argparse + AppLauncher</text>
+  <text x="36" y="150" font-size="12.5" class="muted">known flags are consumed, the rest are kept for hydra;</text>
+  <text x="36" y="166" font-size="12.5" class="muted">the Kit application starts, headless unless --viz kit</text>
+
+  <rect class="box" x="470" y="106" width="410" height="70" rx="6"/>
+  <text x="486" y="130" font-size="14" font-weight="600">2  import uwlab_tasks</text>
+  <text x="486" y="150" font-size="12.5" class="muted">import_packages walks every subpackage; each config/__init__.py</text>
+  <text x="486" y="166" font-size="12.5" class="muted">calls gym.register(id, env_cfg_entry_point, rsl_rl_cfg_entry_point)</text>
+
+  <rect class="box-accent" x="20" y="206" width="860" height="86" rx="6"/>
+  <text x="36" y="230" font-size="14" font-weight="600">3  @hydra_task_config(task, agent)</text>
+  <text x="36" y="250" font-size="12.5" class="muted">looks up the two entry points in the gym registry, instantiates the config classes, registers the scene's object</text>
+  <text x="36" y="266" font-size="12.5" class="muted">variants as hydra groups, applies the key=value overrides from the command line, and calls main(env_cfg, agent_cfg).</text>
+  <text x="36" y="282" font-size="12.5" class="muted">env.scene.insertive_object=peg therefore swaps in the asset configuration registered under that name.</text>
+
+  <rect class="box" x="20" y="322" width="270" height="70" rx="6"/>
+  <text x="36" y="346" font-size="14" font-weight="600">4  gym.make(task, cfg=env_cfg)</text>
+  <text x="36" y="366" font-size="12.5" class="muted">builds ManagerBasedRLEnv: spawns the</text>
+  <text x="36" y="382" font-size="12.5" class="muted">scene, creates every manager and term</text>
+
+  <rect class="box" x="315" y="322" width="270" height="70" rx="6"/>
+  <text x="331" y="346" font-size="14" font-weight="600">5  RslRlVecEnvWrapper</text>
+  <text x="331" y="366" font-size="12.5" class="muted">adapts observations, rewards and</text>
+  <text x="331" y="382" font-size="12.5" class="muted">resets to the interface rsl_rl expects</text>
+
+  <rect class="box-ok" x="610" y="322" width="270" height="70" rx="6"/>
+  <text x="626" y="346" font-size="14" font-weight="600">6  OnPolicyRunner.learn</text>
+  <text x="626" y="366" font-size="12.5" class="muted">the loop of Figure 5, for</text>
+  <text x="626" y="382" font-size="12.5" class="muted">agent_cfg.max_iterations iterations</text>
+
+  <rect class="box" x="20" y="422" width="860" height="110" rx="6"/>
+  <text x="36" y="446" font-size="14" font-weight="600">Outputs under logs/rsl_rl/&lt;experiment_name&gt;/&lt;date&gt;_&lt;task&gt;-&lt;insertive&gt;-&lt;receptive&gt;-s&lt;seed&gt;/</text>
+  <text x="36" y="468" font-size="12.5" class="mono muted">params/env.yaml, params/agent.yaml      the fully resolved configurations, useful for diffing two runs</text>
+  <text x="36" y="486" font-size="12.5" class="mono muted">model_0.pt, model_100.pt, …             checkpoints; play.py loads the newest unless --checkpoint is given</text>
+  <text x="36" y="504" font-size="12.5" class="mono muted">events.out.tfevents.*                   TensorBoard scalars (or a Weights &amp; Biases run when --logger wandb)</text>
+  <text x="36" y="522" font-size="12.5" class="mono muted">exported/                               written by play.py: policy as TorchScript and ONNX</text>
+
+  <path class="edge" marker-end="url(#ah5)" d="M225 76 V106"/>
+  <path class="edge" marker-end="url(#ah5)" d="M430 141 H470"/>
+  <path class="edge" marker-end="url(#ah5)" d="M675 176 V206"/>
+  <path class="edge" marker-end="url(#ah5)" d="M155 292 V322"/>
+  <path class="edge" marker-end="url(#ah5)" d="M290 357 H315"/>
+  <path class="edge" marker-end="url(#ah5)" d="M585 357 H610"/>
+  <path class="edge" marker-end="url(#ah5)" d="M745 392 V422"/>
+</svg>
+<figcaption>Figure 6. From the shell to the learning loop. The grey step 3 is the part specific to UWLab: Isaac Lab's own decorator does not know about object variants.</figcaption>
+</figure>
+
+<h3>5.1 Task registration</h3>
+
+<p>A task id such as <code>OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-v0</code> is a key in the Gymnasium registry. The registration happens in <code>config/ur5e_robotiq_2f85/__init__.py</code>, and it does not point at a class. It points at two import strings: the environment configuration class and the agent configuration class. Nothing is instantiated until a script asks for the task, which keeps importing <code>uwlab_tasks</code> cheap even though it registers dozens of environments.</p>
+
+<pre><code>gym.register(
+    id="OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-v0",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.rl_state_cfg:Ur5eRobotiq2f85RelCartesianOSCTrainCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_cfg:Base_PPORunnerCfg",
+    },
+)</code></pre>
+
+<h3>5.2 The scripts you will actually run</h3>
+
+<div class="tablewrap"><table>
+<thead><tr><th>Script</th><th>Purpose</th><th>Typical invocation</th></tr></thead>
+<tbody>
+<tr><td><code>scripts/reinforcement_learning/rsl_rl/train.py</code></td><td>Train a policy. Pass <code>--resume --load_run</code> or a checkpoint for stage 2.</td><td><code>--task …-State-v0 --num_envs 2048 --viz none</code></td></tr>
+<tr><td><code>scripts/reinforcement_learning/rsl_rl/play.py</code></td><td>Roll out a checkpoint in the evaluation environment and export it.</td><td><code>--task …-State-Play-v0 --checkpoint &lt;file&gt; --viz kit</code></td></tr>
+<tr><td><code>scripts_v2/tools/record_partial_assemblies.py</code></td><td>Dataset step 1.</td><td><code>--task OmniReset-PartialAssemblies-v0</code></td></tr>
+<tr><td><code>scripts_v2/tools/record_grasps.py</code></td><td>Dataset step 2.</td><td><code>--task OmniReset-Robotiq2f85-GraspSampling-v0 --num_envs 8192</code></td></tr>
+<tr><td><code>scripts_v2/tools/record_reset_states.py</code></td><td>Dataset step 3, run once per reset set.</td><td><code>--task OmniReset-UR5eRobotiq2f85-ObjectAnywhereEEAnywhere-v0</code></td></tr>
+<tr><td><code>scripts_v2/tools/visualize_reset_states.py</code></td><td>Cycle through recorded states in a window.</td><td><code>--task …-State-Play-v0 --viz kit</code></td></tr>
+<tr><td><code>scripts_v2/tools/render_reset_states.py</code></td><td>Render recorded states to images without a display.</td><td><code>--task …-State-Play-v0 --out_dir logs/reset_renders</code></td></tr>
+</tbody></table></div>
+
+<p>Two flags deserve a note. Isaac Lab 3.0 removed the old <code>--headless</code> switch. A script is headless by default and opens a window only when it is given <code>--viz kit</code>. Anything after the known flags that looks like <code>a.b.c=value</code> is a hydra override of the environment or agent configuration, so <code>agent.seed=7</code> and <code>env.episode_length_s=8</code> are valid without touching any file.</p>
+
+<h3>5.3 The pipeline scripts</h3>
+
+<p><code>docker/forge/g1d_pipeline.sh</code> is the orchestration layer for the cluster. It runs inside the image, takes a comma-separated <code>STAGES</code> list of <code>assets</code>, <code>datasets</code>, and <code>train</code>, and caches the output of each stage on the shared blob disk so that a later job can skip finished work. <code>FORCE=1</code> ignores the cache. <code>docker/forge/run_local.sh</code> starts the same image on a workstation with the working copy mounted over the code, forwards the display when one is available, and offers a <code>smoke</code> mode that runs the whole pipeline at small sizes in about twenty minutes. The README in that folder documents the knobs.</p>
+
+<!-- ====================================================================== -->
+<h2 id="ch6">6. Case study: adding the Unitree G1-D</h2>
+
+<p>The G1-D variant is a good illustration of how the configuration system is meant to be extended, because it reuses the entire MDP of the UR5e task and changes only what the new robot forces it to change. Figure 7 lists the files that were added and what each one overrides.</p>
+
+<figure>
+<svg viewBox="0 0 900 400" role="img" aria-label="Files of the G1-D variant and the UR5e configurations they extend">
+  <defs><marker id="ah6" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="arrow"/></marker></defs>
+  <rect class="box" x="20" y="20" width="400" height="360" rx="6"/>
+  <text x="36" y="46" font-size="14" font-weight="600">config/ur5e_robotiq_2f85/ (unchanged)</text>
+  <text x="36" y="76" font-size="13" class="mono">rl_state_cfg.py</text>
+  <text x="36" y="94" font-size="12.5" class="muted">scene, observations, rewards, terminations, events</text>
+  <text x="36" y="124" font-size="13" class="mono">reset_states_cfg.py</text>
+  <text x="36" y="142" font-size="12.5" class="muted">five reset-set environments and their success term</text>
+  <text x="36" y="172" font-size="13" class="mono">agents/rsl_rl_cfg.py</text>
+  <text x="36" y="190" font-size="12.5" class="muted">Base_PPORunnerCfg</text>
+  <text x="36" y="220" font-size="13" class="mono">../mdp/*.py</text>
+  <text x="36" y="238" font-size="12.5" class="muted">all terms, shared by every robot</text>
+  <text x="36" y="268" font-size="13" class="mono">uwlab_assets/robots/ur5e_robotiq_gripper/</text>
+  <text x="36" y="286" font-size="12.5" class="muted">articulation, actuators, kinematics, actions</text>
+
+  <rect class="box-accent" x="480" y="20" width="400" height="360" rx="6"/>
+  <text x="496" y="46" font-size="14" font-weight="600">config/g1d_dex1/ (new)</text>
+  <text x="496" y="76" font-size="13" class="mono">layout.py</text>
+  <text x="496" y="94" font-size="12.5" class="muted">table block, workspace boxes, dataset directory</text>
+  <text x="496" y="124" font-size="13" class="mono">actions.py</text>
+  <text x="496" y="142" font-size="12.5" class="muted">OSC on 7 arm joints with the G1-D Jacobian, Dex1 gripper</text>
+  <text x="496" y="172" font-size="13" class="mono">rl_state_cfg.py</text>
+  <text x="496" y="190" font-size="12.5" class="muted">subclasses the UR5e scene, events, observations; swaps</text>
+  <text x="496" y="206" font-size="12.5" class="muted">robot, table, end-effector body name, dataset path</text>
+  <text x="496" y="236" font-size="13" class="mono">reset_states_cfg.py</text>
+  <text x="496" y="254" font-size="12.5" class="muted">re-targets the placement events to the new workspace</text>
+  <text x="496" y="270" font-size="12.5" class="muted">and chains the UR5e post-init of each variant</text>
+  <text x="496" y="300" font-size="13" class="mono">agents/rsl_rl_cfg.py</text>
+  <text x="496" y="318" font-size="12.5" class="muted">experiment_name only</text>
+  <text x="496" y="348" font-size="13" class="mono">uwlab_assets/robots/unitree_g1d_dex1/</text>
+  <text x="496" y="366" font-size="12.5" class="muted">URDF builder, USD import, kinematics, actuator gains</text>
+
+  <path class="edge" marker-end="url(#ah6)" d="M480 184 H420"/>
+  <path class="edge" marker-end="url(#ah6)" d="M480 248 H420"/>
+  <path class="edge" marker-end="url(#ah6)" d="M480 310 H420"/>
+</svg>
+<figcaption>Figure 7. The G1-D package subclasses the UR5e configurations. Arrows point from a new file to the file it extends. The MDP terms and the learning recipe are untouched.</figcaption>
+</figure>
+
+<p>Three lessons from that port are worth keeping in mind when you extend the code yourself. First, parent defaults should be read from an instance of the parent configuration rather than from the class, because <code>configclass</code> stores mutable defaults as factories. Second, when a variant inherits from two configuration classes, only the first base's <code>__post_init__</code> runs automatically, so a variant that needs both must call the second one explicitly. Third, anything that changes the scene, including the table, invalidates the recorded reset-state datasets, because they store every rigid object's pose.</p>
+
+<!-- ====================================================================== -->
+<h2 id="ch7">7. Where to look</h2>
+
+<div class="tablewrap"><table>
+<thead><tr><th>If you want to…</th><th>Open</th></tr></thead>
+<tbody>
+<tr><td>Change what the policy observes or how it is rewarded</td><td><code>omnireset/config/ur5e_robotiq_2f85/rl_state_cfg.py</code>, then the term in <code>omnireset/mdp/observations.py</code> or <code>rewards.py</code></td></tr>
+<tr><td>Change the controller gains or action scale</td><td><code>uwlab_assets/robots/ur5e_robotiq_gripper/actions.py</code> and the <code>RelCartesianOSCActionCfg</code> fields in <code>omnireset/mdp/actions/actions_cfg.py</code></td></tr>
+<tr><td>Change how episodes start</td><td><code>TrainEventCfg.reset_from_reset_states</code> and <code>MultiResetManager</code> in <code>omnireset/mdp/events.py</code></td></tr>
+<tr><td>Change what counts as a good reset state</td><td><code>check_reset_state_success</code> in <code>omnireset/mdp/terminations.py</code> and the per-set parameters in <code>reset_states_cfg.py</code></td></tr>
+<tr><td>Change PPO hyperparameters or the network</td><td><code>omnireset/config/ur5e_robotiq_2f85/agents/rsl_rl_cfg.py</code></td></tr>
+<tr><td>Add an object pair</td><td>the <code>variants</code> dictionary at the bottom of <code>rl_state_cfg.py</code> and a <code>metadata.yaml</code> beside each USD</td></tr>
+<tr><td>Add a robot</td><td>a new module under <code>uwlab_assets/robots/</code> and a new folder under <code>omnireset/config/</code>, following <code>g1d_dex1/</code></td></tr>
+<tr><td>Run it on the cluster</td><td><code>docker/forge/README.md</code>, then <code>submit_g1d.sh</code> or <code>submit_train.sh</code></td></tr>
+</tbody></table></div>
+
+<h3>Glossary</h3>
+<dl class="def">
+<dt>term</dt><dd>A function or callable class that a manager invokes every step with the environment as its first argument. Configuration classes list terms by name, weight, and parameters.</dd>
+<dt>configclass</dt><dd>Isaac Lab's dataclass decorator. It adds dictionary conversion, deep copies of mutable defaults, and a <code>replace</code> method for making variants.</dd>
+<dt>insertive and receptive object</dt><dd>The part being inserted and the part receiving it. For peg insertion they are the peg and the hole. The names are used everywhere so that the same code serves all six tasks.</dd>
+<dt>assembled offset</dt><dd>A frame stored in each object's metadata. The task is solved when the two objects' assembled frames coincide within the stored tolerances.</dd>
+<dt>reset set</dt><dd>One of the four recorded distributions of initial states. The training reset term mixes them with equal probability.</dd>
+<dt>decimation</dt><dd>The number of physics steps per policy step. Twelve steps at 120 Hz give a 10 Hz control rate.</dd>
+<dt>implicit and explicit actuator</dt><dd>Two actuator models. The implicit one is a PD drive solved inside PhysX. The explicit one computes torques in Python each step and can add delays and limits that match the real motor.</dd>
+</dl>
+
+<p style="margin-top:48px; font-size:14px; color:var(--muted)">Written against the <code>feature/forge-omnireset</code> branch on 2026-10-26. File paths are relative to the repository root, and paths starting with <code>omnireset/</code> are under <code>source/uwlab_tasks/uwlab_tasks/manager_based/manipulation/</code>.</p>
+</article>
+</div>

@@ -21,6 +21,92 @@ The image is a single squashed layer and skips Isaac Lab's `isaacsim` pip extra 
 Rebuild only when a dependency changes (Isaac Sim / Isaac Lab / RSL-RL / torch
 pins, a new `install_requires` entry in a `setup.py`, a new apt package).
 
+## 0. Local smoke test (same image, this machine)
+
+The Forge image runs unchanged on a workstation with an NVIDIA GPU and the container toolkit;
+`run_local.sh` reproduces the job layout (working copy mounted over `/workspace/uwlab`, a local
+folder in place of the blob disk at `/mnt/robotics`, persistent Isaac Sim caches):
+
+```bash
+docker build -f docker/forge/Dockerfile -t uwlab-omnireset:local docker/forge   # once, ~1 h
+docker/forge/run_local.sh smoke          # G1-D assets -> tiny datasets -> 5 PPO iterations (1 GPU, ~20 min)
+docker/forge/run_local.sh smoke-train    # train stage only, from the cached assets/datasets
+docker/forge/run_local.sh                # interactive shell
+NUM_ENVS=256 MAX_ITER=20 docker/forge/run_local.sh smoke-train   # any g1d_pipeline.sh knob overrides
+```
+
+Cache and checkpoints land in `~/.cache/uwlab-local/robotics/twguntara/omni-reset/`, mirroring the
+cluster paths; TensorBoard files in `logs/rsl_rl/g1d_dex1_omnireset_agent/`.
+
+### Watching an environment with a window
+
+`run_local.sh` passes the X display through when `DISPLAY` is set (run `xhost +si:localuser:root`
+once per login). Isaac Lab 3.0 runs headless unless a Kit visualizer is requested, so pass
+`--viz kit` (there is no `--headless` flag any more; headless is `--viz none`, which the pipeline uses).
+Example, the UR5e peg-insertion reset states (dataset downloaded from HuggingFace on first use):
+
+```bash
+docker/forge/run_local.sh python scripts_v2/tools/visualize_reset_states.py \
+    --task OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-Play-v0 --num_envs 16 --reset_interval 1.0 --viz kit \
+    --dataset_dir https://huggingface.co/datasets/UW-Lab/uwlab-assets/resolve/83860532010b2737aa80d6e8621235ee554186f0/Datasets/OmniReset_isaaclab3
+```
+
+Add `--reset_type ObjectRestingEEGrasped` (or one of the other three set names) to cycle a single set.
+
+The G1-D variant reads the locally generated sets (the `datasets` stage of `g1d_pipeline.sh` writes them
+under `source/uwlab_assets/data/Datasets/OmniReset_g1d`, i.e. after `run_local.sh smoke`). The sets store the
+root pose of every rigid object including the table, so after any scene change re-record them with
+`FORCE=1 STAGES=datasets docker/forge/run_local.sh smoke` (and `FORCE=1` on the next Forge job):
+
+```bash
+docker/forge/run_local.sh python scripts_v2/tools/visualize_reset_states.py \
+    --task OmniReset-G1dDex1-RelCartesianOSC-State-Play-v0 --num_envs 16 --reset_interval 1.0 --viz kit \
+    --dataset_dir source/uwlab_assets/data/Datasets/OmniReset_g1d
+```
+
+Without a display, `scripts_v2/tools/render_reset_states.py` writes the first N states of every set as images
+(one camera per environment, RTX, `--viz none`): `--task ... --dataset_dir ... --out_dir logs/reset_renders`.
+By default it shows the state as recorded (two physics steps). `--settle_steps 240 --gripper close` shows the
+same states after two seconds with the arm held and the gripper driven closed, which is what the recorder does
+during its hold, and `poses.json` next to the images holds the peg, hole and end-effector positions so two
+renders can be compared numerically. A recorded grasp holds the peg only while the gripper is *commanded*
+closed: the dataset stores finger positions, the clamping force comes from the position target being past the
+contact, so a policy that opens the gripper on its first step drops the peg by design.
+
+### Checking why a reset set yields nothing
+
+`scripts_v2/tools/debug_reset_env.py --funnel --close_gripper --task OmniReset-G1dDex1-<Set>-v0 --num_envs 256
+--steps 150 --viz none env.scene.insertive_object=peg env.scene.receptive_object=peghole` prints, at the end,
+how many resets were discarded at once because the IK placement missed the grasp pose
+(`grasp_placement_failed`), how many reached the end of the hold, and how many of those passed each clause of
+the success term (approach from above, stability, pose deviation per asset, collision freedom, fingers blocked,
+end effector still at the grasp pose). The "EE grasped" sets need the end effector to stay within 1.5 cm and
+15 degrees of the sampled grasp pose in the object's frame; the IK iterates are clamped to the joint limits
+(an out-of-range wrist is snapped back by PhysX on the first step and throws the hand off the peg); grasps
+whose fingers never closed are dropped when the grasp dataset is loaded.
+
+To play a trained policy with the window, run `play.py` with `--viz kit`, the `-Play-v0` task id and a
+checkpoint (a path or URL; without `--checkpoint` the newest run under `logs/rsl_rl/<experiment>` is used,
+narrow it with `--load_run <run dir>`). The hydra overrides at the end pick the object pair:
+
+```bash
+# UR5e + Robotiq (Stage 1 checkpoint; use ...-State-Finetune-Play-v0 for a Stage 2 one)
+docker/forge/run_local.sh python scripts/reinforcement_learning/rsl_rl/play.py \
+    --task OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-Play-v0 --num_envs 16 --viz kit \
+    --checkpoint logs/rsl_rl/ur5e_robotiq_2f85_omnireset_agent/<run>/model_2999.pt \
+    env.scene.insertive_object=peg env.scene.receptive_object=peghole
+
+# G1-D + Dex1 (checkpoints synced from a Forge job land under /mnt/robotics/<user>/omni-reset/g1d_dex1_omnireset_agent/<run>/)
+docker/forge/run_local.sh python scripts/reinforcement_learning/rsl_rl/play.py \
+    --task OmniReset-G1dDex1-RelCartesianOSC-State-Play-v0 --num_envs 16 --viz kit \
+    --checkpoint logs/rsl_rl/g1d_dex1_omnireset_agent/<run>/model_<iter>.pt \
+    env.scene.insertive_object=peg env.scene.receptive_object=peghole
+```
+
+`--real-time` slows playback to wall-clock speed; `--video --video_length 400` records an MP4 next to the
+checkpoint. Run one Kit instance at a time: the env reserves a 2 GB PhysX collision stack and two instances
+overflow a 16 GB card.
+
 ## 1. Build the image (once)
 
 ```bash
