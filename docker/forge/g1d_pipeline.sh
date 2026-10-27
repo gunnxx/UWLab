@@ -7,6 +7,8 @@
 #   INSERTIVE=peg RECEPTIVE=peghole
 #   CACHE=/mnt/robotics/twguntara/omni-reset/g1d   blob cache root ("" disables caching)
 #   FORCE=1                        rebuild/re-record even if cached
+#   RESET_TYPES="A B"              record only these reset-state families (default: all four)
+#   STAGES=assets,bench BENCH_ENVS="4096 16384"   step-rate / memory benchmark of a reset-state env
 #   GPUS NUM_ENVS SEED MAX_ITER LOGGER LOG_PROJECT RUN_NAME    training knobs (see submit_train.sh)
 #   RESET_ENVS=2048 NUM_RESETS=10000 GRASP_ENVS=8192 NUM_GRASPS=1000
 #   BUILD_ARGS="--waist-pitch 0.1"  extra flags for build_urdf.py
@@ -26,6 +28,8 @@ RESET_ENVS="${RESET_ENVS:-2048}"
 NUM_RESETS="${NUM_RESETS:-10000}"
 GRASP_ENVS="${GRASP_ENVS:-8192}"
 NUM_GRASPS="${NUM_GRASPS:-1000}"
+# reset-state families to record (space separated); split them across jobs to use several GPUs in parallel
+RESET_TYPES="${RESET_TYPES:-ObjectAnywhereEEAnywhere ObjectRestingEEGrasped ObjectAnywhereEEGrasped ObjectPartiallyAssembledEEGrasped}"
 VIS=(--visualizer none)
 
 log() { echo "[g1d $(date +%H:%M:%S)] $*"; }
@@ -93,7 +97,7 @@ if a is None or b is None:
 print("__".join(sorted([a, b])))
 PY
 )"
-    DONE_MARK="Resets/${PAIR}/resets_ObjectPartiallyAssembledEEGrasped.pt"
+    DONE_MARK="Resets/${PAIR}/resets_${RESET_TYPES##* }.pt"
     if [[ "${FORCE}" != 1 && -n "${CACHE}" && -f "${CACHE}/datasets/${DONE_MARK}" ]]; then
         log "datasets: using cached ${CACHE}/datasets (${PAIR})"
         mkdir -p "${DATA_DIR}" && rsync -a "${CACHE}/datasets/" "${DATA_DIR}/"
@@ -106,7 +110,7 @@ PY
         python scripts_v2/tools/record_grasps.py --task OmniReset-Dex1-GraspSampling-v0 \
             --num_envs "${GRASP_ENVS}" --num_grasps "${NUM_GRASPS}" --dataset_dir "${DATA_DIR}" \
             --gripper_body_name right_dex1_base_link "${VIS[@]}" env.scene.object="${INSERTIVE}"
-        for RT in ObjectAnywhereEEAnywhere ObjectRestingEEGrasped ObjectAnywhereEEGrasped ObjectPartiallyAssembledEEGrasped; do
+        for RT in ${RESET_TYPES}; do
             log "datasets: reset states ${RT}"
             python scripts_v2/tools/record_reset_states.py --task "OmniReset-G1dDex1-${RT}-v0" \
                 --num_envs "${RESET_ENVS}" --num_reset_states "${NUM_RESETS}" --dataset_dir "${DATA_DIR}" "${VIS[@]}" "${OBJ[@]}"
@@ -114,6 +118,35 @@ PY
         find "${DATA_DIR}" -name '*.pt' -exec ls -la {} \;
         if [[ -n "${CACHE}" ]]; then mkdir -p "${CACHE}/datasets" && rsync -a "${DATA_DIR}/" "${CACHE}/datasets/" && log "datasets: cached"; fi
     fi
+fi
+
+# ------------------------------------------------------------------------------------------------------- bench
+# Step-rate / memory benchmark of a reset-state environment at several environment counts (debug_reset_env.py
+# prints env-steps/s and the success funnel); the peak GPU memory is sampled while each probe runs.
+if has_stage bench; then
+    BENCH_TASK="${BENCH_TASK:-ObjectAnywhereEEGrasped}"
+    BENCH_ENVS="${BENCH_ENVS:-4096 8192 16384}"
+    BENCH_STEPS="${BENCH_STEPS:-100}"
+    OBJ=(env.scene.insertive_object="${INSERTIVE}" env.scene.receptive_object="${RECEPTIVE}")
+    if [[ -n "${CACHE}" && -d "${CACHE}/datasets" ]]; then mkdir -p "${DATA_DIR}" && rsync -a "${CACHE}/datasets/" "${DATA_DIR}/"; fi
+    if ! compgen -G "${DATA_DIR}/Grasps/*/grasps.pt" > /dev/null; then
+        log "bench: no grasp file cached, recording a small one"
+        python scripts_v2/tools/record_grasps.py --task OmniReset-Dex1-GraspSampling-v0 --num_envs 512 --num_grasps 200 \
+            --dataset_dir "${DATA_DIR}" --gripper_body_name right_dex1_base_link "${VIS[@]}" env.scene.object="${INSERTIVE}"
+    fi
+    for n in ${BENCH_ENVS}; do
+        log "bench: ${BENCH_TASK} with ${n} envs, ${BENCH_STEPS} steps"
+        python scripts_v2/tools/debug_reset_env.py --task "OmniReset-G1dDex1-${BENCH_TASK}-v0" --num_envs "${n}" \
+            --steps "${BENCH_STEPS}" --funnel --close_gripper "${VIS[@]}" "${OBJ[@]}" > "/tmp/bench_${n}.log" 2>&1 &
+        BPID=$!; PEAK=0
+        while kill -0 "${BPID}" 2>/dev/null; do
+            sleep 5; M=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits | head -1); (( M > PEAK )) && PEAK=$M
+        done
+        wait "${BPID}" && RC=0 || RC=$?
+        log "bench: ${n} envs exit ${RC}, peak GPU memory ${PEAK} MiB"
+        grep -E "^\[timing\]|^\[funnel\]|out of memory|RuntimeError" "/tmp/bench_${n}.log" || true
+        [[ -n "${CACHE}" ]] && cp "/tmp/bench_${n}.log" "${CACHE}/logs/bench_${BENCH_TASK}_${n}.log"
+    done
 fi
 
 # ------------------------------------------------------------------------------------------------------- train
