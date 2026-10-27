@@ -8,6 +8,7 @@
 #   CACHE=/mnt/robotics/twguntara/omni-reset/g1d   blob cache root ("" disables caching)
 #   FORCE=1                        rebuild/re-record even if cached
 #   RESET_TYPES="A B"              record only these reset-state families (default: all four)
+#   AUX_FROM_CACHE=1               take partial assemblies, grasps and earlier families from the cache (one job per family)
 #   STAGES=assets,bench BENCH_ENVS="4096 16384"   step-rate / memory benchmark of a reset-state env
 #   GPUS NUM_ENVS SEED MAX_ITER LOGGER LOG_PROJECT RUN_NAME    training knobs (see submit_train.sh)
 #   RESET_ENVS=2048 NUM_RESETS=10000 GRASP_ENVS=8192 NUM_GRASPS=1000
@@ -103,13 +104,22 @@ PY
         mkdir -p "${DATA_DIR}" && rsync -a "${CACHE}/datasets/" "${DATA_DIR}/"
     else
         OBJ=(env.scene.insertive_object="${INSERTIVE}" env.scene.receptive_object="${RECEPTIVE}")
-        log "datasets: partial assemblies (${PAIR})"
-        python scripts_v2/tools/record_partial_assemblies.py --task OmniReset-PartialAssemblies-v0 \
-            --num_envs 10 --num_trajectories 10 --dataset_dir "${DATA_DIR}" "${VIS[@]}" "${OBJ[@]}"
-        log "datasets: Dex1-1 grasps on ${INSERTIVE}"
-        python scripts_v2/tools/record_grasps.py --task OmniReset-Dex1-GraspSampling-v0 \
-            --num_envs "${GRASP_ENVS}" --num_grasps "${NUM_GRASPS}" --dataset_dir "${DATA_DIR}" \
-            --gripper_body_name right_dex1_base_link "${VIS[@]}" env.scene.object="${INSERTIVE}"
+        if [[ "${AUX_FROM_CACHE:-0}" == 1 ]]; then
+            # one job per family: take the partial assemblies, grasps and already recorded families from the cache
+            # (a previous job recorded them) and record only ${RESET_TYPES}
+            [[ -n "${CACHE}" && -d "${CACHE}/datasets" ]] || { log "AUX_FROM_CACHE=1 but no ${CACHE}/datasets"; exit 1; }
+            mkdir -p "${DATA_DIR}" && rsync -a "${CACHE}/datasets/" "${DATA_DIR}/"
+            compgen -G "${DATA_DIR}/Grasps/*/grasps.pt" > /dev/null || { log "no grasp file in the cache"; exit 1; }
+            log "datasets: partial assemblies and grasps taken from ${CACHE}/datasets"
+        else
+            log "datasets: partial assemblies (${PAIR})"
+            python scripts_v2/tools/record_partial_assemblies.py --task OmniReset-PartialAssemblies-v0 \
+                --num_envs 10 --num_trajectories 10 --dataset_dir "${DATA_DIR}" "${VIS[@]}" "${OBJ[@]}"
+            log "datasets: Dex1-1 grasps on ${INSERTIVE}"
+            python scripts_v2/tools/record_grasps.py --task OmniReset-Dex1-GraspSampling-v0 \
+                --num_envs "${GRASP_ENVS}" --num_grasps "${NUM_GRASPS}" --dataset_dir "${DATA_DIR}" \
+                --gripper_body_name right_dex1_base_link "${VIS[@]}" env.scene.object="${INSERTIVE}"
+        fi
         for RT in ${RESET_TYPES}; do
             log "datasets: reset states ${RT}"
             python scripts_v2/tools/record_reset_states.py --task "OmniReset-G1dDex1-${RT}-v0" \
