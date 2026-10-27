@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OmniReset config class diagram</title>
+<style>
+  :root {
+    --bg: #f6f6f3; --panel: #ffffff; --ink: #1d1d1b; --muted: #6d6d68; --line: #d6d6cf; --edge: #a9a9a2; --edge-hi: #2f5bea;
+    --accent: #2f5bea; --chip: #ececee; --head-env: #e8eefc; --head-mgr: #f1f1ee; --head-ext: #f7f7f4;
+    --inh: #8a8a85; --ovr: #b26a00; --ovr-bg: #fff3dc; --new: #1e7f4d; --new-bg: #e4f4ea; --rm: #b3261e; --rm-bg: #fbe7e5;
+    --m-startup: #6b4fbb; --m-reset: #2f5bea; --m-interval: #0b8a8a;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+    --bg: #131315; --panel: #1c1c1f; --ink: #ebebe8; --muted: #9d9d97; --line: #35353b; --edge: #5a5a62; --edge-hi: #8fa8ff;
+    --accent: #8fa8ff; --chip: #2a2a30; --head-env: #22294a; --head-mgr: #26262b; --head-ext: #202024;
+    --inh: #8f8f8a; --ovr: #f0b254; --ovr-bg: #3a2c12; --new: #6cc48f; --new-bg: #16331f; --rm: #ff8a80; --rm-bg: #3b1b18;
+    --m-startup: #b39ddb; --m-reset: #8fa8ff; --m-interval: #5fd0d0;
+  } }
+  :root[data-theme="dark"] {
+    --bg: #131315; --panel: #1c1c1f; --ink: #ebebe8; --muted: #9d9d97; --line: #35353b; --edge: #5a5a62; --edge-hi: #8fa8ff;
+    --accent: #8fa8ff; --chip: #2a2a30; --head-env: #22294a; --head-mgr: #26262b; --head-ext: #202024;
+    --inh: #8f8f8a; --ovr: #f0b254; --ovr-bg: #3a2c12; --new: #6cc48f; --new-bg: #16331f; --rm: #ff8a80; --rm-bg: #3b1b18;
+    --m-startup: #b39ddb; --m-reset: #8fa8ff; --m-interval: #5fd0d0;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; display: flex; flex-direction: column; }
+  code { font-family: var(--mono); font-size: 12px; }
+  header { padding: 8px 14px 6px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  h1 { font-size: 14px; margin: 0 10px 0 0; font-weight: 600; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .legend .hint { margin-left: auto; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; background: var(--panel); }
+  .seg button { border: 0; background: transparent; color: var(--ink); padding: 5px 10px; cursor: pointer; font: inherit; font-size: 12.5px; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: var(--accent); color: #fff; }
+  .btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 7px; padding: 5px 10px; cursor: pointer; font: inherit; font-size: 12.5px; }
+  .spacer { flex: 1; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--muted); font-size: 11.5px; margin-top: 6px; align-items: center; }
+  .legend span { display: inline-flex; align-items: center; gap: 4px; }
+  .legend svg { overflow: visible; }
+
+  #viewport { flex: 1; overflow: auto; position: relative; cursor: grab; }
+  #viewport.dragging { cursor: grabbing; user-select: none; }
+  #scaler { position: relative; transform-origin: 0 0; }
+  #canvas { position: relative; }
+  #edges { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+  #edges path { fill: none; stroke: var(--edge); stroke-width: 1.4; transition: stroke .12s, opacity .12s; }
+  #edges path.compose { stroke-dasharray: none; }
+  #edges path.hi { stroke: var(--edge-hi); stroke-width: 2; }
+  #edges path.dim { opacity: .18; }
+  #edges text { font: 10.5px var(--mono); fill: var(--muted); paint-order: stroke; stroke: var(--bg); stroke-width: 3px; }
+  #edges text.hi { fill: var(--edge-hi); font-weight: 600; }
+  #edges text.dim { opacity: .15; }
+  #edges .hidden { display: none; }
+  #edges path.compose { stroke: var(--edge); }
+
+  .node { position: absolute; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 1px 2px rgba(0,0,0,.05); font-size: 12px; transition: opacity .12s, box-shadow .12s; }
+  .node.dim { opacity: .3; }
+  .node.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+  .node.nb { border-color: var(--accent); }
+  .node .head { padding: 6px 8px; border-bottom: 1px solid var(--line); cursor: pointer; display: flex; flex-direction: column; gap: 1px; }
+  .node.env .head { background: var(--head-env); }
+  .node.mgr .head { background: var(--head-mgr); }
+  .node.ext .head { background: var(--head-ext); }
+  .node .stereo { font-size: 10px; color: var(--muted); letter-spacing: .03em; overflow-wrap: anywhere; }
+  .node .name { font-family: var(--mono); font-weight: 700; font-size: 12px; word-break: break-word; display: flex; align-items: flex-start; gap: 6px; }
+  .node .name .tog { color: var(--muted); font-size: 10px; margin-top: 3px; flex: none; width: 9px; transition: transform .12s; }
+  .node.open .name .tog { transform: rotate(90deg); }
+  .node .badges { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 2px; }
+  .node .comp { display: none; padding: 4px 8px 6px; }
+  .node.open .comp { display: block; }
+  .node .facts { color: var(--muted); font-size: 11px; margin: 2px 0 4px; }
+  .node .facts div { padding: 1px 0; overflow-wrap: anywhere; }
+  .node .facts code { word-break: break-all; }
+  .node .facts b { color: var(--ink); font-weight: 600; }
+  .node .field { font-family: var(--mono); font-size: 11.5px; padding: 1px 0; display: flex; gap: 6px; }
+  .node .field .fn { color: var(--muted); }
+  .node .field.inh { color: var(--muted); }
+  .node .sep { border-top: 1px solid var(--line); margin: 4px -8px; }
+  .term { padding: 3px 0 3px 12px; position: relative; cursor: pointer; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+  .term::before { content: "▸"; position: absolute; left: 0; top: 4px; color: var(--muted); font-size: 10px; transition: transform .12s; }
+  .term.open::before { transform: rotate(90deg); }
+  .term .tn { font-family: var(--mono); font-size: 11.5px; font-weight: 600; overflow-wrap: anywhere; min-width: 0; }
+  .node .comp { overflow-wrap: anywhere; }
+  .term.removed .tn { text-decoration: line-through; color: var(--muted); }
+  .term.ghost .tn { color: var(--muted); font-weight: 500; }
+  .term .fn { font-family: var(--mono); font-size: 10.5px; color: var(--muted); width: 100%; }
+  .term.open .fn { display: block; }
+  .params { display: none; margin: 0 0 6px 12px; font-size: 11px; }
+  .params.open { display: block; }
+  .params .kv { display: grid; grid-template-columns: max-content 1fr; gap: 1px 8px; }
+  .params .k { font-family: var(--mono); color: var(--muted); }
+  .params .v { font-family: var(--mono); word-break: break-word; }
+  .params .v.changed { color: var(--ovr); }
+  .params .v.added { color: var(--new); }
+  .params .note { color: var(--muted); margin-top: 3px; }
+  .more { color: var(--muted); font-size: 11px; cursor: pointer; padding: 3px 0 1px; }
+  .more:hover { color: var(--ink); }
+
+  .chip { display: inline-block; padding: 0 6px; border-radius: 999px; font-size: 10px; font-weight: 600; white-space: nowrap; line-height: 16px; }
+  .st-inherited { color: var(--inh); background: var(--chip); }
+  .st-override, .st-overrides { color: var(--ovr); background: var(--ovr-bg); }
+  .st-new, .st-replaced { color: var(--new); background: var(--new-bg); }
+  .st-removed { color: var(--rm); background: var(--rm-bg); }
+  .st-abstract { color: var(--muted); background: var(--chip); font-style: italic; }
+  .m { color: #fff; } .m-startup { background: var(--m-startup); } .m-reset { background: var(--m-reset); } .m-interval { background: var(--m-interval); }
+  .m-done, .m-action, .m-asset { background: var(--chip); color: var(--muted); }
+  footer { padding: 6px 16px; color: var(--muted); font-size: 11.5px; border-top: 1px solid var(--line); background: var(--panel); }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1>OmniReset configs</h1>
+    <div class="seg" id="envSeg"><button data-env="grasp">Grasp sampling</button><button data-env="reset">Reset states</button></div>
+    <div class="seg" id="variantSeg" style="display:none"></div>
+    <span class="spacer"></span>
+    <div class="seg" id="fieldSeg" title="Field (diamond) edges: only for the selected class, or always"><button data-fields="select" class="on">fields: on click</button><button data-fields="always">always</button></div>
+    <div class="seg"><button id="expandAll" title="Expand all">⊞</button><button id="collapseAll" title="Collapse all">⊟</button></div>
+    <div class="seg"><button id="zoomOut">−</button><button id="zoomFit">Fit</button><button id="zoomIn">+</button></div>
+    <button class="btn" id="theme" title="Theme: auto / light / dark">◐</button>
+  </div>
+  <div class="legend">
+    <span><svg width="36" height="12"><path d="M2 6 H24" stroke="var(--edge)" stroke-width="1.4" fill="none"/><path d="M24 1 L34 6 L24 11 Z" fill="var(--panel)" stroke="var(--edge)" stroke-width="1.2"/></svg> extends</span>
+    <span><svg width="36" height="12"><path d="M2 6 L8 1 L14 6 L8 11 Z" fill="var(--edge)"/><path d="M14 6 H34" stroke="var(--edge)" stroke-width="1.4" fill="none"/></svg> has field</span>
+    <span><i class="chip st-overrides">overrides</i><i class="chip st-replaced">replaced</i><i class="chip st-inherited">inherited</i><i class="chip st-removed">removed</i></span>
+    <span><i class="chip m m-startup">startup</i><i class="chip m m-reset">reset</i><i class="chip m m-interval">interval</i></span>
+    <span class="hint">click a class to select, again to open · click a term for its params · drag to pan</span>
+  </div>
+</header>
+
+<div id="viewport"><div id="scaler"><div id="canvas"><svg id="edges"><defs>
+  <marker id="tri" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="12" markerHeight="12" orient="auto"><path d="M1 1 L11 6 L1 11 Z" style="fill:var(--panel);stroke:var(--edge);stroke-width:1.2"/></marker>
+  <marker id="tri-hi" viewBox="0 0 12 12" refX="11" refY="6" markerWidth="12" markerHeight="12" orient="auto"><path d="M1 1 L11 6 L1 11 Z" style="fill:var(--panel);stroke:var(--edge-hi);stroke-width:1.4"/></marker>
+  <marker id="dia" viewBox="0 0 14 10" refX="1" refY="5" markerWidth="14" markerHeight="10" orient="auto"><path d="M1 5 L7 1 L13 5 L7 9 Z" style="fill:var(--edge)"/></marker>
+  <marker id="dia-hi" viewBox="0 0 14 10" refX="1" refY="5" markerWidth="14" markerHeight="10" orient="auto"><path d="M1 5 L7 1 L13 5 L7 9 Z" style="fill:var(--edge-hi)"/></marker>
+</defs></svg></div></div></div>
+
+<footer><code>uwlab_tasks/.../omnireset/config/{ur5e_robotiq_2f85,g1d_dex1}/</code> · <code>uwlab_assets/robots/{ur5e_robotiq_gripper,unitree_g1d_dex1}</code> · feature/forge-omnireset, 2026-10-27</footer>
+
+<script>
+// =============================================================================== data helpers
+const UR5E_IK = 'SceneEntityCfg("robot", joint_names=["shoulder.*","elbow.*","wrist.*"], body_names="robotiq_base_link")';
+const G1D_IK  = 'ROBOT_IK_CFG: joints right_shoulder_.* / right_elbow_joint / right_wrist_.*, body right_dex1_base_link';
+const UR5E_GRIP = 'SceneEntityCfg("robot", joint_names=["finger_joint",".*right.*",".*left.*"])';
+const G1D_GRIP  = 'GRIPPER_CFG: joints right_dex1_finger_joint_.*';
+const UR5E_DS = "{UWLAB_CLOUD_ASSETS_DIR}/Datasets/OmniReset_isaaclab3";
+const G1D_DS  = "G1D_DATASET_DIR (uwlab_assets/data/Datasets/OmniReset_g1d)";
+const mat = (a) => [["static / dynamic friction", "0.3 / 0.2"], ["restitution", "0.0"], ["num_buckets", "1"], ["asset_cfg", `SceneEntityCfg("${a}")`], ["make_consistent", "True"]];
+const T = (name, mode, func, params = [], note = "", status) => ({ name, mode, func, params, note, status });
+
+// =============================================================================== GRASP SAMPLING
+function graspModel() {
+  const nodes = [
+    { id: "mbrl", kind: "ext", stereo: "isaaclab.envs", name: "ManagerBasedRLEnvCfg", row: 0, w: 230,
+      facts: ["Six manager configs: scene, events, terminations, observations, actions, rewards."] },
+    { id: "u_env", kind: "env", stereo: "env cfg", name: "Robotiq2f85GraspSamplingCfg", row: 1, w: 300, extends: ["mbrl"],
+      fields: [["scene", "u_scene"], ["events", "u_ev"], ["terminations", "u_term"], ["observations", "u_obs"], ["actions", "u_act"], ["rewards", "u_rew"]],
+      facts: ["<b>task</b> OmniReset-Robotiq2f85-GraspSampling-v0", "<b>__post_init__</b>: decimation 12 · episode 4.0 s · sim.dt 1/120 · PhysX 192 position iterations", "<b>variants</b>: scene.object = fbleg | fbdrawerbottom | peg | cupcake | cube | rectangle"] },
+    { id: "d_env", kind: "env", stereo: "env cfg", name: "Dex1GraspSamplingCfg", row: 1, w: 300, extends: ["u_env"], badge: "overrides",
+      facts: ["<b>task</b> OmniReset-Dex1-GraspSampling-v0"],
+      fields: [["scene", "d_scene"], ["events", "d_ev"], ["actions", "d_act"]], inheritedFields: ["terminations", "observations", "rewards", "variants", "__post_init__"] },
+
+    { id: "u_scene", kind: "mgr", stereo: "scene · InteractiveSceneCfg", name: "GraspSamplingSceneCfg", row: 2, col: 0, w: 215,
+      facts: ["num_envs=1 · floating gripper, no arm, no table"],
+      terms: [T("robot", "asset", "ROBOTIQ_2F85", [["what", "Robotiq 2F-85 gripper floating in space"]]),
+              T("object", "asset", "RigidObjectCfg", [["usd", "Props/Custom/Peg/peg.usd (default)"], ["init pos", "(0, 0, 0.5)"], ["mass_props", "None, asset mass"]]),
+              T("ground", "asset", "GroundPlaneCfg", [["pos", "(0, 0, 0)"]]),
+              T("sky_light", "asset", "DomeLightCfg", [["intensity", "1000"]])] },
+    { id: "u_ev", kind: "mgr", stereo: "events", name: "GraspSamplingEventCfg", row: 2, col: 1, w: 215,
+      terms: [T("reset_object_position", "reset", "task_mdp.reset_root_state_uniform", [["pose_range", "fixed: z (0.3, 0.3), rest 0"], ["asset_cfg", 'SceneEntityCfg("object")']]),
+              T("grasp_sampling", "reset", "task_mdp.grasp_sampling_event", [["object_cfg", 'SceneEntityCfg("object")'], ["gripper_cfg", 'SceneEntityCfg("robot", body_names="robotiq_base_link")'], ["num_candidates", "1e6"], ["num_standoff_samples", "32"], ["num_orientations", "16"], ["lateral_sigma", "0.0"]], "Samples antipodal grasps on the object surface and teleports the gripper to one per env."),
+              T("global_physics_control_event", "interval", "task_mdp.global_physics_control_event", [["interval_range_s", "(0.1, 0.1)"], ["gravity_on_interval", "(1.0, inf) s"], ["force_torque_on_interval", "(1.0, 2.0) s"], ["force_torque_magnitude", "0.01 on object"]], "Gravity off for the first second so the gripper can close, then gravity plus a shake.")] },
+    { id: "u_term", kind: "mgr", stereo: "terminations", name: "GraspSamplingTerminationCfg", row: 2, col: 2, w: 215,
+      terms: [T("time_out", "done", "task_mdp.time_out", [["time_out", "True"]]),
+              T("success", "done", "task_mdp.check_grasp_success", [["collision analyzer", "robot vs object, 1024 pts, min_dist -0.0005"], ["max_pos_deviation", "0.25"], ["pos_z_threshold", "0.25"], ["time_out", "True"]], "A success is what the recorder exports.")] },
+    { id: "u_obs", kind: "mgr", stereo: "observations", name: "GraspSamplingObservationsCfg", row: 2, col: 3, w: 215, facts: ["empty"] },
+    { id: "u_act", kind: "mgr", stereo: "actions", name: "Robotiq2f85BinaryGripperAction", row: 2, col: 4, w: 215,
+      terms: [T("gripper", "action", "BinaryJointPositionActionCfg", [["joint_names", '["finger_joint"]'], ["open / close", "0.0 / 0.785398"]])] },
+    { id: "u_rew", kind: "mgr", stereo: "rewards", name: "GraspSamplingRewardsCfg", row: 2, col: 5, w: 215, facts: ["empty"] },
+
+    { id: "d_scene", kind: "mgr", stereo: "scene", name: "Dex1GraspSamplingSceneCfg", row: 3, col: 0, w: 215, extends: ["u_scene"], badge: "overrides",
+      facts: ["num_envs=32"],
+      terms: [T("robot", "asset", "DEX1_GRIPPER", [["what", "Dex1-1 parallel gripper floating in space", "changed"]], "", "override")],
+      inheritedTerms: ["object", "ground", "sky_light"] },
+    { id: "d_ev", kind: "mgr", stereo: "events", name: "Dex1GraspSamplingEventCfg", row: 3, col: 1, w: 215, extends: ["u_ev"], badge: "overrides",
+      facts: ["term rebuilt with <b>.replace(params={**parent, ...})</b>"],
+      terms: [T("grasp_sampling", "reset", "task_mdp.grasp_sampling_event", [["gripper_cfg", 'SceneEntityCfg("robot", body_names="right_dex1_base_link")', "changed"], ["top_bias_fraction", "0.5", "added"]], "Half the surface samples uniform over the object: top-biased cap grasps only work on a standing peg.", "override")],
+      inheritedTerms: ["reset_object_position", "global_physics_control_event"] },
+    { id: "d_act", kind: "mgr", stereo: "actions", name: "Dex1BinaryGripperAction", row: 3, col: 4, w: 215, badge: "replaced",
+      terms: [T("gripper", "action", "DEX1_GRIPPER_BINARY_ACTIONS", [["joint_names", "right_dex1_finger_joint_.*", "changed"], ["open / close", "DEX1_FINGER_OPEN / DEX1_FINGER_CLOSED", "changed"]], "", "override")] },
+  ];
+  return { nodes, cols: 6, colW: 270 };
+}
+
+// =============================================================================== RESET STATES
+const VARIANTS = [
+  { key: "ObjectAnywhereEEAnywhere", short: "Anywhere / EE anywhere" },
+  { key: "ObjectRestingEEGrasped", short: "Resting / EE grasped" },
+  { key: "ObjectAnywhereEEGrasped", short: "Anywhere / EE grasped" },
+  { key: "ObjectPartiallyAssembledEEAnywhere", short: "Partial / EE anywhere" },
+  { key: "ObjectPartiallyAssembledEEGrasped", short: "Partial / EE grasped" },
+];
+
+const baseEvU = [
+  T("reset_robot_material", "startup", "task_mdp.randomize_rigid_body_material", mat("robot")),
+  T("insertive_object_material", "startup", "task_mdp.randomize_rigid_body_material", mat("insertive_object")),
+  T("receptive_object_material", "startup", "task_mdp.randomize_rigid_body_material", mat("receptive_object")),
+  T("reset_everything", "reset", "task_mdp.reset_scene_to_default"),
+  T("reset_robot_pose", "reset", "task_mdp.reset_root_states_uniform", [["pose_range", "x ±0.01 · y (-0.059, -0.019) · z ±0.01"], ["asset_cfgs", "robot + ur5_metal_support"]], "Jitters where the arm is mounted on the table."),
+  T("reset_receptive_object_pose", "reset", "task_mdp.reset_root_states_uniform", [["pose_range", "x (0.3, 0.55) · y (-0.1, 0.3) · yaw ±15°"], ["offset_asset_cfg", "ur5_metal_support (ranges relative to the plate)"], ["use_bottom_offset", "True"]]),
+];
+const baseEvD = [
+  T("reset_robot_pose", "", "", [], "= None. The G1-D is fixed to the floor, nothing to jitter.", "removed"),
+  T("reset_receptive_object_pose", "reset", "task_mdp.reset_root_states_uniform", [["pose_range", "x RECEPTIVE_X (0.31, 0.41) · y RECEPTIVE_Y (-0.35, 0.05) · z TABLE_TOP_Z 0.855 · yaw ±15°", "changed"], ["offset_asset_cfg", "None (absolute env-frame ranges)", "changed"]], "", "override"),
+];
+const insAnyU = (yHi) => T("reset_insertive_object_pose", "reset", "task_mdp.reset_root_states_uniform", [["pose_range", `x (0.3, 0.55) · y (-0.1, ${yHi}) · z (0, 0.3) · rpy (-π, π)`], ["offset_asset_cfg", "ur5_metal_support"], ["use_bottom_offset", "True"]], "Dropped from up to 30 cm with random orientation, physics settles it.");
+const insAnyD = T("reset_insertive_object_pose", "reset", "task_mdp.reset_root_states_uniform", [["pose_range", "x INSERTIVE_X (0.30, 0.42) · y INSERTIVE_Y (-0.38, 0.08) · z TABLE_TOP_Z + (0, 0.25) · rpy (-π, π)", "changed"], ["offset_asset_cfg", "None", "changed"]], "Module constant _INSERTIVE_ANYWHERE, shared by two variants.", "override");
+const eeAnyU = (z) => T("reset_end_effector_pose", "reset", "task_mdp.reset_end_effector_round_fixed_asset", [["fixed_asset_cfg", 'SceneEntityCfg("robot") (range in robot base frame)'], ["pose_range_b", `x (0.3, 0.7) · y ±0.4 · z ${z} · pitch (45°, 135°) · yaw (90°, 270°)`], ["robot_ik_cfg", UR5E_IK]], "Samples a hand pose, solves IK for the arm.");
+const eeAnyD = (z) => T("reset_end_effector_pose", "reset", "task_mdp.reset_end_effector_round_fixed_asset", [["pose_range_b", `EE_POSE_RANGE_B: x (0.28, 0.44) · y (-0.42, 0.10) · z ${z}`, "changed"], ["robot_ik_cfg", G1D_IK, "changed"]], "_with_params(parent_term, ...) keeps the other parameters.", "override");
+const eeGraspU = (pert) => T("reset_end_effector_pose_from_grasp_dataset", "reset", "task_mdp.reset_end_effector_from_grasp_dataset", [["dataset_dir", UR5E_DS + " → Grasps/<Object>/grasps.pt"], ["fixed_asset_cfg", "insertive_object (grasp is object-relative)"], ["robot_ik_cfg", UR5E_IK], ["gripper_cfg", UR5E_GRIP], ["pose_range_b", pert]], "Picks a recorded grasp, perturbs it, places the hand with IK, closes the gripper.");
+const eeGraspD = T("reset_end_effector_pose_from_grasp_dataset", "reset", "task_mdp.reset_end_effector_from_grasp_dataset", [["dataset_dir", G1D_DS, "changed"], ["robot_ik_cfg", G1D_IK, "changed"], ["gripper_cfg", G1D_GRIP, "changed"]], "pose_range_b inherited.", "override");
+const partU = T("reset_insertive_object_pose_from_partial_assembly_dataset", "reset", "task_mdp.reset_insertive_object_from_partial_assembly_dataset", [["dataset_dir", UR5E_DS + " → PartialAssemblies/<Pair>/"], ["pose_range_b", "all zeros"]], "Places the insertive object partway along a recorded assembly trajectory.");
+const partD = T("reset_insertive_object_pose_from_partial_assembly_dataset", "reset", "task_mdp.reset_insertive_object_from_partial_assembly_dataset", [["dataset_dir", G1D_DS, "changed"]], "", "override");
+const restU = T("reset_insertive_object_pose_from_reset_states", "reset", "task_mdp.MultiResetManager", [["dataset_dir", UR5E_DS + " → Resets/<Pair>/resets_ObjectAnywhereEEAnywhere.pt"], ["reset_types / probs", '["ObjectAnywhereEEAnywhere"] / [1.0]']], "Replays a settled pose from the first dataset, so this set depends on it.");
+const restD = T("reset_insertive_object_pose_from_reset_states", "reset", "task_mdp.MultiResetManager", [["dataset_dir", G1D_DS, "changed"]], "", "override");
+
+const RV = {
+  ObjectAnywhereEEAnywhere: { u: [insAnyU("0.5"), eeAnyU("(0, 0.5)")], d: [insAnyD, eeAnyD("EE_Z_ROOT (table top +0.05 .. +0.30)")], post: "max_object_pos_deviation = inf" },
+  ObjectRestingEEGrasped: { u: [restU, eeGraspU("xyz ±0.02 m · rpy ±π/16")], d: [restD, eeGraspD], post: "max_object_pos_deviation = 0.01 · require_grasp" },
+  ObjectAnywhereEEGrasped: { u: [insAnyU("0.3"), eeGraspU("all zeros (exact grasp)")], d: [insAnyD, eeGraspD], post: "max_object_pos_deviation = 0.05 · require_grasp" },
+  ObjectPartiallyAssembledEEAnywhere: { u: [partU, eeAnyU("(0.5, 0.5) fixed")], d: [partD, eeAnyD("EE_Z_ROOT[1] fixed")], post: "max_object_pos_deviation = 0.025 · assembly_success_prob 0.5 · assembly_threshold_scale 1.5" },
+  ObjectPartiallyAssembledEEGrasped: { u: [partU, eeGraspU("xyz ±0.01 m · rpy ±π/32")], d: [partD, eeGraspD], post: "max_object_pos_deviation = 0.025 · require_grasp · assembly_success_prob 0.5 · assembly_threshold_scale 1.5" },
+};
+
+function resetModel(filter) {
+  const vs = filter === "all" ? VARIANTS : VARIANTS.filter((v) => v.key === filter);
+  const compact = filter === "all";
+  const vw = compact ? 165 : 300;
+  const nodes = [
+    { id: "mbrl", kind: "ext", stereo: "isaaclab.envs", name: "ManagerBasedRLEnvCfg", row: 0, w: 230 },
+    { id: "u_env", kind: "env", stereo: "env cfg · base", name: "UR5eRobotiq2f85ResetStatesCfg", row: 1, w: 310, extends: ["mbrl"], badge: "abstract",
+      fields: [["scene", "u_scene"], ["events", null, "MISSING, set by each variant"], ["terminations", "u_term"], ["observations", "u_obs"], ["actions", "u_act"], ["rewards", "u_rew"]],
+      facts: ["<b>__post_init__</b>: decimation 12 · episode 2.0 s · sim.dt 1/120 · PhysX 192 position iterations", "<b>variants</b>: scene.insertive_object = fbleg | fbdrawerbottom | peg | cupcake | cube | rectangle · scene.receptive_object = fbtabletop | fbdrawerbox | peghole | plate | cube | wall"] },
+    { id: "d_env", kind: "env", stereo: "env cfg · base", name: "G1dDex1ResetStatesCfg", row: 1, w: 310, extends: ["u_env"], badge: "overrides",
+      fields: [["scene", "d_scene"], ["terminations", "d_term"], ["actions", "d_act"]], inheritedFields: ["events (still MISSING)", "observations", "rewards", "variants", "__post_init__"] },
+
+    { id: "u_scene", kind: "mgr", stereo: "scene · InteractiveSceneCfg", name: "ResetStatesSceneCfg", row: 3, col: 0, w: 215,
+      facts: ["arm mounted on a Vention table through a metal plate"],
+      terms: [T("robot", "asset", "IMPLICIT_UR5E_ROBOTIQ_2F85", [["what", "UR5e + Robotiq 2F-85, implicit PD actuators"]]),
+              T("insertive_object", "asset", "RigidObjectCfg", [["usd", "Props/Custom/Peg/peg.usd (default)"], ["mass", "0.001, dynamic"]]),
+              T("receptive_object", "asset", "RigidObjectCfg", [["usd", "Props/Custom/PegHole/peg_hole.usd (default)"], ["kinematic_enabled", "True"]]),
+              T("table", "asset", "RigidObjectCfg (kinematic)", [["usd", "Props/Mounts/UWPatVention/pat_vention.usd"], ["pos", "(0.4, 0, -0.881)"]]),
+              T("ur5_metal_support", "asset", "RigidObjectCfg (kinematic)", [["usd", "Ur5MetalSupport/ur5plate.usd"]], "Reference asset for offset_asset_cfg in the pose events."),
+              T("ground", "asset", "GroundPlaneCfg", [["pos", "(0, 0, -0.868)"]]),
+              T("sky_light", "asset", "DomeLightCfg", [["intensity", "10000"]])] },
+    { id: "u_bev", kind: "mgr", stereo: "events · shared base", name: "ResetStatesBaseEventCfg", row: 3, col: 1, w: 235, terms: baseEvU },
+    { id: "u_term", kind: "mgr", stereo: "terminations", name: "ResetStatesTerminationCfg", row: 3, col: 2, w: 215,
+      terms: [T("time_out", "done", "task_mdp.time_out", [["time_out", "True"]]),
+              T("abnormal_robot", "done", "task_mdp.abnormal_robot_state"),
+              T("grasp_placement_failed", "done", "task_mdp.grasp_placement_failed", [["pos_tol / ang_tol", "0.01 m / 0.17 rad"]], "EE-grasped sets only: give up early when IK missed the grasp pose."),
+              T("success", "done", "task_mdp.check_reset_state_success", [["ee_body_name", "robotiq_base_link"], ["collision analyzers", "robot↔insertive (-0.0005) · robot↔receptive (0.0) · insertive↔receptive (-0.001)"], ["max_robot_pos_deviation", "0.1"], ["max_object_pos_deviation", "MISSING, set per variant"], ["pos_z_threshold", "-0.02"], ["consecutive_stability_steps", "5"], ["time_out", "True"]])] },
+    { id: "u_obs", kind: "mgr", stereo: "observations", name: "ResetStatesObservationsCfg", row: 3, col: 3, w: 215, facts: ["empty"] },
+    { id: "u_act", kind: "mgr", stereo: "actions", name: "Ur5eRobotiq2f85RelativeOSCAction", row: 3, col: 4, w: 215,
+      terms: [T("arm", "action", "RelCartesianOSCActionCfg", [["joint_names", "shoulder.* / elbow.* / wrist.*"], ["body_name", "wrist_3_link"], ["scale_xyz_axisangle", "(0.02 ×3, 0.02, 0.02, 0.2)"], ["motion_stiffness", "(200 ×3, 3 ×3)"]]),
+              T("gripper", "action", "ROBOTIQ_GRIPPER_BINARY_ACTIONS", [["joint_names", '["finger_joint"]'], ["open / close", "0.0 / 0.785398"]])] },
+    { id: "u_rew", kind: "mgr", stereo: "rewards", name: "ResetStatesRewardsCfg", row: 3, col: 5, w: 215, facts: ["empty"] },
+
+    { id: "d_scene", kind: "mgr", stereo: "scene", name: "G1dResetStatesSceneCfg", row: 4, col: 0, w: 215, extends: ["u_scene"], badge: "overrides",
+      facts: ["robot stands on the floor in front of the same table, ranges become absolute (layout.py)"],
+      terms: [T("robot", "asset", "IMPLICIT_G1D_DEX1", [["what", "G1-D torso + 7-DoF right arm + Dex1-1", "changed"]], "", "override"),
+              T("table", "asset", "G1D_TABLE (layout.py)", [["TABLE_TOP_Z", "0.855", "changed"], ["TABLE_EDGE_X", "0.29", "changed"]], "", "override"),
+              T("ur5_metal_support", "", "", [], "= None, no mounting plate.", "removed"),
+              T("ground", "asset", "GroundPlaneCfg", [["pos", "(0, 0, 0)", "changed"]], "", "override")],
+      inheritedTerms: ["insertive_object", "receptive_object", "sky_light"] },
+    { id: "d_bev", kind: "mgr", stereo: "events · shared base", name: "G1dResetStatesBaseEventCfg", row: 4, col: 1, w: 235, extends: ["u_bev"], badge: "overrides",
+      terms: baseEvD, inheritedTerms: ["reset_robot_material", "insertive_object_material", "receptive_object_material", "reset_everything"] },
+    { id: "d_term", kind: "mgr", stereo: "terminations", name: "G1dResetStatesTerminationCfg", row: 4, col: 2, w: 215, extends: ["u_term"], badge: "overrides",
+      terms: [T("success", "done", "task_mdp.check_reset_state_success", [["ee_body_name", "right_dex1_base_link", "changed"], ["pos_z_threshold", "TABLE_TOP_Z - 0.02 = 0.835 (stay on the table)", "changed"]], "success.replace(params={**parent, ...})", "override")],
+      inheritedTerms: ["time_out", "abnormal_robot", "grasp_placement_failed"] },
+    { id: "d_act", kind: "mgr", stereo: "actions", name: "G1dDex1RelativeOSCAction", row: 4, col: 4, w: 215, badge: "replaced",
+      terms: [T("arm", "action", "G1D_DEX1_RELATIVE_OSC", [["joint_names", "7 right-arm joints", "changed"], ["body_name", "right_wrist_yaw_link", "changed"], ["jacobian_fn", "kinematics:compute_jacobian_analytical", "added"], ["motion_stiffness", "(200 ×3, 3 ×3) same gains"], ["motion_damping_ratio", "all 0 (implicit actuator damps)", "changed"], ["nullspace", "k 2.0, ζ 1.0, hold default elbow pose", "added"]], "", "override"),
+              T("gripper", "action", "DEX1_GRIPPER_BINARY_ACTIONS", [["joint_names", "right_dex1_finger_joint_.*", "changed"]], "", "override")] },
+  ];
+  for (const v of vs) {
+    const r = RV[v.key];
+    nodes.push(
+      { id: "u_venv_" + v.key, kind: "env", stereo: "env cfg", name: `${v.key}ResetStatesCfg`, row: 2, w: vw, extends: ["u_env"], pair: v.key,
+        fields: [["events", "u_vev_" + v.key]], facts: [`<b>task</b> OmniReset-UR5eRobotiq2f85-${v.key}-v0`, `<b>__post_init__</b> on terminations.success: ${r.post}`] },
+      { id: "d_venv_" + v.key, kind: "env", stereo: "env cfg", name: `G1d${v.key}ResetStatesCfg`, row: 2, w: vw, extends: ["d_env", "u_venv_" + v.key], pair: v.key,
+        fields: [["events", "d_vev_" + v.key]], facts: [`<b>task</b> OmniReset-G1dDex1-${v.key}-v0`, `<b>__post_init__</b> calls <code>ur5e.${v.key}ResetStatesCfg.__post_init__(self)</code> explicitly; configclass would otherwise bind the one from the first base and skip the success parameters.`] },
+      { id: "u_vev_" + v.key, kind: "mgr", stereo: "events", name: `${v.key}EventCfg`, row: 5, w: vw, extends: ["u_bev"], pair: v.key, terms: r.u, inheritedTerms: baseEvU.map((t) => t.name) },
+      { id: "d_vev_" + v.key, kind: "mgr", stereo: "events", name: `G1d${v.key}EventCfg`, row: 5, w: vw, extends: ["d_bev", "u_vev_" + v.key], pair: v.key, badge: "overrides", terms: r.d, inheritedTerms: baseEvU.map((t) => t.name) },
+    );
+  }
+  return { nodes, cols: 6, colW: 270 };
+}
+
+// =============================================================================== rendering
+const esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const chip = (c, t) => `<span class="chip ${c}">${esc(t)}</span>`;
+const canvas = document.getElementById("canvas"), svg = document.getElementById("edges"), viewport = document.getElementById("viewport"), scaler = document.getElementById("scaler");
+const openNodes = new Set(), openTerms = new Set(), showInherited = new Set();
+let model = null, byId = {}, selected = null, zoom = 1;
+
+function termHtml(nodeId, t, parentTerm) {
+  const key = nodeId + "::" + t.name;
+  const src = parentTerm || null;
+  const mode = t.mode || (src && src.mode);
+  const func = t.func || (src && src.func) || "";
+  const params = t.params && t.params.length ? t.params : (src ? src.params : []);
+  const note = t.note || (src ? src.note : "");
+  const isOpen = openTerms.has(key);
+  const kv = params.map(([k, v, f]) => `<div class="k">${esc(k)}</div><div class="v ${f || ""}">${esc(v)}</div>`).join("");
+  return `<div class="term ${t.status || ""} ${src ? "ghost" : ""} ${isOpen ? "open" : ""}" data-term="${esc(key)}">
+      <span class="tn">${esc(t.name)}</span>${mode ? chip("m m-" + mode, mode) : ""}${t.status ? chip("st-" + t.status, t.status) : ""}${src ? chip("st-inherited", "inherited") : ""}
+      ${isOpen && func ? `<span class="fn">${esc(func)}</span>` : ""}
+    </div>
+    <div class="params ${isOpen ? "open" : ""}">${kv ? `<div class="kv">${kv}</div>` : ""}${note ? `<div class="note">${note}</div>` : ""}${!kv && !note ? `<div class="note">No parameters.</div>` : ""}</div>`;
+}
+
+function nodeHtml(n) {
+  const isOpen = openNodes.has(n.id);
+  const hasComp = (n.fields && n.fields.length) || (n.facts && n.facts.length) || (n.terms && n.terms.length) || (n.inheritedTerms && n.inheritedTerms.length) || (n.inheritedFields && n.inheritedFields.length);
+  let comp = "";
+  if (n.facts) comp += `<div class="facts">${n.facts.map((f) => `<div>${f}</div>`).join("")}</div>`;
+  if (n.fields) comp += n.fields.map(([f, to, note]) => `<div class="field"><span class="fn">${esc(f)}:</span><span>${to ? esc(byId[to].name) : esc(note || "")}</span></div>`).join("");
+  if (n.inheritedFields) comp += n.inheritedFields.map((f) => `<div class="field inh"><span class="fn">${esc(f)}:</span><span>inherited</span></div>`).join("");
+  if (n.terms || n.inheritedTerms) {
+    if (comp) comp += `<div class="sep"></div>`;
+    comp += (n.terms || []).map((t) => termHtml(n.id, t)).join("");
+    if (n.inheritedTerms && n.inheritedTerms.length) {
+      const parentTerms = {};
+      for (const p of n.extends || []) for (const t of allTerms(byId[p])) parentTerms[t.name] = t;
+      if (showInherited.has(n.id)) comp += n.inheritedTerms.map((name) => termHtml(n.id, { name }, parentTerms[name] || { name })).join("") + `<div class="more" data-more="${n.id}">hide inherited</div>`;
+      else comp += `<div class="more" data-more="${n.id}">+ ${n.inheritedTerms.length} inherited: ${esc(n.inheritedTerms.join(", "))}</div>`;
+    }
+  }
+  const badges = n.badge ? `<div class="badges">${chip("st-" + n.badge, n.badge)}</div>` : "";
+  return `<div class="node ${n.kind} ${isOpen && hasComp ? "open" : ""}" id="n-${n.id}" style="width:${n.w}px">
+    <div class="head" data-node="${n.id}"><span class="stereo">«${esc(n.stereo)}»</span><span class="name">${hasComp ? `<span class="tog">▶</span>` : ""}<span>${esc(n.name)}</span></span>${badges}</div>
+    ${hasComp ? `<div class="comp">${comp}</div>` : ""}
+  </div>`;
+}
+// all terms visible on a node, including inherited ones (recursive), for ghost lookups
+function allTerms(n) {
+  if (!n) return [];
+  const out = {};
+  for (const p of n.extends || []) for (const t of allTerms(byId[p])) out[t.name] = t;
+  for (const t of n.terms || []) out[t.name] = t;
+  return Object.values(out);
+}
+
+function build() {
+  model = env === "grasp" ? graspModel() : resetModel(variant);
+  byId = Object.fromEntries(model.nodes.map((n) => [n.id, n]));
+  // edges
+  model.edges = [];
+  for (const n of model.nodes) {
+    for (const p of n.extends || []) model.edges.push({ type: "extends", from: n.id, to: p });
+    for (const [f, to] of n.fields || []) if (to) model.edges.push({ type: "compose", from: n.id, to, label: f });
+  }
+  canvas.querySelectorAll(".node").forEach((e) => e.remove());
+  canvas.insertAdjacentHTML("beforeend", model.nodes.map(nodeHtml).join(""));
+  layout();
+  applyHighlight();
+}
+
+function rerenderNode(id) {
+  const el = document.getElementById("n-" + id);
+  el.outerHTML = nodeHtml(byId[id]);
+  layout();
+  applyHighlight();
+}
+
+// ------------------------------------------------------------------------------- layered layout
+function layout() {
+  const PAD = 30, ROWGAP = 90, GAP = 14;
+  const rows = {};
+  for (const n of model.nodes) (rows[n.row] = rows[n.row] || []).push(n);
+  const gridW = model.cols * model.colW;
+  let totalW = gridW;
+  const rowKeys = Object.keys(rows).map(Number).sort((a, b) => a - b);
+  // measure
+  for (const n of model.nodes) { const el = document.getElementById("n-" + n.id); n.h = el.offsetHeight; }
+  // free rows: nodes of the same `pair` sit next to each other (UR5e twin, then G1-D twin); pairs get a wider gap.
+  // The two base env cfgs get a wide gap too, so the horizontal "extends" arrow between them has room.
+  const freeRowWidth = (r) => {
+    let w = 0, prev = null;
+    for (const n of r) { if (prev) w += (prev.pair && prev.pair === n.pair) ? 28 : (prev.kind === "env" && !prev.pair ? 90 : 44); w += n.w; prev = n; }
+    return w;
+  };
+  for (const k of rowKeys) if (rows[k].some((n) => n.col == null)) totalW = Math.max(totalW, freeRowWidth(rows[k]));
+  const left = PAD, gridLeft = PAD + (totalW - gridW) / 2;
+  let y = PAD;
+  for (const k of rowKeys) {
+    const r = rows[k];
+    const rowH = Math.max(...r.map((n) => n.h));
+    if (r.every((n) => n.col != null)) {
+      for (const n of r) { n.x = gridLeft + n.col * model.colW + (model.colW - n.w) / 2; n.y = y; }
+    } else {
+      // keep pair members adjacent: order by first appearance of the pair, UR5e member first
+      const order = [];
+      for (const n of r) { const p = n.pair || n.id; if (!order.includes(p)) order.push(p); }
+      const sorted = [].concat(...order.map((p) => r.filter((n) => (n.pair || n.id) === p)));
+      let x = left + (totalW - freeRowWidth(sorted)) / 2, prev = null;
+      for (const n of sorted) { if (prev) x += (prev.pair && prev.pair === n.pair) ? 28 : (prev.kind === "env" && !prev.pair ? 90 : 44); n.x = x; n.y = y; x += n.w; prev = n; }
+    }
+    y += rowH + ROWGAP;
+  }
+  const W = totalW + 2 * PAD, H = y - ROWGAP + PAD;
+  canvas.style.width = W + "px"; canvas.style.height = H + "px";
+  svg.setAttribute("width", W); svg.setAttribute("height", H);
+  for (const n of model.nodes) { const el = document.getElementById("n-" + n.id); el.style.left = n.x + "px"; el.style.top = n.y + "px"; }
+  drawEdges();
+  applyZoom();
+}
+
+function anchor(n, side, frac = 0.5) {
+  if (side === "top") return [n.x + n.w * frac, n.y];
+  if (side === "bottom") return [n.x + n.w * frac, n.y + n.h];
+  if (side === "left") return [n.x, n.y + n.h * frac];
+  return [n.x + n.w, n.y + n.h * frac];
+}
+
+// Orthogonal routing. Edges of one family share a horizontal "bus" in the gap between rows, so n children of
+// one parent look like a tree with a single trunk, not n curves. A vertical that would cut through a box is
+// diverted into a free channel beside the target and enters it from the side instead.
+const boxHit = (x, y1, y2, skip) => { const lo = Math.min(y1, y2), hi = Math.max(y1, y2); return model.nodes.some((n) => !skip.has(n.id) && x > n.x - 6 && x < n.x + n.w + 6 && hi > n.y + 2 && lo < n.y + n.h - 2); };
+function channel(target, y1, y2, skip) {
+  for (const dx of [-20, 20, -44, 44, -70, 70, -100, 100]) { const x = dx < 0 ? target.x + dx : target.x + target.w + dx; if (!boxHit(x, y1, y2, skip)) return x; }
+  return target.x - 20;
+}
+const P = (pts) => pts.map(([x, y], i) => `${i ? "L" : "M"}${Math.round(x)},${Math.round(y)}`).join(" ");
+
+function drawEdges() {
+  svg.querySelectorAll(":scope > path, :scope > text").forEach((e) => e.remove());
+  const rowTop = {}, rowBottom = {};
+  for (const n of model.nodes) { rowTop[n.row] = Math.min(rowTop[n.row] ?? Infinity, n.y); rowBottom[n.row] = Math.max(rowBottom[n.row] ?? -Infinity, n.y + n.h); }
+
+  // --- extends: group by (parent, child row); each group gets its own bus just above the child row
+  const groups = {};
+  for (const e of model.edges) if (e.type === "extends") { const k = e.to + "|" + byId[e.from].row; (groups[k] = groups[k] || []).push(e); }
+  const busIndex = {};  // per child row, how many buses were already placed
+  const groupKeys = Object.keys(groups).sort((a, b) => byId[groups[a][0].to].x - byId[groups[b][0].to].x);
+  for (const k of groupKeys) {
+    const es = groups[k], parent = byId[es[0].to], row = byId[es[0].from].row;
+    const sameRow = parent.row === row, parentAbove = parent.y + parent.h <= rowTop[row];
+    let busY = 0;
+    if (!sameRow) { const i = busIndex[row] = (busIndex[row] || 0) + 1; busY = parentAbove ? rowTop[row] - 16 - 12 * (i - 1) : rowBottom[row] + 16 + 12 * (i - 1); }
+    for (const e of es) {
+      const a = byId[e.from];
+      let pts, labelAt = null;
+      if (sameRow) {
+        // adjacent twins: straight horizontal into the parent's side
+        const l = parent.x > a.x;
+        // one shared y inside the vertical overlap of both boxes, so the arrow is level even if the boxes differ in height
+        const yy = (Math.max(a.y, parent.y) + Math.min(a.y + a.h, parent.y + parent.h)) / 2;
+        pts = [[l ? a.x + a.w : a.x, yy], [l ? parent.x : parent.x + parent.w, yy]];
+      } else {
+        const [ax, ay] = anchor(a, parentAbove ? "top" : "bottom");
+        const [px, py] = anchor(parent, parentAbove ? "bottom" : "top");
+        const skip = new Set([a.id, parent.id]);
+        if (boxHit(px, busY, py, skip)) {
+          const cx = channel(parent, busY, parent.y + parent.h / 2, skip);
+          const side = cx < parent.x ? "left" : "right";
+          pts = [[ax, ay], [ax, busY], [cx, busY], [cx, parent.y + parent.h / 2], anchor(parent, side)];
+        } else pts = [[ax, ay], [ax, busY], [px, busY], [px, py]];
+      }
+      addEdge(e, P(pts), null);
+    }
+  }
+
+  // --- has-field: one bus per owner just below it, branches drop onto each field's class
+  const owners = {};
+  for (const e of model.edges) if (e.type === "compose") (owners[e.from] = owners[e.from] || []).push(e);
+  const ownerKeys = Object.keys(owners).sort((a, b) => byId[a].x - byId[b].x);
+  const ownerBusIdx = {};
+  for (const o of ownerKeys) {
+    const es = owners[o], a = byId[o];
+    const i = ownerBusIdx[a.row] = (ownerBusIdx[a.row] || 0) + 1;
+    const busY = rowBottom[a.row] + 24 + 12 * (i - 1);
+    es.forEach((e, j) => {
+      const b = byId[e.to];
+      const [sx, sy] = anchor(a, "bottom", (j + 1) / (es.length + 1));
+      const [tx, ty] = anchor(b, "top");
+      const skip = new Set([a.id, b.id]);
+      let pts, lab;
+      if (boxHit(tx, busY, ty, skip)) {
+        const cx = channel(b, busY, b.y + b.h / 2, skip);
+        pts = [[sx, sy], [sx, busY], [cx, busY], [cx, b.y + b.h / 2], anchor(b, cx < b.x ? "left" : "right")];
+        lab = [cx < b.x ? cx + 5 : cx - 50, b.y + b.h / 2 - 8];
+      } else { pts = [[sx, sy], [sx, busY], [tx, busY], [tx, ty]]; lab = [tx + 5, ty - 8]; }
+      addEdge(e, P(pts), lab);
+    });
+  }
+}
+function addEdge(e, d, labelAt) {
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", d); path.setAttribute("class", e.type === "compose" ? "compose field" : "extends");
+  path.setAttribute(e.type === "extends" ? "marker-end" : "marker-start", `url(#${e.type === "extends" ? "tri" : "dia"})`);
+  svg.appendChild(path); e.el = path;
+  if (e.label && labelAt) {
+    const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    t.setAttribute("x", labelAt[0]); t.setAttribute("y", labelAt[1]); t.setAttribute("class", "field"); t.textContent = e.label;
+    svg.appendChild(t); e.labelEl = t;
+  }
+}
+
+// ------------------------------------------------------------------------------- highlight
+// Field edges (diamonds) are hidden until a class is selected, unless the "always" toggle is on.
+function applyHighlight() {
+  const nodesEl = canvas.querySelectorAll(".node");
+  const sel = selected && byId[selected] ? selected : null;
+  const nb = new Set(sel ? [sel] : []);
+  if (sel) for (const e of model.edges) if (e.from === sel || e.to === sel) { nb.add(e.from); nb.add(e.to); }
+  nodesEl.forEach((el) => { const id = el.id.slice(2); el.classList.toggle("sel", id === sel); el.classList.toggle("nb", !!sel && nb.has(id) && id !== sel); el.classList.toggle("dim", !!sel && !nb.has(id)); });
+  for (const e of model.edges) {
+    const incident = !!sel && (e.from === sel || e.to === sel);
+    const shown = e.type === "extends" || showFields || incident;
+    const hi = incident, dim = !!sel && !incident;
+    for (const el of [e.el, e.labelEl]) {
+      if (!el) continue;
+      el.classList.toggle("hi", hi); el.classList.toggle("dim", dim); el.classList.toggle("hidden", !shown);
+    }
+    e.el.setAttribute(e.type === "extends" ? "marker-end" : "marker-start", `url(#${e.type === "extends" ? "tri" : "dia"}${hi ? "-hi" : ""})`);
+  }
+}
+
+// ------------------------------------------------------------------------------- zoom + pan
+function applyZoom() {
+  scaler.style.transform = `scale(${zoom})`;
+  scaler.style.width = canvas.offsetWidth * zoom + "px"; scaler.style.height = canvas.offsetHeight * zoom + "px";
+}
+function fit() { zoom = Math.min(1, (viewport.clientWidth - 8) / canvas.offsetWidth); applyZoom(); }
+document.getElementById("zoomIn").onclick = () => { zoom = Math.min(2, zoom * 1.2); applyZoom(); };
+document.getElementById("zoomOut").onclick = () => { zoom = Math.max(0.3, zoom / 1.2); applyZoom(); };
+document.getElementById("zoomFit").onclick = fit;
+let drag = null;
+viewport.addEventListener("mousedown", (e) => { if (e.target.closest(".node")) return; drag = { x: e.clientX, y: e.clientY, sl: viewport.scrollLeft, st: viewport.scrollTop }; viewport.classList.add("dragging"); });
+window.addEventListener("mousemove", (e) => { if (!drag) return; viewport.scrollLeft = drag.sl - (e.clientX - drag.x); viewport.scrollTop = drag.st - (e.clientY - drag.y); });
+window.addEventListener("mouseup", () => { drag = null; viewport.classList.remove("dragging"); });
+viewport.addEventListener("wheel", (e) => { if (!e.ctrlKey && !e.metaKey) return; e.preventDefault(); zoom = Math.max(0.3, Math.min(2, zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1))); applyZoom(); }, { passive: false });
+
+// ------------------------------------------------------------------------------- interaction
+canvas.addEventListener("click", (e) => {
+  const more = e.target.closest(".more");
+  if (more) { const id = more.dataset.more; showInherited.has(id) ? showInherited.delete(id) : showInherited.add(id); rerenderNode(id); return; }
+  const term = e.target.closest(".term");
+  if (term) { const k = term.dataset.term; openTerms.has(k) ? openTerms.delete(k) : openTerms.add(k); rerenderNode(k.split("::")[0]); return; }
+  const head = e.target.closest(".head");
+  if (head) {
+    const id = head.dataset.node;
+    if (selected === id) { openNodes.has(id) ? openNodes.delete(id) : openNodes.add(id); }
+    else { selected = id; openNodes.add(id); }
+    rerenderNode(id); return;
+  }
+  if (e.target.closest(".node")) return;
+  selected = null; applyHighlight();
+});
+viewport.addEventListener("click", (e) => { if (e.target === viewport || e.target === scaler) { selected = null; applyHighlight(); } });
+
+document.getElementById("expandAll").onclick = () => { model.nodes.forEach((n) => openNodes.add(n.id)); build(); };
+document.getElementById("collapseAll").onclick = () => { openNodes.clear(); openTerms.clear(); showInherited.clear(); selected = null; build(); };
+
+let env = "grasp", variant = "all", showFields = false;
+try { env = localStorage.getItem("omnireset.d.env") || env; variant = localStorage.getItem("omnireset.d.variant") || variant; } catch (_) {}
+// theme: auto -> light -> dark; CSS keys off data-theme on <html>
+const THEMES = ["auto", "light", "dark"], THEME_ICON = { auto: "◐", light: "☀", dark: "☾" };
+let theme = "auto"; try { theme = localStorage.getItem("omnireset.d.theme") || "auto"; } catch (_) {}
+function applyTheme() {
+  if (theme === "auto") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", theme);
+  const b = document.getElementById("theme"); b.textContent = THEME_ICON[theme]; b.title = `Theme: ${theme} (click to change)`;
+  try { localStorage.setItem("omnireset.d.theme", theme); } catch (_) {}
+}
+document.getElementById("theme").addEventListener("click", () => { theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length]; applyTheme(); });
+applyTheme();
+document.getElementById("fieldSeg").addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  showFields = b.dataset.fields === "always";
+  document.querySelectorAll("#fieldSeg button").forEach((x) => x.classList.toggle("on", x === b));
+  applyHighlight();
+});
+const envSeg = document.getElementById("envSeg"), variantSeg = document.getElementById("variantSeg");
+variantSeg.innerHTML = `<button data-variant="all">All 5 variants</button>` + VARIANTS.map((v) => `<button data-variant="${v.key}" title="${v.key}">${esc(v.short)}</button>`).join("");
+function update(refit = true) {
+  envSeg.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.env === env));
+  variantSeg.style.display = env === "reset" ? "" : "none";
+  variantSeg.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.variant === variant));
+  selected = null;
+  build();
+  if (refit) fit();
+  try { localStorage.setItem("omnireset.d.env", env); localStorage.setItem("omnireset.d.variant", variant); } catch (_) {}
+}
+envSeg.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { env = b.dataset.env; update(); } });
+variantSeg.addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { variant = b.dataset.variant; update(); } });
+window.addEventListener("resize", () => layout());
+update();
+</script>
+</body>
+</html>
