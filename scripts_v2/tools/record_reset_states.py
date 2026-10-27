@@ -124,7 +124,9 @@ def main(env_cfg, agent_cfg) -> None:
     num_reset_conditions_evaluated = 0
     current_successful_reset_conditions = 0
     actions = torch.zeros(env.action_space.shape, device=env.device, dtype=torch.float32)
-    if "ObjectAnywhereEEGrasped" in args_cli.task or "ObjectRestingEEGrasped" in args_cli.task:
+    # every "EE grasped" set (including the partially assembled one) holds with the gripper commanded closed;
+    # the other sets alternate open and closed at random
+    if "EEGrasped" in args_cli.task:
         actions[:, -1] = -1.0
     else:
         actions[:, -1] = (
@@ -143,9 +145,7 @@ def main(env_cfg, agent_cfg) -> None:
         done_idx = torch.where(dones)[0]
 
         # Reset actions for environments that are done
-        if done_idx.numel() > 0 and not (
-            "ObjectAnywhereEEGrasped" in args_cli.task or "ObjectRestingEEGrasped" in args_cli.task
-        ):
+        if done_idx.numel() > 0 and "EEGrasped" not in args_cli.task:
             actions[done_idx, -1] = (
                 torch.randint(0, 2, (done_idx.numel(),), device=env.device, dtype=torch.float32) * 2 - 1
             )

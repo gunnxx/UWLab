@@ -30,6 +30,9 @@ class Dex1GraspSamplingEventCfg(robotiq.GraspSamplingEventCfg):
         params={
             **_ROBOTIQ_EVENTS.grasp_sampling.params,
             "gripper_cfg": SceneEntityCfg("robot", body_names=DEX1_BASE_BODY_NAME),
+            # half of the surface samples uniform over the object: the top-biased cap grasps only work on a
+            # standing peg, a lying one needs a grasp across its diameter approached from above
+            "top_bias_fraction": 0.5,
         }
     )
 

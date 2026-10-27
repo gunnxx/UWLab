@@ -95,14 +95,19 @@ def main(env_cfg, agent_cfg) -> None:
     print(f"Starting visualization of saved states from {args_cli.dataset_dir}")
     print("Press Ctrl+C to stop")
 
+    # Gripper "closed" test from the binary gripper action: fraction of the way from the open to the
+    # closed command on its first joint (Robotiq: finger_joint 0 -> 0.785 rad; Dex1: prismatic fingers).
+    asset = env.unwrapped.scene["robot"]
+    gripper_cfg = env_cfg.actions.gripper
+    gripper_joint = next(iter(gripper_cfg.close_command_expr))
+    gripper_joint_id = asset.find_joints([gripper_joint])[0][0]
+    gripper_open = float(gripper_cfg.open_command_expr.get(gripper_joint, 0.0))
+    gripper_closed = float(gripper_cfg.close_command_expr[gripper_joint])
+
     with contextlib.suppress(KeyboardInterrupt):
         while True:
-            asset = env.unwrapped.scene["robot"]
-            # specific for robotiq
-            gripper_joint_positions = asset.data.joint_pos[:, asset.find_joints(["finger_joint"])[0][0]]
-            gripper_closed_fraction = (
-                torch.abs(gripper_joint_positions) / env_cfg.actions.gripper.close_command_expr["finger_joint"]
-            )
+            gripper_joint_positions = asset.data.joint_pos[:, gripper_joint_id]
+            gripper_closed_fraction = (gripper_joint_positions - gripper_open) / (gripper_closed - gripper_open)
             gripper_mask = gripper_closed_fraction > 0.1
             # Step the simulation
             for _ in range(5):

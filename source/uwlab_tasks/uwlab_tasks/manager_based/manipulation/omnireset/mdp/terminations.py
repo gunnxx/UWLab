@@ -127,6 +127,22 @@ class check_grasp_success(ManagerTermBase):
         self.max_pos_deviation = cfg.params.get("max_pos_deviation")
         self.pos_z_threshold = cfg.params.get("pos_z_threshold")
         self.consecutive_stability_steps = cfg.params.get("consecutive_stability_steps", 5)
+
+        # The fingers must have travelled at least this fraction of the open-to-close range: an object lying
+        # across fully open fingers does not move either, but it is not grasped. Uses the task's gripper action.
+        self.min_close_fraction = cfg.params.get("min_close_fraction", 0.1)
+        self._closure_joint_ids = None
+        gripper_action_cfg = getattr(getattr(env.cfg, "actions", None), "gripper", None)
+        close_expr = getattr(gripper_action_cfg, "close_command_expr", None)
+        open_expr = getattr(gripper_action_cfg, "open_command_expr", None)
+        if close_expr and open_expr and self.min_close_fraction > 0:
+            gripper_asset = env.scene[self.gripper_cfg.name]
+            names = [n for n in close_expr if n in open_expr and abs(open_expr[n] - close_expr[n]) > 1e-6]
+            if names:
+                self._closure_joint_ids, _ = gripper_asset.find_joints(names, preserve_order=True)
+                self._closure_open = torch.tensor([open_expr[n] for n in names], device=env.device)
+                self._closure_close = torch.tensor([close_expr[n] for n in names], device=env.device)
+
         self.stability_counter = torch.zeros(env.num_envs, device=env.device, dtype=torch.int32)
 
     def reset(self, env_ids: torch.Tensor | None = None) -> None:
@@ -154,6 +170,7 @@ class check_grasp_success(ManagerTermBase):
         max_pos_deviation: float = 0.05,
         pos_z_threshold: float = 0.05,
         consecutive_stability_steps: int = 5,
+        min_close_fraction: float = 0.1,
     ) -> torch.Tensor:
         # Get object and gripper from scene
         object_asset = env.scene[self.object_cfg.name]
@@ -213,6 +230,11 @@ class check_grasp_success(ManagerTermBase):
             & time_out
         )
 
+        if self._closure_joint_ids is not None:
+            finger_pos = gripper_asset.data.joint_pos.torch[:, self._closure_joint_ids]
+            closed_fraction = (finger_pos - self._closure_open) / (self._closure_close - self._closure_open)
+            grasp_success &= (closed_fraction > self.min_close_fraction).all(dim=1)
+
         return grasp_success
 
 
@@ -251,6 +273,39 @@ class check_reset_state_success(ManagerTermBase):
         self.assets_to_check = self.object_assets + [self.robot_asset]
         self.ee_body_idx = self.robot_asset.data.body_names.index(self.ee_body_name)
 
+        # Optional hold check for the "EE grasped" sets. Three clauses: the gripper must be stopped short of its
+        # closed command (something is between the fingers), the grasped object must sit near the end effector,
+        # and the end effector must still be at the grasp pose it was placed at, expressed in the object's frame
+        # (target recorded by reset_end_effector_from_grasp_dataset). The last clause is what tells a hand
+        # closed on the peg from a hand closed on the hole, the table edge or thin air next to the peg; the
+        # first two alone accept those whenever the object happens not to move.
+        self.require_grasp = cfg.params.get("require_grasp", False)
+        if self.require_grasp:
+            grasp_object_cfg = cfg.params.get("grasp_object_cfg") or self.object_cfgs[0]
+            self.grasp_object = env.scene[grasp_object_cfg.name]
+            self.grasp_max_object_ee_dist = cfg.params.get("grasp_max_object_ee_dist", 0.2)
+            self.grasp_min_open_fraction = cfg.params.get("grasp_min_open_fraction", 0.08)
+            # and not (nearly) fully open either: an open hand hovering over the object is not a grasp
+            self.grasp_max_open_fraction = cfg.params.get("grasp_max_open_fraction", 0.9)
+            self.grasp_event_name = cfg.params.get("grasp_event_name", "reset_end_effector_pose_from_grasp_dataset")
+            self.grasp_pos_tol = cfg.params.get("grasp_pos_tol", 0.015)
+            self.grasp_ang_tol = cfg.params.get("grasp_ang_tol", 0.26)
+            self._grasp_event = None  # resolved on first call, the event manager may not exist yet
+            gripper_action_cfg = env.cfg.actions.gripper
+            joint_names = list(gripper_action_cfg.close_command_expr.keys())
+            self.grasp_joint_ids, _ = self.robot_asset.find_joints(joint_names, preserve_order=True)
+            self.grasp_closed = torch.tensor(
+                [gripper_action_cfg.close_command_expr[n] for n in joint_names], device=env.device
+            )
+            self.grasp_open = torch.tensor(
+                [gripper_action_cfg.open_command_expr.get(n, 0.0) for n in joint_names], device=env.device
+            )
+
+        # Optional per-clause bookkeeping (debug_reset_env.py --funnel): counts, over the envs whose hold just
+        # ended, how many pass each clause. Collected inside the term because the env is reset right after.
+        self.collect_funnel = cfg.params.get("collect_funnel", False)
+        self.funnel: dict[str, int] = {}
+
         # Optional assembly alignment filter
         self.assembly_success_prob = cfg.params.get("assembly_success_prob")
         if self.assembly_success_prob is not None:
@@ -278,6 +333,17 @@ class check_reset_state_success(ManagerTermBase):
             )
             self.require_assembly_success = torch.rand(env.num_envs, device=env.device) < self.assembly_success_prob
             self._pending_reflip = torch.zeros(env.num_envs, device=env.device, dtype=torch.bool)
+
+    def _resolve_grasp_event(self, env: ManagerBasedEnv):
+        """The grasp placement event term of this env, or None if the env has none (checked once)."""
+        if self._grasp_event is None and self.grasp_event_name is not None:
+            try:
+                self._grasp_event = env.event_manager.get_term_cfg(self.grasp_event_name).func
+            except (ValueError, KeyError, AttributeError):
+                self.grasp_event_name = None
+            if self._grasp_event is not None and not hasattr(self._grasp_event, "target_pos_obj"):
+                self._grasp_event, self.grasp_event_name = None, None
+        return self._grasp_event
 
     def reset(self, env_ids: torch.Tensor | None = None) -> None:
         super().reset(env_ids)
@@ -327,6 +393,15 @@ class check_reset_state_success(ManagerTermBase):
         receptive_asset_cfg: SceneEntityCfg | None = None,
         assembly_success_prob: float | None = None,
         assembly_threshold_scale: float = 1.0,
+        require_grasp: bool = False,
+        grasp_object_cfg: SceneEntityCfg | None = None,
+        grasp_max_object_ee_dist: float = 0.2,
+        grasp_min_open_fraction: float = 0.08,
+        grasp_max_open_fraction: float = 0.9,
+        grasp_event_name: str = "reset_end_effector_pose_from_grasp_dataset",
+        grasp_pos_tol: float = 0.015,
+        grasp_ang_tol: float = 0.26,
+        collect_funnel: bool = False,
     ) -> torch.Tensor:
 
         # Check time out
@@ -370,6 +445,7 @@ class check_reset_state_success(ManagerTermBase):
         # Reset initial positions on first check or after env reset
         excessive_pose_deviation = torch.zeros(env.num_envs, device=env.device, dtype=torch.bool)
         pos_below_threshold = torch.zeros(env.num_envs, device=env.device, dtype=torch.bool)
+        deviations = {}
         for asset in self.assets_to_check:
             if asset is self.robot_asset:
                 asset_pos = asset.data.body_link_pos_w.torch[:, self.ee_body_idx].clone()
@@ -384,6 +460,7 @@ class check_reset_state_success(ManagerTermBase):
             # Asset has excessive pose deviation if position exceeds thresholds
             pos_deviation = (asset_pos - asset.initial_pos).norm(dim=1)
             valid_pos_deviation = torch.where(~skip_check, pos_deviation, torch.zeros_like(pos_deviation))
+            deviations[asset.cfg.prim_path.split("/")[-1]] = valid_pos_deviation
             if asset is self.robot_asset:
                 excessive_pose_deviation |= valid_pos_deviation > self.max_robot_pos_deviation
             else:
@@ -409,6 +486,58 @@ class check_reset_state_success(ManagerTermBase):
             & time_out
         )
 
+        clauses = {}
+        if self.collect_funnel:
+            clauses = {
+                "no_abnormal_gripper": ~abnormal_gripper_state,
+                "orientation_down": gripper_orientation_within_range,
+                "stable": stability_reached,
+                "pose_deviation_ok": ~excessive_pose_deviation,
+                "above_z_threshold": ~pos_below_threshold,
+                "collision_free": collision_free,
+            }
+            for name, dev in deviations.items():
+                limit = self.max_robot_pos_deviation if name == self.robot_asset.cfg.prim_path.split("/")[-1] else self.max_object_pos_deviation
+                clauses[f"  dev_ok {name}"] = dev <= limit
+                clauses[f"  dev<3cm {name}"] = dev <= 0.03
+
+        if self.require_grasp:
+            finger_pos = self.robot_asset.data.joint_pos.torch[:, self.grasp_joint_ids]
+            # 0 = at the closed command (nothing between the fingers), 1 = at the open command
+            open_fraction = ((finger_pos - self.grasp_closed) / (self.grasp_open - self.grasp_closed)).abs()
+            fingers_blocked = (
+                (open_fraction > self.grasp_min_open_fraction) & (open_fraction < self.grasp_max_open_fraction)
+            ).all(dim=1)
+            ee_pos = self.robot_asset.data.body_link_pos_w.torch[:, self.ee_body_idx]
+            object_near_ee = (self.grasp_object.data.root_pos_w.torch - ee_pos).norm(dim=1) < (
+                self.grasp_max_object_ee_dist
+            )
+            reset_success = reset_success & fingers_blocked & object_near_ee
+            if self.collect_funnel:
+                clauses["fingers_blocked"] = fingers_blocked
+                clauses["  fingers open>20%"] = (open_fraction > 0.2).all(dim=1)
+                clauses["  fingers open>50%"] = (open_fraction > 0.5).all(dim=1)
+                clauses["object_near_ee"] = object_near_ee
+            grasp_event = self._resolve_grasp_event(env)
+            if grasp_event is not None:
+                ee_quat = self.robot_asset.data.body_link_quat_w.torch[:, self.ee_body_idx]
+                ee_pos_obj, ee_quat_obj = math_utils.subtract_frame_transforms(
+                    self.grasp_object.data.root_pos_w.torch, self.grasp_object.data.root_quat_w.torch, ee_pos, ee_quat
+                )
+                pos_err = (ee_pos_obj - grasp_event.target_pos_obj).norm(dim=1)
+                ang_err = math_utils.quat_error_magnitude(ee_quat_obj, grasp_event.target_quat_obj)
+                at_grasp_pose = (pos_err < self.grasp_pos_tol) & (ang_err < self.grasp_ang_tol)
+                reset_success = reset_success & at_grasp_pose
+                if self.collect_funnel:
+                    clauses["grasp_pos_ok"] = pos_err < self.grasp_pos_tol
+                    clauses["grasp_pos_within_3cm"] = pos_err < 0.03
+                    clauses["grasp_ang_ok"] = ang_err < self.grasp_ang_tol
+
+        if self.collect_funnel:
+            counts = torch.stack([time_out.sum()] + [(time_out & m).sum() for m in clauses.values()]).tolist()
+            for name, n in zip(["hold_end"] + list(clauses), counts):
+                self.funnel[name] = self.funnel.get(name, 0) + int(n)
+
         if self.assembly_success_prob is not None:
             ins_pos_w, ins_quat_w = self.insertive_asset_offset.apply(self.insertive_asset)
             rec_pos_w, rec_quat_w = self.receptive_asset_offset.apply(self.receptive_asset)
@@ -420,6 +549,11 @@ class check_reset_state_success(ManagerTermBase):
             assembly_match = torch.where(self.require_assembly_success, assembly_success, ~assembly_success)
             reset_success = reset_success & assembly_match
             self._pending_reflip |= reset_success
+            if self.collect_funnel:
+                self.funnel["assembly_match"] = self.funnel.get("assembly_match", 0) + int((time_out & assembly_match).sum())
+
+        if self.collect_funnel:
+            self.funnel["SUCCESS"] = self.funnel.get("SUCCESS", 0) + int(reset_success.sum())
 
         return reset_success
 
@@ -738,6 +872,40 @@ class check_obb_no_overlap_termination(ManagerTermBase):
             self._visualize_bounding_boxes(env)
 
         return ~obb_overlap
+
+
+class grasp_placement_failed(ManagerTermBase):
+    """Terminate at once when the IK placement of ``reset_end_effector_from_grasp_dataset`` missed its target.
+
+    A reset whose end effector never reached the sampled grasp pose cannot become a valid "EE grasped" state, so
+    holding it for the full episode only costs time. Envs without that event term never terminate here.
+    """
+
+    def __init__(self, cfg: TerminationTermCfg, env: ManagerBasedEnv):
+        super().__init__(cfg, env)
+        self.event_name = cfg.params.get("event_name", "reset_end_effector_pose_from_grasp_dataset")
+        self.pos_tol = cfg.params.get("pos_tol", 0.01)
+        self.ang_tol = cfg.params.get("ang_tol", 0.17)
+        self._event = None
+        self._checked = False
+
+    def __call__(
+        self,
+        env: ManagerBasedEnv,
+        event_name: str = "reset_end_effector_pose_from_grasp_dataset",
+        pos_tol: float = 0.01,
+        ang_tol: float = 0.17,
+    ) -> torch.Tensor:
+        if not self._checked:
+            self._checked = True
+            try:
+                term = env.event_manager.get_term_cfg(self.event_name).func
+                self._event = term if hasattr(term, "ik_pos_error") else None
+            except (ValueError, KeyError, AttributeError):
+                self._event = None
+        if self._event is None:
+            return torch.zeros(env.num_envs, device=env.device, dtype=torch.bool)
+        return (self._event.ik_pos_error > self.pos_tol) | (self._event.ik_ang_error > self.ang_tol)
 
 
 def consecutive_success_state(env: ManagerBasedRLEnv, num_consecutive_successes: int = 10):

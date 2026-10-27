@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from isaaclab.assets import AssetBaseCfg, RigidObjectCfg
+from isaaclab.assets import AssetBaseCfg
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils import configclass
@@ -39,8 +39,7 @@ from .layout import (
     INSERTIVE_Z_ABOVE_TABLE,
     RECEPTIVE_X,
     RECEPTIVE_Y,
-    TABLE_CENTER_X,
-    TABLE_ORIGIN_Z,
+    G1D_TABLE,
     TABLE_TOP_Z,
 )
 
@@ -75,11 +74,7 @@ _UR5E_TERMINATIONS = ur5e.ResetStatesTerminationCfg()
 class G1dResetStatesSceneCfg(ur5e.ResetStatesSceneCfg):
     robot = IMPLICIT_G1D_DEX1.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
-    table = _UR5E_SCENE.table.replace(
-        init_state=RigidObjectCfg.InitialStateCfg(
-            pos=(TABLE_CENTER_X, 0.0, TABLE_ORIGIN_Z), rot=(0.0, 0.0, -0.707, 0.707)
-        )
-    )
+    table = G1D_TABLE
 
     ur5_metal_support = None
 
@@ -206,7 +201,13 @@ class G1dObjectPartiallyAssembledEEGraspedEventCfg(
 @configclass
 class G1dResetStatesTerminationCfg(ur5e.ResetStatesTerminationCfg):
     success = _UR5E_TERMINATIONS.success.replace(
-        params={**_UR5E_TERMINATIONS.success.params, "ee_body_name": DEX1_BASE_BODY_NAME}
+        params={
+            **_UR5E_TERMINATIONS.success.params,
+            "ee_body_name": DEX1_BASE_BODY_NAME,
+            # objects (and the hand) must stay above the table top: a peg that rolled off the edge onto the
+            # floor is not a usable reset state (the UR5e value is relative to its mounting plate)
+            "pos_z_threshold": TABLE_TOP_Z - 0.02,
+        }
     )
 
 
@@ -220,19 +221,32 @@ class G1dDex1ResetStatesCfg(ur5e.UR5eRobotiq2f85ResetStatesCfg):
     actions: G1dDex1RelativeOSCAction = G1dDex1RelativeOSCAction()
 
 
+# ``configclass`` binds each class's ``__post_init__`` to whatever ``cls.__post_init__`` resolves to at decoration
+# time. For the variants below that is the one inherited from ``G1dDex1ResetStatesCfg`` (first base), which skips
+# the UR5e variant's ``__post_init__`` that fills in the success-term parameters (``max_object_pos_deviation``,
+# assembly thresholds). Chain it explicitly.
 @configclass
 class G1dObjectAnywhereEEAnywhereResetStatesCfg(G1dDex1ResetStatesCfg, ur5e.ObjectAnywhereEEAnywhereResetStatesCfg):
     events: G1dObjectAnywhereEEAnywhereEventCfg = G1dObjectAnywhereEEAnywhereEventCfg()
+
+    def __post_init__(self):
+        ur5e.ObjectAnywhereEEAnywhereResetStatesCfg.__post_init__(self)
 
 
 @configclass
 class G1dObjectRestingEEGraspedResetStatesCfg(G1dDex1ResetStatesCfg, ur5e.ObjectRestingEEGraspedResetStatesCfg):
     events: G1dObjectRestingEEGraspedEventCfg = G1dObjectRestingEEGraspedEventCfg()
 
+    def __post_init__(self):
+        ur5e.ObjectRestingEEGraspedResetStatesCfg.__post_init__(self)
+
 
 @configclass
 class G1dObjectAnywhereEEGraspedResetStatesCfg(G1dDex1ResetStatesCfg, ur5e.ObjectAnywhereEEGraspedResetStatesCfg):
     events: G1dObjectAnywhereEEGraspedEventCfg = G1dObjectAnywhereEEGraspedEventCfg()
+
+    def __post_init__(self):
+        ur5e.ObjectAnywhereEEGraspedResetStatesCfg.__post_init__(self)
 
 
 @configclass
@@ -241,9 +255,15 @@ class G1dObjectPartiallyAssembledEEAnywhereResetStatesCfg(
 ):
     events: G1dObjectPartiallyAssembledEEAnywhereEventCfg = G1dObjectPartiallyAssembledEEAnywhereEventCfg()
 
+    def __post_init__(self):
+        ur5e.ObjectPartiallyAssembledEEAnywhereResetStatesCfg.__post_init__(self)
+
 
 @configclass
 class G1dObjectPartiallyAssembledEEGraspedResetStatesCfg(
     G1dDex1ResetStatesCfg, ur5e.ObjectPartiallyAssembledEEGraspedResetStatesCfg
 ):
     events: G1dObjectPartiallyAssembledEEGraspedEventCfg = G1dObjectPartiallyAssembledEEGraspedEventCfg()
+
+    def __post_init__(self):
+        ur5e.ObjectPartiallyAssembledEEGraspedResetStatesCfg.__post_init__(self)

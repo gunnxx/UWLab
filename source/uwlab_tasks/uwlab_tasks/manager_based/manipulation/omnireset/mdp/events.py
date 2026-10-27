@@ -10,6 +10,7 @@ import numpy as np
 import os
 import random
 import scipy.stats as stats
+import math
 import torch
 import trimesh
 import trimesh.transformations as tra
@@ -79,6 +80,10 @@ class grasp_sampling_event(ManagerTermBase):
         self.num_standoff_samples = cfg.params.get("num_standoff_samples")
         self.num_orientations = cfg.params.get("num_orientations")
         self.lateral_sigma = cfg.params.get("lateral_sigma")
+        # share of surface samples taken from the top-biased subset (high z, upward normal in the object frame);
+        # the rest are uniform over the surface so that side grasps exist too (a lying peg can only be grasped
+        # from above across its diameter, which the top-biased cap grasps cannot do)
+        self.top_bias_fraction = float(cfg.params.get("top_bias_fraction", 1.0))
         self.visualize_grasps = cfg.params.get("visualize_grasps", False)
         self.visualization_scale = cfg.params.get("visualization_scale", 0.03)
 
@@ -128,6 +133,7 @@ class grasp_sampling_event(ManagerTermBase):
         lateral_sigma: float,
         visualize_grasps: bool = False,
         visualization_scale: float = 0.01,
+        top_bias_fraction: float = 1.0,
     ) -> None:
         """Execute grasp sampling event - sample from pre-computed candidates."""
         # Generate grasp candidates if not already done
@@ -270,8 +276,15 @@ class grasp_sampling_event(ManagerTermBase):
         normal_score = np.maximum(normal_z_components, 0)  # Only positive Z normals
         top_bias_scores = z_normalized + normal_score
 
-        # Select top-biased subset
-        top_indices = np.argsort(top_bias_scores)[-num_surface_samples:]
+        # Select top-biased subset, topped up with uniform surface samples when top_bias_fraction < 1
+        num_top = int(round(num_surface_samples * self.top_bias_fraction))
+        order = np.argsort(top_bias_scores)
+        top_indices = order[len(order) - num_top :] if num_top > 0 else order[:0]
+        rest = np.setdiff1d(np.arange(len(surface_points)), top_indices, assume_unique=True)
+        num_uniform = min(num_surface_samples - num_top, len(rest))
+        if num_uniform > 0:
+            uniform_indices = np.random.choice(rest, size=num_uniform, replace=False)
+            top_indices = np.concatenate([top_indices, uniform_indices])
         surface_points = surface_points[top_indices]
         surface_normals = surface_normals[top_indices]
 
@@ -655,6 +668,9 @@ class reset_end_effector_from_grasp_dataset(ManagerTermBase):
         self.joint_ids: list[int] | slice = robot_ik_cfg.joint_ids
         self.n_joints: int = self.robot.num_joints if isinstance(self.joint_ids, slice) else len(self.joint_ids)
 
+        # grasps whose fingers are at least this far open (fraction of the open-to-close travel) are discarded
+        self.min_grasp_closure: float = cfg.params.get("min_grasp_closure", 0.9)
+
         # Pose range for sampling variations
         pose_range_b: dict[str, tuple[float, float]] = cfg.params.get("pose_range_b", dict())
         range_list = [pose_range_b.get(key, (0.0, 0.0)) for key in ["x", "y", "z", "roll", "pitch", "yaw"]]
@@ -681,6 +697,17 @@ class reset_end_effector_from_grasp_dataset(ManagerTermBase):
 
         # Load and pre-compute grasp data for fast sampling
         self._load_and_precompute_grasps(env)
+
+        # Per-env record of the last placement, read by the success / early-out terminations: the target
+        # end-effector pose expressed in the grasped object's frame (grasp dataset pose plus the sampled
+        # variation) and how far the iterative IK ended from that target.
+        self.target_pos_obj = torch.zeros((env.num_envs, 3), device=env.device)
+        self.target_quat_obj = torch.zeros((env.num_envs, 4), device=env.device)
+        self.target_quat_obj[:, 3] = 1.0
+        self.ik_pos_error = torch.zeros(env.num_envs, device=env.device)
+        self.ik_ang_error = torch.zeros(env.num_envs, device=env.device)
+        self._ik_log_every = 20
+        self._ik_calls = 0
 
     def _compute_grasp_dataset_path(self) -> str:
         usd_path = self.fixed_asset.cfg.spawn.usd_path
@@ -742,6 +769,33 @@ class reset_end_effector_from_grasp_dataset(ManagerTermBase):
             ).to(env.device, dtype=torch.float32)
             self.gripper_joint_positions[:, gripper_idx] = joint_tensor
 
+        # Drop grasps whose fingers never closed on the object (the grasp recorder's success check only looks at
+        # the object's motion, so an object lying across fully open fingers passes it). Open / close commands
+        # come from the task's gripper action; without one every grasp is kept.
+        gripper_action_cfg = getattr(getattr(env.cfg, "actions", None), "gripper", None)
+        close_expr = getattr(gripper_action_cfg, "close_command_expr", None)
+        open_expr = getattr(gripper_action_cfg, "open_command_expr", None)
+        if close_expr and open_expr:
+            keep = torch.ones(num_grasps, device=env.device, dtype=torch.bool)
+            for gripper_idx, robot_joint_idx in enumerate(gripper_joint_list):
+                joint_name = self.robot.joint_names[robot_joint_idx]
+                if joint_name in close_expr and joint_name in open_expr:
+                    span = open_expr[joint_name] - close_expr[joint_name]
+                    if abs(span) > 1e-6:
+                        open_fraction = (self.gripper_joint_positions[:, gripper_idx] - close_expr[joint_name]) / span
+                        keep &= open_fraction < self.min_grasp_closure
+            if not bool(keep.all()):
+                print(
+                    f"[grasp dataset] dropping {int((~keep).sum())} of {num_grasps} grasps whose fingers stayed within "
+                    f"{100 * (1 - self.min_grasp_closure):.0f}% of fully open (object was resting on the gripper)"
+                )
+                self.rel_positions = self.rel_positions[keep]
+                self.rel_quaternions = self.rel_quaternions[keep]
+                self.gripper_joint_positions = self.gripper_joint_positions[keep]
+                num_grasps = int(keep.sum())
+                if num_grasps == 0:
+                    raise ValueError(f"No grasp with closed fingers left in {self.grasp_dataset_path}")
+
         print(f"Loaded and pre-computed {num_grasps} grasp tensors from Torch file: {self.grasp_dataset_path}")
 
     def __call__(
@@ -753,6 +807,7 @@ class reset_end_effector_from_grasp_dataset(ManagerTermBase):
         robot_ik_cfg: SceneEntityCfg,
         gripper_cfg: SceneEntityCfg,
         pose_range_b: dict[str, tuple[float, float]] = dict(),
+        min_grasp_closure: float = 0.9,
     ) -> None:
         """Apply grasp poses to reset end effector."""
         # RigidObject asset
@@ -791,19 +846,46 @@ class reset_end_effector_from_grasp_dataset(ManagerTermBase):
                 math_utils.quat_from_euler_xyz(samples[:, 3], samples[:, 4], samples[:, 5]),
             )
 
+        # Remember the target in the object's frame (variation included) for the grasp checks
+        target_pos_w, target_quat_w = math_utils.combine_frame_transforms(
+            self.robot.data.root_link_pos_w[env_ids], self.robot.data.root_link_quat_w[env_ids], pos_b[env_ids], quat_b[env_ids]
+        )
+        self.target_pos_obj[env_ids], self.target_quat_obj[env_ids] = math_utils.subtract_frame_transforms(
+            object_pos_w, object_quat_w, target_pos_w, target_quat_w
+        )
+
         self.solver.process_actions(torch.cat([pos_b, quat_b], dim=1))
 
-        # Solve IK iteratively for better convergence
+        # Solve IK iteratively for better convergence. Each iterate is clamped to the joint limits: a joint
+        # written beyond its limit is snapped back by PhysX on the first step, which throws the arm away from
+        # the grasp (wrist roll / yaw solutions several radians out of range were common on the G1-D).
+        limits = self.robot.data.soft_joint_pos_limits.torch[env_ids][:, self.joint_ids]
         for i in range(25):
             self.solver.apply_actions()
             delta_joint_pos = 0.25 * (
                 self.robot.data.joint_pos_target[env_ids] - self.robot.data.joint_pos.torch[env_ids]
             )
+            new_joint_pos = (delta_joint_pos + self.robot.data.joint_pos.torch[env_ids])[:, self.joint_ids]
+            new_joint_pos = torch.clamp(new_joint_pos, limits[..., 0], limits[..., 1])
             self.robot.write_joint_state_to_sim(
-                position=(delta_joint_pos + self.robot.data.joint_pos.torch[env_ids])[:, self.joint_ids],
+                position=new_joint_pos,
                 velocity=torch.zeros((len(env_ids), self.n_joints), device=env.device),
                 joint_ids=self.joint_ids,
                 env_ids=env_ids,  # type: ignore
+            )
+
+        # How far did the placement get? (joint writes refresh the forward kinematics on the next read)
+        ee_pos_b, ee_quat_b = self.solver._compute_frame_pose()
+        self.ik_pos_error[env_ids] = (ee_pos_b[env_ids] - pos_b[env_ids]).norm(dim=1)
+        self.ik_ang_error[env_ids] = math_utils.quat_error_magnitude(ee_quat_b[env_ids], quat_b[env_ids])
+        self._ik_calls += 1
+        if self._ik_calls % self._ik_log_every == 1:
+            pos_err, ang_err = self.ik_pos_error[env_ids], self.ik_ang_error[env_ids]
+            reached = ((pos_err < 0.01) & (ang_err < 0.17)).float().mean().item()
+            print(
+                f"[grasp reset] IK within 1 cm / 10 deg: {100 * reached:.1f}% of {num_envs} envs | pos err median "
+                f"{100 * pos_err.median().item():.2f} cm, p90 {100 * pos_err.quantile(0.9).item():.2f} cm | ang err median "
+                f"{math.degrees(ang_err.median().item()):.1f} deg"
             )
 
         # Sample gripper joint positions using the same indices
@@ -830,6 +912,9 @@ class reset_insertive_object_from_partial_assembly_dataset(ManagerTermBase):
         self.receptive_object: RigidObject = env.scene[self.receptive_object_cfg.name]
         self.insertive_object_cfg: SceneEntityCfg = cfg.params.get("insertive_object_cfg")
         self.insertive_object: RigidObject = env.scene[self.insertive_object_cfg.name]
+
+        # grasps whose fingers are at least this far open (fraction of the open-to-close travel) are discarded
+        self.min_grasp_closure: float = cfg.params.get("min_grasp_closure", 0.9)
 
         # Pose range for sampling variations
         pose_range_b: dict[str, tuple[float, float]] = cfg.params.get("pose_range_b", dict())

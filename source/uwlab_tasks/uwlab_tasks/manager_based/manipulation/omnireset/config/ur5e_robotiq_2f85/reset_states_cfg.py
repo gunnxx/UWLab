@@ -399,6 +399,9 @@ class ResetStatesTerminationCfg:
 
     abnormal_robot = DoneTerm(func=task_mdp.abnormal_robot_state)
 
+    # "EE grasped" sets only (no-op elsewhere): give up at once on resets whose IK placement missed the grasp pose
+    grasp_placement_failed = DoneTerm(func=task_mdp.grasp_placement_failed, params={"pos_tol": 0.01, "ang_tol": 0.17})
+
     success = DoneTerm(
         func=task_mdp.check_reset_state_success,
         params={
@@ -574,6 +577,7 @@ class ObjectRestingEEGraspedResetStatesCfg(UR5eRobotiq2f85ResetStatesCfg):
     def __post_init__(self):
         super().__post_init__()
         self.terminations.success.params["max_object_pos_deviation"] = 0.01
+        self.terminations.success.params["require_grasp"] = True
 
 
 @configclass
@@ -583,6 +587,7 @@ class ObjectAnywhereEEGraspedResetStatesCfg(UR5eRobotiq2f85ResetStatesCfg):
     def __post_init__(self):
         super().__post_init__()
         self.terminations.success.params["max_object_pos_deviation"] = 0.05
+        self.terminations.success.params["require_grasp"] = True
 
 
 @configclass
@@ -605,6 +610,7 @@ class ObjectPartiallyAssembledEEGraspedResetStatesCfg(UR5eRobotiq2f85ResetStates
     def __post_init__(self):
         super().__post_init__()
         self.terminations.success.params["max_object_pos_deviation"] = 0.025
+        self.terminations.success.params["require_grasp"] = True
         self.terminations.success.params["insertive_asset_cfg"] = SceneEntityCfg("insertive_object")
         self.terminations.success.params["receptive_asset_cfg"] = SceneEntityCfg("receptive_object")
         self.terminations.success.params["assembly_success_prob"] = 0.5
