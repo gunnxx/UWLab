@@ -113,6 +113,29 @@ docker/forge/run_local.sh python scripts/reinforcement_learning/rsl_rl/play.py \
 checkpoint. Run one Kit instance at a time: the env reserves a 2 GB PhysX collision stack and two instances
 overflow a 16 GB card.
 
+### Browsing and debugging the code in VS Code
+
+Isaac Sim, Isaac Lab and the pinned dependencies exist only inside the image, so on the host Pylance
+cannot resolve most imports (the `_isaac_sim` / `_isaaclab` symlinks dangle). `.devcontainer/` opens
+this working copy *inside* `uwlab-omnireset:local` with the `run_local.sh` layout (repo at
+`/workspace/uwlab`, `~/.cache/uwlab-local/robotics` at `/mnt/robotics`, persistent Isaac Sim caches,
+GPU, X display):
+
+1. Build the image as above (once), then in VS Code: `F1` -> **Dev Containers: Reopen in Container**
+   (the `ms-vscode-remote.remote-containers` extension). The first start installs the VS Code server and
+   the Python extensions into the container and runs `.devcontainer/post_create.sh`, which recreates the
+   two symlinks, whitelists the repo for git, and generates `.vscode/settings.json` (Pylance
+   `extraPaths` for Isaac Sim's Kit extensions, Isaac Lab under `_isaaclab/`, the four uwlab
+   extensions) from `.vscode/tools/settings.template.json`.
+2. "Go to Definition" then follows imports into Isaac Lab and Isaac Sim; the integrated terminal is a
+   shell in the container (`python` is Isaac Sim's `python.sh`), and the `launch.json` configurations
+   (play / train OmniReset G1-D, pytest) debug under the same interpreter. `xhost +si:localuser:root`
+   once per login for the Kit window.
+
+The container runs as root; files it creates in the working copy are chowned back to the host user on
+every container start. Point the config at another image with `UWLAB_DEVCONTAINER_IMAGE=<image> code .`.
+Rebuild the image -> **Dev Containers: Rebuild Container** picks it up.
+
 ## 1. Build the image (once)
 
 ```bash

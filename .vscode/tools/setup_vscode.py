@@ -117,6 +117,12 @@ def overwrite_python_analysis_extra_paths(uwlab_settings: str) -> str:
         if not source_dir.is_dir():
             raise RuntimeError(f"Could not find 'source' near {pkg_file}")
 
+        # 3) Installed by `uwlab.sh --install` into the (gitignored, possibly symlinked) _isaaclab directory:
+        #    keep the workspace-relative spelling so the paths stay short and survive a moved checkout.
+        linked_source = UWLAB_DIR / "_isaaclab" / "IsaacLab" / "source"
+        if linked_source.is_dir() and linked_source.resolve() == source_dir.resolve():
+            source_dir = linked_source
+
         for p in sorted(source_dir.iterdir()):
             if p.is_dir() and p.name.startswith("isaaclab"):
                 rel = os.path.relpath(p, UWLAB_DIR).replace("\\", "/")

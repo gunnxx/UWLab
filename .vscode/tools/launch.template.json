@@ -2,54 +2,57 @@
     // Use IntelliSense to learn about possible attributes.
     // Hover to view descriptions of existing attributes.
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    //
+    // The interpreter is Isaac Sim's python.sh (see settings.json), so every configuration runs with
+    // the Omniverse environment set up. Isaac Lab 3.0 is headless unless "--viz", "kit" is passed.
     "version": "0.2.0",
     "configurations": [
         {
             "name": "Python: Current File",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${file}",
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "justMyCode": false
         },
         {
-            "name": "Python: Attach (windows-x86_64/linux-x86_64)",
-            "type": "python",
+            "name": "Python: Attach (localhost:3000)",
+            "type": "debugpy",
             "request": "attach",
-            "port": 3000,
-            "host": "localhost"
+            "connect": {"host": "localhost", "port": 3000}
         },
         {
-            "name": "Python: Train Environment",
-            "type": "python",
+            "name": "RSL-RL: Play OmniReset G1-D (newest run, Kit window)",
+            "type": "debugpy",
             "request": "launch",
-            "args" : ["--task", "Isaac-Reach-Franka-v0", "--headless"],
-            "program": "${workspaceFolder}/scripts/reinforcement_learning/rsl_rl/train.py",
-            "console": "integratedTerminal"
-        },
-        {
-            "name": "Python: Play Environment",
-            "type": "python",
-            "request": "launch",
-            "args" : ["--task", "Isaac-Reach-Franka-v0", "--num_envs", "32"],
             "program": "${workspaceFolder}/scripts/reinforcement_learning/rsl_rl/play.py",
-            "console": "integratedTerminal"
-        },
-        {
-            "name": "Python: SinglePytest",
-            "type": "python",
-            "request": "launch",
-            "module": "pytest",
             "args": [
-              "${file}"
+                "--task", "OmniReset-G1dDex1-RelCartesianOSC-State-Play-v0",
+                "--num_envs", "16", "--viz", "kit",
+                "env.scene.insertive_object=peg", "env.scene.receptive_object=peghole"
             ],
-            "console": "integratedTerminal"
+            "console": "integratedTerminal",
+            "justMyCode": false
         },
         {
-            "name": "Python: ALL Pytest",
-            "type": "python",
+            "name": "RSL-RL: Train OmniReset G1-D (64 envs, 5 iterations, headless)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts/reinforcement_learning/rsl_rl/train.py",
+            "args": [
+                "--task", "OmniReset-G1dDex1-RelCartesianOSC-State-v0",
+                "--num_envs", "64", "--max_iterations", "5",
+                "env.scene.insertive_object=peg", "env.scene.receptive_object=peghole"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Python: pytest current file",
+            "type": "debugpy",
             "request": "launch",
             "module": "pytest",
-            "args": ["source/isaaclab/test"],
+            "args": ["${file}"],
             "console": "integratedTerminal",
             "justMyCode": false
         }
