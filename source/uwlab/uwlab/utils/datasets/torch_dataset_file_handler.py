@@ -11,6 +11,7 @@ This module provides a dataset file handler that saves data directly in the torc
 from __future__ import annotations
 
 import os
+import time
 import torch
 from collections.abc import Iterable
 from typing import Any
@@ -23,16 +24,31 @@ class TorchDatasetFileHandler(DatasetFileHandlerBase):
     Dataset file handler that saves data directly in torch format as a torch file.
     """
 
+    flush_interval_s: float = float(os.environ.get("UWLAB_DATASET_FLUSH_INTERVAL", "60"))
+    """Minimum time between two writes of the file in :meth:`flush` (seconds; env ``UWLAB_DATASET_FLUSH_INTERVAL``).
+
+    Isaac Lab's ``RecorderManager`` calls :meth:`flush` after every export, i.e. on every environment step
+    that ends at least one successful episode, and each write serializes the whole accumulated dataset.
+    Unthrottled, a reset-state recording at 16k environments spent ever more of each step rewriting the file
+    (measured on Forge: the step rate fell by half over the first ~4,500 states). A pending write is never
+    dropped: :meth:`close` always writes, and writes are atomic (temporary file + rename), so the file on disk
+    is a complete snapshot at most ``flush_interval_s`` old.
+    """
+
     def __init__(self):
         self._file_path: str | None = None
         self._episode_data: dict[str, Any] = {}
         self._episode_count: int = 0
+        self._dirty: bool = False
+        self._last_flush: float = -float("inf")
 
     def create(self, file_path: str, env_name: str | None = None):
         """Create a new dataset file."""
         self._file_path = file_path
         self._episode_data = {}
         self._episode_count = 0
+        self._dirty = False
+        self._last_flush = -float("inf")
 
         # Ensure directory exists
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
@@ -75,14 +91,15 @@ class TorchDatasetFileHandler(DatasetFileHandlerBase):
                 arguments but 4 were given`` at the first episode export. It is
                 meaningful only for the HDF5 handler, which maps it onto gzip
                 per-dataset compression. This handler accumulates episodes in memory
-                and serializes them with ``torch.save`` in :meth:`flush`, which has no
-                equivalent option.
+                and serializes them with ``torch.save`` in :meth:`flush` (at most every
+                :attr:`flush_interval_s`), which has no equivalent option.
         """
         if episode.is_empty() or not episode.success:
             return
 
         # Extract only the last entry from this episode using extend_dicts_last_entry logic
         self._extend_dicts_last_entry(self._episode_data, episode.data)
+        self._dirty = True
 
         # Only increment episode count if using default indexing
         if demo_id is None:
@@ -106,15 +123,28 @@ class TorchDatasetFileHandler(DatasetFileHandlerBase):
         # Not applicable for this handler since we store aggregated data
         raise NotImplementedError("Load episode not supported for preprocessed format")
 
-    def flush(self):
-        """Flush any pending data to disk."""
-        if self._file_path and self._episode_data:
-            # Stamp the quaternion convention; loaders refuse files without it.
-            torch.save({**self._episode_data, "quat_convention": "xyzw"}, self._file_path)
+    def flush(self, force: bool = False):
+        """Write the accumulated dataset to disk.
+
+        Skipped while nothing new was written since the last flush, or while the last write is less than
+        :attr:`flush_interval_s` old (unless ``force``). The write goes to a temporary file that is then renamed
+        over the dataset file, so a reader (or a copy taken while recording) never sees a partial file.
+        """
+        if not (self._file_path and self._episode_data and self._dirty):
+            return
+        now = time.monotonic()
+        if not force and now - self._last_flush < self.flush_interval_s:
+            return
+        # Stamp the quaternion convention; loaders refuse files without it.
+        tmp_path = self._file_path + ".tmp"
+        torch.save({**self._episode_data, "quat_convention": "xyzw"}, tmp_path)
+        os.replace(tmp_path, self._file_path)
+        self._last_flush = now
+        self._dirty = False
 
     def close(self):
-        """Close the dataset file handler."""
-        self.flush()
+        """Close the dataset file handler, writing whatever is still pending."""
+        self.flush(force=True)
         self._episode_data = {}
         self._file_path = None
 

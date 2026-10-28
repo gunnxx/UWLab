@@ -145,6 +145,8 @@ def main(env_cfg, agent_cfg) -> None:
         print(f"Success rate: {final_successful_grasps / num_grasps_evaluated:.2%}")
         print(f"Time taken: {(time.time() - start_time) / 60:.2f} minutes")
 
+    # write the pending snapshot now (the handler throttles its flushes) instead of relying on the manager's destructor
+    env.recorder_manager.close()
     env.close()
 
 
