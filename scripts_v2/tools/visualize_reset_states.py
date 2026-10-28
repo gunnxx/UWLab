@@ -49,6 +49,8 @@ import inspect
 from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab.managers import ManagerTermBase
 
+from uwlab.utils.log_utils import configure_console_logging
+
 from uwlab_tasks.utils.hydra import hydra_task_compose
 
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -59,6 +61,7 @@ torch.backends.cudnn.benchmark = False
 
 @hydra_task_compose(args_cli.task, "env_cfg_entry_point", hydra_args=remaining_args)
 def main(env_cfg, agent_cfg) -> None:
+    configure_console_logging()
     # override configurations with non-hydra CLI arguments
     env_cfg.scene.num_envs = args_cli.num_envs if args_cli.num_envs is not None else env_cfg.scene.num_envs
     env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device

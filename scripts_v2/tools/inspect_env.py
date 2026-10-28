@@ -33,16 +33,16 @@ Examples::
 from __future__ import annotations
 
 import argparse
-import functools
+import logging
 import time
+from typing import TYPE_CHECKING, cast
 
 from isaaclab.app import AppLauncher
 
-# stdout is often a file or a pipe (run_local.sh, logs); keep the status lines unbuffered.
-print = functools.partial(print, flush=True)  # noqa: A001
-
 parser = argparse.ArgumentParser(description="Inspect a registered environment and reset it from the keyboard.")
-parser.add_argument("--task", type=str, required=True, help="Registered task id (see scripts/environments/list_envs.py).")
+parser.add_argument(
+    "--task", type=str, required=True, help="Registered task id (see scripts/environments/list_envs.py)."
+)
 parser.add_argument("--num_envs", type=int, default=4, help="Number of environments to spawn.")
 parser.add_argument(
     "--gripper",
@@ -52,7 +52,9 @@ parser.add_argument(
 )
 parser.add_argument("--no_timeout", action="store_true", help="Disable the time_out termination so only R resets.")
 parser.add_argument("--episode_length_s", type=float, default=None, help="Override the episode length (seconds).")
-parser.add_argument("--auto_reset_s", type=float, default=0.0, help="Also reset every N seconds of wall clock (0 = off).")
+parser.add_argument(
+    "--auto_reset_s", type=float, default=0.0, help="Also reset every N seconds of wall clock (0 = off)."
+)
 parser.add_argument("--max_steps", type=int, default=0, help="Exit after this many env steps (0 = run until closed).")
 parser.add_argument("--print_every", type=int, default=50, help="Print termination counts every N steps (0 = off).")
 parser.add_argument(
@@ -71,20 +73,34 @@ simulation_app = app_launcher.app
 import contextlib  # noqa: E402
 import gymnasium as gym  # noqa: E402
 import torch  # noqa: E402
-from typing import cast  # noqa: E402
 
-from isaaclab.envs import ManagerBasedRLEnv  # noqa: E402
+from isaaclab.envs import ManagerBasedRLEnv, ManagerBasedRLEnvCfg  # noqa: E402
+
+from uwlab.utils.log_utils import configure_console_logging  # noqa: E402
 
 import uwlab_tasks  # noqa: E402, F401
 from uwlab_tasks.utils.hydra import hydra_task_compose  # noqa: E402
 
+if TYPE_CHECKING:
+    import carb
+
+logger = logging.getLogger(__name__)
+
 HELP = "keys: [R] reset all envs  [P] pause/resume  [N] single step while paused  [H] help"
+"""Key bindings, logged when the keyboard is attached and on ``H``."""
 
 
 class KeyboardControl:
-    """Flags toggled from the Kit window's keyboard; falls back to no-op without a window (``--viz none``)."""
+    """Flags toggled from the Kit window's keyboard.
+
+    Subscribes to the default app window's keyboard on construction: ``R`` requests a reset of all environments,
+    ``P`` toggles ``paused``, ``N`` requests a single step while paused and ``H`` logs the key bindings. Without
+    a window (``--viz none``) or without carb input the subscription fails, a warning is logged and the flags
+    simply keep their defaults, so the main loop runs unattended.
+    """
 
     def __init__(self):
+        """Constructor."""
         self.reset_requested = False
         self.paused = False
         self.step_once = False
@@ -97,11 +113,31 @@ class KeyboardControl:
             self._input = carb.input.acquire_input_interface()
             self._keyboard = omni.appwindow.get_default_app_window().get_keyboard()
             self._sub = self._input.subscribe_to_keyboard_events(self._keyboard, self._on_event)
-            print(f"[inspect] keyboard attached. {HELP}")
+            logger.info(f"[inspect] keyboard attached. {HELP}")
         except Exception as exc:  # no app window (headless) or no carb input
-            print(f"[inspect] keyboard unavailable ({exc!r}); use --viz kit for key presses.")
+            logger.warning(f"[inspect] keyboard unavailable ({exc!r}); use --viz kit for key presses.")
 
-    def _on_event(self, event, *args, **kwargs):
+    def close(self):
+        """Unsubscribe from the keyboard; a no-op when nothing was subscribed."""
+        if self._sub is not None:
+            self._input.unsubscribe_to_keyboard_events(self._keyboard, self._sub)
+            self._sub = None
+
+    # ===============
+    # Private Methods
+    # ===============
+
+    def _on_event(self, event: carb.input.KeyboardEvent, *args: object, **kwargs: object) -> bool:
+        """Keyboard callback: set the flag of a handled key press and let every event through.
+
+        Args:
+            event: Keyboard event from carb; only key presses are handled.
+            *args: Ignored; carb passes extra positional arguments on some Kit versions.
+            **kwargs: Ignored; see ``args``.
+
+        Returns:
+            Always ``True`` so the event keeps propagating.
+        """
         if event.type != self._carb.input.KeyboardEventType.KEY_PRESS:
             return True
         key = event.input.name
@@ -109,21 +145,23 @@ class KeyboardControl:
             self.reset_requested = True
         elif key == "P":
             self.paused = not self.paused
-            print(f"[inspect] {'paused' if self.paused else 'resumed'}")
+            logger.info(f"[inspect] {'paused' if self.paused else 'resumed'}")
         elif key == "N":
             self.step_once = True
         elif key == "H":
-            print(f"[inspect] {HELP}")
+            logger.info(f"[inspect] {HELP}")
         return True
-
-    def close(self):
-        if self._sub is not None:
-            self._input.unsubscribe_to_keyboard_events(self._keyboard, self._sub)
-            self._sub = None
 
 
 @hydra_task_compose(args_cli.task, "env_cfg_entry_point", hydra_args=hydra_args)
-def main(env_cfg, agent_cfg) -> None:
+def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: object):
+    """Create the task, hold it still and reset it on the keyboard's or the wall clock's request.
+
+    Args:
+        env_cfg: Environment configuration composed by Hydra from the task's entry point.
+        agent_cfg: Unused; the decorator passes the configuration of the second entry point.
+    """
+    configure_console_logging()
     env_cfg.scene.num_envs = args_cli.num_envs
     env_cfg.sim.device = args_cli.device if args_cli.device is not None else env_cfg.sim.device
     env_cfg.seed = None  # a different reset draw every time
@@ -137,17 +175,19 @@ def main(env_cfg, agent_cfg) -> None:
         if hasattr(env_cfg.terminations, "time_out"):
             env_cfg.terminations.time_out = None
         else:
-            print("[inspect] --no_timeout: this task has no 'time_out' termination term")
+            logger.warning("[inspect] --no_timeout: this task has no 'time_out' termination term")
 
     env = cast(ManagerBasedRLEnv, gym.make(args_cli.task, cfg=env_cfg)).unwrapped
     env.reset()
 
-    print(f"[inspect] task {args_cli.task}: {env.num_envs} envs, episode {env_cfg.episode_length_s} s,"
-          f" action dim {env.action_space.shape[-1]}")
-    print(f"[inspect] terminations: {env.termination_manager.active_terms}")
+    logger.info(
+        f"[inspect] task {args_cli.task}: {env.num_envs} envs, episode {env_cfg.episode_length_s} s,"
+        f" action dim {env.action_space.shape[-1]}"
+    )
+    logger.info(f"[inspect] terminations: {env.termination_manager.active_terms}")
     if hasattr(env, "reward_manager"):
-        print(f"[inspect] rewards: {env.reward_manager.active_terms}")
-    print(f"[inspect] {HELP}")
+        logger.info(f"[inspect] rewards: {env.reward_manager.active_terms}")
+    logger.info(f"[inspect] {HELP}")
 
     # Gripper command for the last action dimension. "keep" measures the first gripper joint against the binary
     # action's open/close targets (Robotiq finger_joint, Dex1 prismatic fingers) and commands what it already is.
@@ -161,6 +201,11 @@ def main(env_cfg, agent_cfg) -> None:
         g_closed = float(gripper_cfg.close_command_expr[joint])
 
     def hold_action() -> torch.Tensor:
+        """Zero arm action plus the gripper command, so the OSC holds the current pose.
+
+        Returns:
+            Action tensor of shape ``(num_envs, action_dim)``.
+        """
         action = torch.zeros((env.num_envs, env.action_space.shape[-1]), device=env.device)
         if keep_gripper:
             frac = (robot.data.joint_pos[:, joint_id] - g_open) / (g_closed - g_open)
@@ -177,11 +222,11 @@ def main(env_cfg, agent_cfg) -> None:
             if keys.reset_requested:
                 keys.reset_requested = False
                 env.reset()
-                print(f"[inspect] step {step}: reset all {env.num_envs} envs")
+                logger.info(f"[inspect] step {step}: reset all {env.num_envs} envs")
             if args_cli.auto_reset_s > 0 and time.monotonic() - last_auto_reset >= args_cli.auto_reset_s:
                 last_auto_reset = time.monotonic()
                 env.reset()
-                print(f"[inspect] step {step}: auto reset")
+                logger.info(f"[inspect] step {step}: auto reset")
             if keys.paused and not keys.step_once:
                 env.sim.render()
                 continue
@@ -191,7 +236,7 @@ def main(env_cfg, agent_cfg) -> None:
             step += 1
             if args_cli.print_every and step % args_cli.print_every == 0:
                 done = (terminated | truncated).sum().item()
-                print(f"[inspect] step {step}: {done} env(s) auto-reset by termination this step")
+                logger.info(f"[inspect] step {step}: {done} env(s) auto-reset by termination this step")
             if args_cli.max_steps and step >= args_cli.max_steps:
                 break
 

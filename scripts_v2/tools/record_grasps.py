@@ -52,6 +52,7 @@ from isaaclab.envs import ManagerBasedRLEnv
 from isaaclab.managers.recorder_manager import DatasetExportMode
 
 from uwlab.utils.datasets.torch_dataset_file_handler import TorchDatasetFileHandler
+from uwlab.utils.log_utils import configure_console_logging
 
 import uwlab_tasks  # noqa: F401
 import uwlab_tasks.manager_based.manipulation.omnireset.mdp as task_mdp
@@ -66,6 +67,7 @@ torch.backends.cudnn.benchmark = False
 @hydra_task_compose(args_cli.task, "env_cfg_entry_point", hydra_args=remaining_args)
 def main(env_cfg, agent_cfg) -> None:
     """Main function to run grasp sampling."""
+    configure_console_logging()
     # create directory if it does not exist
     if not os.path.exists(args_cli.dataset_dir):
         os.makedirs(args_cli.dataset_dir, exist_ok=True)

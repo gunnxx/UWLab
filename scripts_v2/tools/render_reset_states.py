@@ -16,6 +16,7 @@ result is saved as one image grid per set plus the individual tiles. Works witho
 from __future__ import annotations
 
 import argparse
+import logging
 
 from isaaclab.app import AppLauncher
 
@@ -25,6 +26,7 @@ ALL_RESET_TYPES = [
     "ObjectAnywhereEEGrasped",
     "ObjectPartiallyAssembledEEGrasped",
 ]
+"""Every reset set of a pair; rendered when ``--reset_types`` is not given."""
 
 parser = argparse.ArgumentParser(description="Render recorded reset states to images.")
 parser.add_argument("--task", type=str, required=True, help="Task whose events contain `reset_from_reset_states`.")
@@ -42,9 +44,11 @@ parser.add_argument(
     "--gripper",
     choices=["recorded", "close", "open"],
     default="recorded",
-    help="Gripper command during the settle: the task's close / open command through its binary gripper action "
-    "(the recorder commands close while holding the grasped sets), or the recorded finger positions held as targets. "
-    "The arm is always held by the task's own controller at a zero action, as during recording.",
+    help=(
+        "Gripper command during the settle: the task's close / open command through its binary gripper action (the"
+        " recorder commands close while holding the grasped sets), or the recorded finger positions held as targets."
+        " The arm is always held by the task's own controller at a zero action, as during recording."
+    ),
 )
 AppLauncher.add_app_launcher_args(parser)
 args_cli, remaining_args = parser.parse_known_args()
@@ -61,20 +65,31 @@ import json
 import numpy as np
 import os
 import torch
-from PIL import Image
 from typing import cast
 
 import isaaclab.sim as sim_utils
-from isaaclab.envs import ManagerBasedRLEnv
+from isaaclab.envs import ManagerBasedRLEnv, ManagerBasedRLEnvCfg
 from isaaclab.managers import ManagerTermBase
 from isaaclab.sensors import CameraCfg
+from PIL import Image
+
+from uwlab.utils.log_utils import configure_console_logging
 
 from uwlab_tasks.manager_based.manipulation.omnireset.mdp.events import sample_from_nested_dict
 from uwlab_tasks.utils.hydra import hydra_task_compose
 
+logger = logging.getLogger(__name__)
+
 
 @hydra_task_compose(args_cli.task, "env_cfg_entry_point", hydra_args=remaining_args)
-def main(env_cfg, agent_cfg) -> None:
+def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: object):
+    """Write the recorded states into one environment each, render them and save the tiles, grids and poses.
+
+    Args:
+        env_cfg: Environment configuration composed by Hydra from the task's entry point.
+        agent_cfg: Unused; the decorator passes the configuration of the second entry point.
+    """
+    configure_console_logging()
     env_cfg.scene.num_envs = args_cli.num_states
     env_cfg.scene.env_spacing = 6.0  # keep neighbouring environments out of the frame
     env_cfg.seed = 0
@@ -126,6 +141,11 @@ def main(env_cfg, agent_cfg) -> None:
     actions[:, -1] = {"close": -1.0, "open": 1.0}.get(args_cli.gripper, 0.0)
 
     def hold_and_render(num_steps: int):
+        """Step physics with the hold action for ``num_steps`` steps, then render and refresh the camera.
+
+        Args:
+            num_steps: Number of physics steps; the action is re-processed every ``decimation`` steps.
+        """
         hold_pos = robot.data.joint_pos[:, gripper_joint_ids].clone()
         env.action_manager.reset()
         for i in range(num_steps):
@@ -144,7 +164,7 @@ def main(env_cfg, agent_cfg) -> None:
         camera.update(dt=0.0, force_recompute=True)
 
     hold_and_render(1)  # warm up shaders / materials before the first capture
-    poses: dict = {}
+    poses: dict[str, dict[str, object]] = {}
     for set_idx, reset_type in enumerate(args_cli.reset_types):
         available = int(manager.num_states[set_idx])
         count = min(available, args_cli.num_states)
@@ -159,7 +179,9 @@ def main(env_cfg, agent_cfg) -> None:
         grid = np.zeros((rows * args_cli.height, cols * args_cli.width, 3), dtype=np.uint8)
         for i in range(count):
             r, c = divmod(i, cols)
-            grid[r * args_cli.height : (r + 1) * args_cli.height, c * args_cli.width : (c + 1) * args_cli.width] = rgb[i]
+            grid[r * args_cli.height : (r + 1) * args_cli.height, c * args_cli.width : (c + 1) * args_cli.width] = rgb[
+                i
+            ]
             Image.fromarray(rgb[i]).save(os.path.join(args_cli.out_dir, f"{reset_type}_{i:02d}.png"))
         Image.fromarray(grid).save(os.path.join(args_cli.out_dir, f"{reset_type}_grid.png"))
         ins = env.scene["insertive_object"].data.root_pos_w[:count] - origins[:count]
@@ -175,7 +197,7 @@ def main(env_cfg, agent_cfg) -> None:
         }
         with open(os.path.join(args_cli.out_dir, "poses.json"), "w") as f:
             json.dump(poses, f, indent=1)
-        print(
+        logger.info(
             f"[render] {reset_type}: {count}/{available} states -> {reset_type}_grid.png | insertive z "
             f"{[round(v, 3) for v in ins[:, 2].tolist()]} | receptive z {[round(v, 3) for v in rec[:, 2].tolist()]}"
         )
