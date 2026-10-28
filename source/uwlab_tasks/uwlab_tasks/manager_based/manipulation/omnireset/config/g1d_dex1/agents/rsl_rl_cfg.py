@@ -12,4 +12,7 @@ from ...ur5e_robotiq_2f85.agents.rsl_rl_cfg import Base_PPORunnerCfg
 
 @configclass
 class G1dDex1_PPORunnerCfg(Base_PPORunnerCfg):
+    """PPO runner for the G1-D + Dex1-1 tasks: the UR5e recipe under its own experiment name."""
+
     experiment_name = "g1d_dex1_omnireset_agent"
+    """Name of the experiment directory the runner logs to."""

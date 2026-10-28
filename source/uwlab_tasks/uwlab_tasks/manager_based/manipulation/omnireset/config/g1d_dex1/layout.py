@@ -22,7 +22,7 @@ import isaaclab.sim as sim_utils
 from isaaclab.assets import RigidObjectCfg
 
 from uwlab_assets import UWLAB_ASSETS_DATA_DIR
-from uwlab_assets.robots.unitree_g1d_dex1 import AGV_ROOT_HEIGHT  # noqa: F401
+from uwlab_assets.robots.unitree_g1d_dex1 import AGV_ROOT_HEIGHT
 
 # ---- table -----------------------------------------------------------------------------------------------------
 TABLE_TOP_Z = 0.855
@@ -36,6 +36,7 @@ TABLE_EDGE_X = 0.29
 """x of the near table edge. The chassis front is at x = 0.273, so this leaves ~2 cm; the table block reaches the
 floor, so the chassis cannot roll under it."""
 TABLE_CENTER_X = TABLE_EDGE_X + TABLE_HALF_LENGTH
+"""x of the table block's centre: the near edge plus half of the long side."""
 
 G1D_TABLE = RigidObjectCfg(
     prim_path="{ENV_REGEX_NS}/Table",
@@ -57,15 +58,23 @@ randomization events inherited from the UR5e configs still apply."""
 
 # ---- object spawn regions (env frame, on the table top) ---------------------------------------------------------
 RECEPTIVE_X = (0.31, 0.41)
+"""x range (env frame) in which the receptive object is spawned on the table top."""
 RECEPTIVE_Y = (-0.35, 0.05)
+"""y range (env frame) in which the receptive object is spawned on the table top."""
 INSERTIVE_X = (0.30, 0.42)
+"""x range (env frame) in which the insertive object is spawned, slightly wider than the receptive one."""
 INSERTIVE_Y = (-0.38, 0.08)
+"""y range (env frame) in which the insertive object is spawned, slightly wider than the receptive one."""
 INSERTIVE_Z_ABOVE_TABLE = (0.0, 0.25)
+"""Height range above the table top in which the insertive object is spawned (object-anywhere sets)."""
 
 # ---- end-effector reset region (robot root frame = env frame shifted down by AGV_ROOT_HEIGHT) -------------------
 EE_X = (0.28, 0.44)
+"""x range (robot root frame) of the end-effector reset region: the reachable strip of the IK sweep."""
 EE_Y = (-0.42, 0.10)
+"""y range (robot root frame) of the end-effector reset region: the reachable strip of the IK sweep."""
 EE_Z_ROOT = (TABLE_TOP_Z - AGV_ROOT_HEIGHT + 0.05, TABLE_TOP_Z - AGV_ROOT_HEIGHT + 0.30)
+"""z range (robot root frame) of the end-effector reset region: 5 cm to 30 cm above the table top."""
 
 # ---- datasets ---------------------------------------------------------------------------------------------------
 G1D_DATASET_DIR = os.path.join(UWLAB_ASSETS_DATA_DIR, "Datasets", "OmniReset_g1d")

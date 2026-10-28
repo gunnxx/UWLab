@@ -3,4 +3,6 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
+"""Learning-agent configurations for the G1-D + Dex1-1 OmniReset tasks."""
+
 from . import rsl_rl_cfg  # noqa: F401

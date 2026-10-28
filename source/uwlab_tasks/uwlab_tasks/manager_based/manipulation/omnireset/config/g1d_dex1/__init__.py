@@ -48,18 +48,14 @@ gym.register(
     id="OmniReset-G1dDex1-ObjectPartiallyAssembledEEAnywhere-v0",
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": f"{__name__}.reset_states_cfg:G1dObjectPartiallyAssembledEEAnywhereResetStatesCfg"
-    },
+    kwargs={"env_cfg_entry_point": f"{__name__}.reset_states_cfg:G1dObjectPartiallyAssembledEEAnywhereResetStatesCfg"},
 )
 
 gym.register(
     id="OmniReset-G1dDex1-ObjectPartiallyAssembledEEGrasped-v0",
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": f"{__name__}.reset_states_cfg:G1dObjectPartiallyAssembledEEGraspedResetStatesCfg"
-    },
+    kwargs={"env_cfg_entry_point": f"{__name__}.reset_states_cfg:G1dObjectPartiallyAssembledEEGraspedResetStatesCfg"},
 )
 
 gym.register(

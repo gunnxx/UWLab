@@ -17,7 +17,10 @@ from ..ur5e_robotiq_2f85 import grasp_sampling_cfg as robotiq
 
 @configclass
 class Dex1GraspSamplingSceneCfg(robotiq.GraspSamplingSceneCfg):
+    """Grasp-sampling scene with the floating Dex1-1 gripper in place of the Robotiq 2F-85."""
+
     robot = DEX1_GRIPPER.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    """The floating Dex1-1 gripper."""
 
 
 # configclass stores mutable defaults as factories, so defaults are read from an instance, not the class
@@ -26,6 +29,8 @@ _ROBOTIQ_EVENTS = robotiq.GraspSamplingEventCfg()
 
 @configclass
 class Dex1GraspSamplingEventCfg(robotiq.GraspSamplingEventCfg):
+    """Grasp-sampling events of the Robotiq procedure with the Dex1-1 base body as the gripper frame."""
+
     grasp_sampling = _ROBOTIQ_EVENTS.grasp_sampling.replace(
         params={
             **_ROBOTIQ_EVENTS.grasp_sampling.params,
@@ -35,6 +40,7 @@ class Dex1GraspSamplingEventCfg(robotiq.GraspSamplingEventCfg):
             "top_bias_fraction": 0.5,
         }
     )
+    """The grasp-sampling event with the Dex1-1 gripper frame and half of the surface samples uniform."""
 
 
 @configclass

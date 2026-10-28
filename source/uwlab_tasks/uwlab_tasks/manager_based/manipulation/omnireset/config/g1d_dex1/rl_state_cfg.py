@@ -12,8 +12,12 @@ actuator randomization joints, and the reset-state dataset location.
 
 from __future__ import annotations
 
+from typing import Any, TypeVar
+
 from isaaclab.assets import AssetBaseCfg
+from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationTermCfg as ObsTerm
+from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils import configclass
 
@@ -29,8 +33,23 @@ from ..ur5e_robotiq_2f85 import rl_state_cfg as ur5e
 from .actions import G1dDex1RelativeOSCAction, G1dDex1RelativeOSCEvalAction
 from .layout import G1D_DATASET_DIR, G1D_TABLE
 
+TermT = TypeVar("TermT", EventTerm, RewTerm)
+"""A manager term configuration that :func:`_with_params` copies: an event or a reward term."""
 
-def _with_params(term, **updates):
+
+# ===============
+# Private Helpers
+# ===============
+def _with_params(term: TermT, **updates: Any) -> TermT:
+    """Copy a manager term with some of its parameters overridden.
+
+    Args:
+        term: The event or reward term to copy.
+        **updates: Parameter values that replace the entries of ``term.params`` with the same key.
+
+    Returns:
+        A copy of ``term`` whose ``params`` are the original ones updated with ``updates``.
+    """
     return term.replace(params={**term.params, **updates})
 
 
@@ -45,17 +64,23 @@ _UR5E_REWARDS = ur5e.RewardsCfg()
 # ------------------------------------------------------------------------------------------------------- scene
 @configclass
 class G1dRlStateSceneCfg(ur5e.RlStateSceneCfg):
+    """The UR5e RL scene with the G1-D standing on the floor in front of the plain table block."""
+
     robot = IMPLICIT_G1D_DEX1.replace(prim_path="{ENV_REGEX_NS}/Robot")
+    """The G1-D with the Dex1-1 gripper, implicit actuators."""
 
     table = G1D_TABLE
+    """The plain table block of the G1-D layout."""
 
     ur5_metal_support = None
+    """The UR5e's mounting support is not part of this scene."""
 
     ground = AssetBaseCfg(
         prim_path="/World/GroundPlane",
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0)),
         spawn=_UR5E_SCENE.ground.spawn,
     )
+    """The UR5e ground plane moved to z = 0: the robot stands on the floor, not on the table."""
 
 
 # ------------------------------------------------------------------------------------------------------ events
@@ -63,30 +88,38 @@ _GRIPPER_GAINS = _with_params(
     _UR5E_BASE_EVENTS.randomize_gripper_actuator_parameters,
     asset_cfg=SceneEntityCfg("robot", joint_names=DEX1_FINGER_JOINT_REGEX),
 )
+"""The UR5e gripper-actuator randomization applied to the Dex1-1 finger joints."""
 
 
 @configclass
 class G1dTrainEventCfg(ur5e.TrainEventCfg):
+    """The UR5e training events with the Dex1-1 gripper joints and the G1-D reset-state datasets."""
+
     randomize_gripper_actuator_parameters = _GRIPPER_GAINS
     reset_from_reset_states = _with_params(_UR5E_TRAIN_EVENTS.reset_from_reset_states, dataset_dir=G1D_DATASET_DIR)
 
 
 @configclass
 class G1dTrainEvalEventCfg(ur5e.TrainEvalEventCfg):
+    """The UR5e evaluation events with the Dex1-1 gripper joints and the G1-D reset-state datasets."""
+
     randomize_gripper_actuator_parameters = _GRIPPER_GAINS
-    reset_from_reset_states = _with_params(
-        _UR5E_TRAIN_EVAL_EVENTS.reset_from_reset_states, dataset_dir=G1D_DATASET_DIR
-    )
+    reset_from_reset_states = _with_params(_UR5E_TRAIN_EVAL_EVENTS.reset_from_reset_states, dataset_dir=G1D_DATASET_DIR)
 
 
 # ------------------------------------------------------------------------------------------------ observations
 _EE = SceneEntityCfg("robot", body_names=G1D_EE_BODY_NAME)
+"""The G1-D end-effector body the pose and velocity observations are expressed with."""
 
 
 @configclass
 class G1dObservationsCfg(ur5e.ObservationsCfg):
+    """The UR5e observations with the G1-D end-effector body."""
+
     @configclass
     class PolicyCfg(ur5e.ObservationsCfg.PolicyCfg):
+        """Policy observations: the UR5e terms with the end-effector frame of the G1-D."""
+
         end_effector_pose = ObsTerm(
             func=task_mdp.target_asset_pose_in_root_asset_frame,
             params={"target_asset_cfg": _EE, "root_asset_cfg": SceneEntityCfg("robot"), "rotation_repr": "axis_angle"},
@@ -110,6 +143,8 @@ class G1dObservationsCfg(ur5e.ObservationsCfg):
 
     @configclass
     class CriticCfg(ur5e.ObservationsCfg.CriticCfg):
+        """Critic observations: the UR5e terms with the end-effector frame of the G1-D."""
+
         end_effector_pose = ObsTerm(
             func=task_mdp.target_asset_pose_in_root_asset_frame,
             params={"target_asset_cfg": _EE, "root_asset_cfg": SceneEntityCfg("robot"), "rotation_repr": "axis_angle"},
@@ -142,8 +177,11 @@ class G1dObservationsCfg(ur5e.ObservationsCfg):
 # ----------------------------------------------------------------------------------------------------- rewards
 @configclass
 class G1dRewardsCfg(ur5e.RewardsCfg):
+    """The UR5e rewards with the G1-D right-arm joints and the Dex1-1 base body."""
+
     joint_vel = _with_params(
-        _UR5E_REWARDS.joint_vel, asset_cfg=SceneEntityCfg("robot", joint_names=["right_shoulder_.*", "right_elbow_joint", "right_wrist_.*"])
+        _UR5E_REWARDS.joint_vel,
+        asset_cfg=SceneEntityCfg("robot", joint_names=["right_shoulder_.*", "right_elbow_joint", "right_wrist_.*"]),
     )
     ee_asset_distance = _with_params(
         _UR5E_REWARDS.ee_asset_distance, root_asset_cfg=SceneEntityCfg("robot", body_names=DEX1_BASE_BODY_NAME)
@@ -153,6 +191,8 @@ class G1dRewardsCfg(ur5e.RewardsCfg):
 # ------------------------------------------------------------------------------------------------ environments
 @configclass
 class G1dDex1RlStateCfg(ur5e.Ur5eRobotiq2f85RlStateCfg):
+    """State-based RL environment with the G1-D right arm and Dex1-1 gripper."""
+
     scene: G1dRlStateSceneCfg = G1dRlStateSceneCfg(num_envs=32, env_spacing=1.5)
     observations: G1dObservationsCfg = G1dObservationsCfg()
     actions: G1dDex1RelativeOSCAction = G1dDex1RelativeOSCAction()
