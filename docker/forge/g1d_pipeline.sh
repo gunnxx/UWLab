@@ -12,6 +12,7 @@
 #   STAGES=assets,bench BENCH_ENVS="4096 16384"   step-rate / memory benchmark of a reset-state env
 #   GPUS NUM_ENVS SEED MAX_ITER LOGGER LOG_PROJECT RUN_NAME    training knobs (see submit_train.sh)
 #   RESET_ENVS=2048 NUM_RESETS=10000 GRASP_ENVS=8192 NUM_GRASPS=1000
+#   RESET_SYNC_S=300               while recording reset states, mirror the files to the cache this often (seconds)
 #   BUILD_ARGS="--waist-pitch 0.1"  extra flags for build_urdf.py
 set -euo pipefail
 
@@ -120,11 +121,26 @@ PY
                 --num_envs "${GRASP_ENVS}" --num_grasps "${NUM_GRASPS}" --dataset_dir "${DATA_DIR}" \
                 --gripper_body_name right_dex1_base_link "${VIS[@]}" env.scene.object="${INSERTIVE}"
         fi
+        # The recorder writes into the job's own file system, which disappears with the job: a max-duration kill
+        # or a cancel used to lose every state recorded so far. Mirror the reset-state files to the cache every
+        # RESET_SYNC_S seconds while recording (the recorder renames complete snapshots into place, so a copy is
+        # never partial; *.tmp is the snapshot being written), then once more when the recording ends.
+        sync_resets() {
+            [[ -n "${CACHE}" && -d "${DATA_DIR}/Resets" ]] || return 0
+            mkdir -p "${CACHE}/datasets/Resets" && rsync -a --exclude '*.tmp' "${DATA_DIR}/Resets/" "${CACHE}/datasets/Resets/"
+        }
+        SYNC_PID=""
+        if [[ -n "${CACHE}" ]]; then
+            ( while sleep "${RESET_SYNC_S:-300}"; do sync_resets || true; done ) & SYNC_PID=$!
+            trap 'kill ${SYNC_PID} 2>/dev/null || true; sync_resets || true' EXIT
+        fi
         for RT in ${RESET_TYPES}; do
             log "datasets: reset states ${RT}"
             python scripts_v2/tools/record_reset_states.py --task "OmniReset-G1dDex1-${RT}-v0" \
                 --num_envs "${RESET_ENVS}" --num_reset_states "${NUM_RESETS}" --dataset_dir "${DATA_DIR}" "${VIS[@]}" "${OBJ[@]}"
+            sync_resets && log "datasets: ${RT} mirrored to the cache"
         done
+        [[ -n "${SYNC_PID}" ]] && { kill "${SYNC_PID}" 2>/dev/null || true; trap - EXIT; }
         find "${DATA_DIR}" -name '*.pt' -exec ls -la {} \;
         if [[ -n "${CACHE}" ]]; then mkdir -p "${CACHE}/datasets" && rsync -a "${DATA_DIR}/" "${CACHE}/datasets/" && log "datasets: cached"; fi
     fi
