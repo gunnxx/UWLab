@@ -101,7 +101,7 @@ def main(env_cfg, agent_cfg) -> None:
     env_cfg.seed = None
 
     # Create environment
-    env = cast(ManagerBasedRLEnv, gym.make(args_cli.task, cfg=env_cfg)).unwrapped
+    env = cast(ManagerBasedRLEnv, gym.make(args_cli.task, cfg=env_cfg).unwrapped)
 
     # Reset environment (this will trigger grasp sampling event)
     env.reset()
