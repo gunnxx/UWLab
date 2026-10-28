@@ -6,11 +6,13 @@
 //   docker build -f docker/forge/Dockerfile -t uwlab-omnireset:local docker/forge   # once
 //   VS Code: F1 -> "Dev Containers: Reopen in Container"
 //
-// Set the image name from an env var when VS Code is launched from a shell:
-//   UWLAB_DEVCONTAINER_IMAGE=uwlab-omnireset:<tag> code .
+// Pick another image from the shell VS Code is launched from (repository and tag are separate
+// variables because a ${localEnv:VAR:default} default is cut at the first colon):
+//   UWLAB_DEVCONTAINER_TAG=<tag> code .                         # uwlab-omnireset:<tag>
+//   UWLAB_DEVCONTAINER_IMAGE=<repo> UWLAB_DEVCONTAINER_TAG=<tag> code .
 {
     "name": "UW Lab (Isaac Sim 6.1 / Isaac Lab 3.0)",
-    "image": "${localEnv:UWLAB_DEVCONTAINER_IMAGE:uwlab-omnireset:local}",
+    "image": "${localEnv:UWLAB_DEVCONTAINER_IMAGE:uwlab-omnireset}:${localEnv:UWLAB_DEVCONTAINER_TAG:local}",
 
     // The working copy is mounted where the image's editable installs expect it.
     "workspaceMount": "source=${localWorkspaceFolder},target=/workspace/uwlab,type=bind",

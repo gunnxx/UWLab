@@ -48,6 +48,64 @@
             "justMyCode": false
         },
         {
+            // The recorders start their output file over, so the debug configurations write to logs/debug_datasets
+            // and leave the real sets under source/uwlab_assets/data/Datasets/OmniReset_g1d alone (the envs still
+            // read grasps / partial assemblies from there).
+            "name": "Datasets: record Dex1 grasps on the peg (128 envs, 32 grasps, headless)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts_v2/tools/record_grasps.py",
+            "args": [
+                "--task", "OmniReset-Dex1-GraspSampling-v0",
+                "--num_envs", "128", "--num_grasps", "32",
+                "--dataset_dir", "${workspaceFolder}/logs/debug_datasets/OmniReset_g1d",
+                "--gripper_body_name", "right_dex1_base_link",
+                "env.scene.object=peg"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Datasets: record reset states, pick the family (256 envs, 8 states, headless)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts_v2/tools/record_reset_states.py",
+            "args": [
+                "--task", "OmniReset-G1dDex1-${input:resetFamily}-v0",
+                "--num_envs", "256", "--num_reset_states", "8",
+                "--dataset_dir", "${workspaceFolder}/logs/debug_datasets/OmniReset_g1d",
+                "env.scene.insertive_object=peg", "env.scene.receptive_object=peghole"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Datasets: success funnel of a reset-state family (256 envs, 45 steps, headless)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts_v2/tools/debug_reset_env.py",
+            "args": [
+                "--task", "OmniReset-G1dDex1-${input:resetFamily}-v0",
+                "--num_envs", "256", "--steps", "45", "--funnel",
+                "env.scene.insertive_object=peg", "env.scene.receptive_object=peghole"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Inspect: environment, pick the task (4 envs, Kit window, R resets)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts_v2/tools/inspect_env.py",
+            "args": [
+                "--task", "${input:inspectTask}",
+                "--num_envs", "4", "--viz", "kit", "--no_timeout",
+                "env.scene.insertive_object=peg", "env.scene.receptive_object=peghole"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
             "name": "Python: pytest current file",
             "type": "debugpy",
             "request": "launch",
@@ -55,6 +113,37 @@
             "args": ["${file}"],
             "console": "integratedTerminal",
             "justMyCode": false
+        }
+    ],
+    "inputs": [
+        {
+            "id": "resetFamily",
+            "type": "pickString",
+            "description": "Reset-state family (OmniReset-G1dDex1-<family>-v0)",
+            "default": "ObjectAnywhereEEAnywhere",
+            "options": [
+                "ObjectAnywhereEEAnywhere",
+                "ObjectAnywhereEEGrasped",
+                "ObjectRestingEEGrasped",
+                "ObjectPartiallyAssembledEEAnywhere",
+                "ObjectPartiallyAssembledEEGrasped"
+            ]
+        },
+        {
+            "id": "inspectTask",
+            "type": "pickString",
+            "description": "Task to open in inspect_env.py",
+            "default": "OmniReset-G1dDex1-RelCartesianOSC-State-Play-v0",
+            "options": [
+                "OmniReset-G1dDex1-RelCartesianOSC-State-Play-v0",
+                "OmniReset-G1dDex1-ObjectAnywhereEEAnywhere-v0",
+                "OmniReset-G1dDex1-ObjectAnywhereEEGrasped-v0",
+                "OmniReset-G1dDex1-ObjectRestingEEGrasped-v0",
+                "OmniReset-G1dDex1-ObjectPartiallyAssembledEEAnywhere-v0",
+                "OmniReset-G1dDex1-ObjectPartiallyAssembledEEGrasped-v0",
+                "OmniReset-Dex1-GraspSampling-v0",
+                "OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-Play-v0"
+            ]
         }
     ]
 }

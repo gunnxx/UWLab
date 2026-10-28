@@ -74,7 +74,11 @@ exclude = [
     ".vscode",
 ]
 
-typeCheckingMode = "basic"
+# Pylance reads this section and it takes precedence over .vscode/settings.json. Isaac Lab is not written for a
+# type checker (@configclass adds methods at runtime, manager terms pass classes where Callable[..., None] is
+# annotated, private members are reached across modules), so "basic" floods the editor; "off" keeps only syntax,
+# import and undefined-name problems. Navigation and completion do not depend on this setting.
+typeCheckingMode = "off"
 pythonVersion = "3.11"
 pythonPlatform = "Linux"
 enableTypeIgnoreComments = true
@@ -86,8 +90,8 @@ reportMissingImports = "none"
 reportMissingModuleSource = "none" # -> most common: prettytable in mdp managers
 
 reportGeneralTypeIssues = "none"       # -> raises 218 errors (usage of literal MISSING in dataclasses)
-reportOptionalMemberAccess = "warning" # -> raises 8 errors
-reportPrivateUsage = "warning"
+reportOptionalMemberAccess = "none"
+reportPrivateUsage = "none"
 
 
 [tool.codespell]

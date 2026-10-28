@@ -73,10 +73,24 @@
         "franka",
         "tycho",
         "hebi",
-        "xarm"
+        "xarm",
+        "robotiq",
+        "unitree",
+        "***OMNIRESET_KEYWORDS***",
+        "omnireset",
+        "peghole",
+        "insertive",
+        "receptive",
+        "debugpy"
     ],
+    // Spelling: keep the suggestions out of the Problems panel and the editor gutter (hint = faint dots only)
+    "cSpell.diagnosticLevel": "Hint",
     // This enables python language server. Seems to work slightly better than jedi:
     "python.languageServer": "Pylance",
+    // Pylance's checking level comes from [tool.pyright] in pyproject.toml, which overrides these settings
+    // (and makes python.analysis.ignore inert). Keep Pylance for navigation and completion; set
+    // "python.languageServer": "None" to disable it entirely.
+    "python.analysis.typeCheckingMode": "off",
     // We use "black" as a formatter:
     "python.formatting.provider": "black",
     "python.formatting.blackArgs": ["--line-length", "120"],
