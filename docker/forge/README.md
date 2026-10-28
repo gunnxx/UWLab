@@ -133,7 +133,8 @@ GPU, X display):
    once per login for the Kit window.
 
 The container runs as root; files it creates in the working copy are chowned back to the host user on
-every container start. Point the config at another image with `UWLAB_DEVCONTAINER_IMAGE=<image> code .`.
+every container start. Point the config at another image with `UWLAB_DEVCONTAINER_TAG=<tag> code .`
+(and `UWLAB_DEVCONTAINER_IMAGE=<repository>` for a different repository).
 Rebuild the image -> **Dev Containers: Rebuild Container** picks it up.
 
 ## 1. Build the image (once)
@@ -205,6 +206,52 @@ team disk `blob-robotics-scus`. Training never blocks on the shared mount, and t
 destination mirrors RSL-RL's log root, so a run that hit its duration cap continues with
 `RESUME_PATH=/mnt/robotics/twguntara/omni-reset/<run dir>/model_<n>.pt docker/forge/submit_train.sh <objs>`
 (`MAX_ITER` stays the intended total; the helper subtracts the checkpoint's iteration because RSL-RL counts `--max_iterations` as additional iterations after a resume). Weights & Biases files stay local.
+
+## 3. Record the datasets
+
+The G1-D reset-state and grasp sets are recorded on the cluster by the `datasets` stage of
+`g1d_pipeline.sh` and cached under `/mnt/robotics/twguntara/omni-reset/g1d/datasets/`; later jobs with
+`STAGES=train` copy them from there. `docs/COMMAND.md` section 2 lists the recorders, the files each one
+writes and the order they depend on. `submit_g1d.sh` dry-runs and submits after confirmation (`YES=1` skips
+the prompt):
+
+```bash
+# everything in one job: assets, partial assemblies, grasps, then the four reset-state families in order
+STAGES=assets,datasets RESET_ENVS=16384 NUM_RESETS=10000 GRASP_ENVS=8192 NUM_GRASPS=1000 HOURS=48 \
+    docker/forge/submit_g1d.sh
+
+# one job per family (what produced the current sets, 2026-10-27/28). The first job records the partial
+# assemblies, the grasps and the ungrasped family; the others take those from the cache and record only
+# their own family, so the four run on four GPUs at once.
+STAGES=assets,datasets RESET_TYPES=ObjectAnywhereEEAnywhere RESET_ENVS=16384 NUM_RESETS=10000 \
+    JOB_NAME=g1d-ds-base HOURS=6 docker/forge/submit_g1d.sh
+for RT in ObjectAnywhereEEGrasped ObjectPartiallyAssembledEEGrasped ObjectRestingEEGrasped; do
+    STAGES=assets,datasets AUX_FROM_CACHE=1 FORCE=1 RESET_TYPES=${RT} RESET_ENVS=16384 NUM_RESETS=10000 \
+        JOB_NAME=g1d-ds-${RT,,} HOURS=30 YES=1 docker/forge/submit_g1d.sh
+done
+```
+
+`FORCE=1` is needed on the per-family jobs because the stage is otherwise skipped as soon as the cache holds
+the last family's file. Recording time at 16384 envs on one A100: minutes for the ungrasped family, 4 to 6
+hours for the air and partial grasped families, about a day for the resting one (yields 0.85%, 1.05% and
+0.1% of grasp attempts). The files are mirrored to the cache every 5 minutes (`RESET_SYNC_S`), so a job that
+hits `HOURS` still leaves its states behind; resubmitting with the same `RESET_TYPES` starts that family's
+file over.
+
+```bash
+forge job list | grep g1d-ds                       # progress: "Successful reset states: N/10000" in the log tail
+forge job logs <id> --tail 5
+```
+
+To use the sets on this machine, pull them through a 0-GPU SSH notebook that mounts the disk (the notebook
+image has no `rsync`):
+
+```bash
+source docker/forge/_lib.sh && uwlab_notebook_ssh uwlab-code-push       # sets UWLAB_SSH_OPTS / UWLAB_SSH_HOST
+ssh "${UWLAB_SSH_OPTS[@]}" "${UWLAB_SSH_HOST}" \
+    "tar czf - -C /mnt/robotics/twguntara/omni-reset/g1d/datasets ." \
+    | tar xzf - -C source/uwlab_assets/data/Datasets/OmniReset_g1d
+```
 
 ## 4. Train
 

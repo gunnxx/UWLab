@@ -34,8 +34,8 @@ python scripts/environments/list_envs.py --keyword G1dDex1
 | G1-D + Dex1 | tooling | `OmniReset-Dex1-GraspSampling-v0` |
 
 Most envs reset from recorded datasets. The UR5e ones download from the UW Lab cloud assets
-(`Datasets/OmniReset_isaaclab3`); the G1-D ones read `source/uwlab_assets/data/Datasets/OmniReset_g1d`, generated
-by `docker/forge/run_local.sh smoke` (stages `assets,datasets`).
+(`Datasets/OmniReset_isaaclab3`); the G1-D ones read `source/uwlab_assets/data/Datasets/OmniReset_g1d`, which
+section 2 generates.
 
 | Env | Dataset files |
 |---|---|
@@ -45,10 +45,82 @@ by `docker/forge/run_local.sh smoke` (stages `assets,datasets`).
 | `ObjectAnywhereEEGrasped` | `Grasps/<object>/grasps.pt` |
 | `ObjectPartiallyAssembled*` | `Resets/<pair>/partial_assemblies.pt` (+ `grasps.pt` for `EEGrasped`) |
 
-Note: a recorded reset state restores every rigid object in the scene, the table included. After changing
-the table layout, envs that read `resets_*.pt` keep the recorded table pose until the datasets are re-recorded.
+Note: a recorded reset state restores every non-kinematic rigid object in the scene. The table is kinematic and
+is skipped, so moving it does not invalidate the sets; changing the objects or the robot does.
 
-## 2. Inspect a scene and reset it from the keyboard
+## 2. Generate the G1-D datasets
+
+The G1-D sets are robot-specific and gitignored, so they are recorded, not downloaded. Four recorders write
+into one `--dataset_dir`; each later step reads what the earlier ones wrote, so the order matters:
+
+| Step | Script / task | Writes | Needs |
+|---|---|---|---|
+| 0 | `build_urdf.py` + `convert_urdf_kit.py` (assets stage) | `data/Robots/Unitree/G1dDex1/*.usd` | `unitree_ros` checkout |
+| 1 | `record_partial_assemblies.py`, `OmniReset-PartialAssemblies-v0` | `Resets/<pair>/partial_assemblies.pt` | 0 |
+| 2 | `record_grasps.py`, `OmniReset-Dex1-GraspSampling-v0` | `Grasps/<object>/grasps.pt` | 0 |
+| 3 | `record_reset_states.py`, `...-ObjectAnywhereEEAnywhere-v0` | `Resets/<pair>/resets_ObjectAnywhereEEAnywhere.pt` | 0 |
+| 4 | `record_reset_states.py`, `...-ObjectAnywhereEEGrasped-v0` | `Resets/<pair>/resets_ObjectAnywhereEEGrasped.pt` | 2 |
+| 5 | `record_reset_states.py`, `...-ObjectRestingEEGrasped-v0` | `Resets/<pair>/resets_ObjectRestingEEGrasped.pt` | 2, 3 |
+| 6 | `record_reset_states.py`, `...-ObjectPartiallyAssembledEEGrasped-v0` | `Resets/<pair>/resets_ObjectPartiallyAssembledEEGrasped.pt` | 1, 2 |
+
+`<pair>` is the sorted pair of USD folder names (`Peg__PegHole`), `<object>` the insertive object's (`Peg`).
+The grasp sampler drops the arm and moves the bare Dex1-1 gripper around the object, so step 2 runs on the
+gripper USD alone and records the pose of `right_dex1_base_link` relative to the object. Steps 3 to 6 sample
+poses, let the scene settle and keep the states whose success term holds; the grasped families are
+reach-limited by the table layout (see section 5 to measure a family's yield before a long run).
+
+**All at once.** `docker/forge/g1d_pipeline.sh` runs steps 0 to 6 in this order and caches each stage under
+`${CACHE}` (`~/.cache/uwlab-local/robotics/twguntara/omni-reset/g1d` locally, `/mnt/robotics/twguntara/omni-reset/g1d` on
+Forge). From the host:
+
+```bash
+# smoke-test sizes, a few minutes: assets -> all datasets -> 5 PPO iterations
+docker/forge/run_local.sh smoke
+# the real sizes, only the dataset stages; FORCE=1 re-records even if the cache already has the files
+FORCE=1 STAGES=assets,datasets RESET_ENVS=16384 NUM_RESETS=10000 GRASP_ENVS=8192 NUM_GRASPS=1000 docker/forge/run_local.sh smoke
+# one family per job/GPU: partial assemblies, grasps and the other families come from the cache
+AUX_FROM_CACHE=1 RESET_TYPES=ObjectRestingEEGrasped FORCE=1 STAGES=datasets docker/forge/run_local.sh smoke
+```
+
+The reset-state files are mirrored to the cache every `RESET_SYNC_S` (300) seconds while recording, so a
+killed run keeps what it had. `docker/forge/README.md` section 3 has the same runs as Forge jobs.
+
+**Step by step**, inside the container (`DATA=source/uwlab_assets/data/Datasets/OmniReset_g1d`,
+`OBJ="env.scene.insertive_object=peg env.scene.receptive_object=peghole"`). Sizes are the pipeline's defaults;
+the ones used for the recorded sets are in the comments:
+
+```bash
+# 0. assets: G1-D right arm + Dex1-1 URDFs from unitree_ros, converted to USD inside a Kit app
+git clone --depth 1 https://github.com/unitreerobotics/unitree_ros.git /workspace/unitree_ros
+ASSETS=source/uwlab_assets/data/Robots/Unitree/G1dDex1
+python -m uwlab_assets.robots.unitree_g1d_dex1.build_urdf --unitree-ros /workspace/unitree_ros --out-dir $ASSETS
+python scripts_v2/tools/convert_urdf_kit.py $ASSETS/g1d_dex1_right_arm.urdf $ASSETS/g1d_dex1_right_arm.usd \
+    --fix_base --joint_stiffness 0 --joint_damping 0 --viz none
+python scripts_v2/tools/convert_urdf_kit.py $ASSETS/dex1_gripper.urdf $ASSETS/dex1_gripper.usd \
+    --fix_base --joint_stiffness 0 --joint_damping 0 --viz none
+
+# 1. partial assemblies: physics trajectories of the peg sliding into the hole, de-duplicated poses
+python scripts_v2/tools/record_partial_assemblies.py --task OmniReset-PartialAssemblies-v0 \
+    --num_envs 10 --num_trajectories 10 --dataset_dir $DATA --viz none $OBJ
+
+# 2. grasps: Dex1-1 gripper poses on the peg that hold when the fingers close (recorded set: 8192 envs, 1000 grasps)
+python scripts_v2/tools/record_grasps.py --task OmniReset-Dex1-GraspSampling-v0 \
+    --num_envs 8192 --num_grasps 1000 --dataset_dir $DATA --gripper_body_name right_dex1_base_link \
+    --viz none env.scene.object=peg
+
+# 3-6. reset states, one family per run (recorded sets: 16384 envs, 10000 states each; --num_reset_states 0 = until killed)
+for RT in ObjectAnywhereEEAnywhere ObjectAnywhereEEGrasped ObjectRestingEEGrasped ObjectPartiallyAssembledEEGrasped; do
+    python scripts_v2/tools/record_reset_states.py --task OmniReset-G1dDex1-${RT}-v0 \
+        --num_envs 2048 --num_reset_states 10000 --dataset_dir $DATA --viz none $OBJ
+done
+```
+
+Each recorder starts its output file over, so a family can only be extended by recording more states in one
+run, not by running twice. A state restores every non-kinematic rigid object, so the reset sets must be
+re-recorded after the objects or the robot change but not after the table moves. Section 4 replays a
+finished set.
+
+## 3. Inspect a scene and reset it from the keyboard
 
 `scripts_v2/tools/inspect_env.py` opens any registered task, holds the arm still (zero OSC action) and
 listens to the Kit window:
@@ -91,7 +163,7 @@ python scripts_v2/tools/inspect_env.py --task OmniReset-G1dDex1-ObjectAnywhereEE
     --num_envs 2 --viz none --max_steps 100 --auto_reset_s 2 --no_timeout
 ```
 
-## 3. Replay recorded reset states
+## 4. Replay recorded reset states
 
 Cycles through a saved reset-state dataset (one reset every `--reset_interval` seconds) and prints the
 success flag of each loaded state:
@@ -102,7 +174,7 @@ python scripts_v2/tools/visualize_reset_states.py --task OmniReset-G1dDex1-RelCa
     --num_envs 4 --reset_interval 2 --viz kit env.scene.insertive_object=peg env.scene.receptive_object=peghole
 ```
 
-## 4. Probe why a reset-state set yields nothing
+## 5. Probe why a reset-state set yields nothing
 
 Per-step breakdown of the success term's clauses (gripper, approach orientation, stability, collisions,
 pose deviation); `--funnel` accumulates the pass counts over all episodes:
@@ -112,7 +184,7 @@ python scripts_v2/tools/debug_reset_env.py --task OmniReset-G1dDex1-ObjectAnywhe
     --num_envs 256 --steps 45 --funnel --viz none env.scene.insertive_object=peg env.scene.receptive_object=peghole
 ```
 
-## 5. Play a trained policy
+## 6. Play a trained policy
 
 ```bash
 # UR5e + Robotiq (Stage 1 checkpoint; use ...-State-Finetune-Play-v0 for a Stage 2 one)
@@ -132,7 +204,7 @@ Without `--checkpoint` the newest run under `logs/rsl_rl/<experiment>` is used (
 it). `--real-time` plays at wall-clock speed, `--video --video_length 400` records an MP4 next to the
 checkpoint.
 
-## 6. Train
+## 7. Train
 
 ```bash
 # local smoke test of the whole G1-D pipeline (assets -> datasets -> 5 PPO iterations), from the host
@@ -147,7 +219,7 @@ python scripts/reinforcement_learning/rsl_rl/train.py \
 
 See `docker/forge/README.md` for the Forge (cluster) submission flow and the VS Code dev container.
 
-## 7. Tests and formatting
+## 8. Tests and formatting
 
 ```bash
 python -m pytest source/uwlab_tasks/test -x          # or any test file / directory
