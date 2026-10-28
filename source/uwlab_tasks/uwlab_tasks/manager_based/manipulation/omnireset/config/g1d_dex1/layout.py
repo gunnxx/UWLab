@@ -7,8 +7,8 @@
 
 World frame: the environment origin is on the floor under the chassis centre, x forward, y to the robot's left,
 z up. The articulation root (``AGV_link``) sits at z = :data:`AGV_ROOT_HEIGHT`. The table is a plain block with
-the footprint and top height of the Vention table of the UR5e scene; it stands in front of the robot with its
-long (1.384 m) side along x.
+the top height of the Vention table of the UR5e scene but a smaller footprint (0.684 m along x, 1.0 m along y);
+it stands in front of the robot with its x side pointing away from it.
 
 Workspace numbers come from an inverse-kinematics sweep of the right arm with the waist pitched 0.1 rad and the
 lift at its lowest (``docs/notes`` of 2026-10-25): with the gripper pointing within 45 deg of straight down,
@@ -28,10 +28,10 @@ from uwlab_assets.robots.unitree_g1d_dex1 import AGV_ROOT_HEIGHT  # noqa: F401
 TABLE_TOP_Z = 0.855
 """Height of the table surface above the floor: the Vention mat top of the UR5e scene (ground -0.868, table origin
 -0.881, mat top 0.8685 above the origin)."""
-TABLE_HALF_LENGTH = 0.692
-"""Half of the table's long side (1.384 m), which runs along x."""
-TABLE_HALF_WIDTH = 0.557
-"""Half of the table's short side (1.115 m), along y."""
+TABLE_HALF_LENGTH = 0.342
+"""Half of the table's long side (0.684 m), which runs along x."""
+TABLE_HALF_WIDTH = 0.5
+"""Half of the table's short side (1.0 m), along y."""
 TABLE_EDGE_X = 0.29
 """x of the near table edge. The chassis front is at x = 0.273, so this leaves ~2 cm; the table block reaches the
 floor, so the chassis cannot roll under it."""
