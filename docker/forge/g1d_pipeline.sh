@@ -170,7 +170,7 @@ if has_stage bench; then
         done
         wait "${BPID}" && RC=0 || RC=$?
         log "bench: ${n} envs exit ${RC}, peak GPU memory ${PEAK} MiB"
-        grep -E "^\[timing\]|^\[funnel\]|out of memory|RuntimeError" "/tmp/bench_${n}.log" || true
+        grep -E "\[timing\]|\[funnel\]|out of memory|RuntimeError" "/tmp/bench_${n}.log" || true
         [[ -n "${CACHE}" ]] && cp "/tmp/bench_${n}.log" "${CACHE}/logs/bench_${BENCH_TASK}_${n}.log"
     done
 fi
