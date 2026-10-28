@@ -23,4 +23,6 @@ DEX1_GRIPPER_BINARY_ACTIONS = BinaryJointPositionActionCfg(
 
 @configclass
 class Dex1BinaryGripperAction:
+    """Action terms of the Dex1-1 gripper: one binary open/close command."""
+
     gripper = DEX1_GRIPPER_BINARY_ACTIONS
