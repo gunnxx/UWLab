@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import importlib
 import torch
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING
 
 import isaaclab.utils.math as math_utils
@@ -15,18 +15,6 @@ from isaaclab.assets import Articulation
 from isaaclab.managers.action_manager import ActionTerm
 
 from . import actions_cfg
-
-
-def _resolve_jacobian_fn(path: str | None):
-    """Import ``"package.module:function"``; ``None`` -> the calibrated UR5e kinematics."""
-    if path is None:
-        from uwlab_assets.robots.ur5e_robotiq_gripper.kinematics import compute_jacobian_analytical
-
-        return compute_jacobian_analytical
-    module_name, _, attr = path.partition(":")
-    if not attr:
-        raise ValueError(f"jacobian_fn must be 'package.module:function', got {path!r}")
-    return getattr(importlib.import_module(module_name), attr)
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
@@ -229,3 +217,31 @@ class RelCartesianOSCAction(ActionTerm):
             ee_quat_w,
         )
         return ee_pos_b, ee_quat_b
+
+
+# ===============
+# Private Helpers
+# ===============
+
+
+def _resolve_jacobian_fn(path: str | None) -> Callable[..., torch.Tensor]:
+    """Resolve the analytical Jacobian function from its import path.
+
+    Args:
+        path: Import path of the form ``"package.module:function"``, or None for the calibrated UR5e kinematics
+            (:func:`uwlab_assets.robots.ur5e_robotiq_gripper.kinematics.compute_jacobian_analytical`).
+
+    Returns:
+        The Jacobian function, called as ``fn(joint_pos, device=...)``.
+
+    Raises:
+        ValueError: If ``path`` is not of the form ``"package.module:function"``.
+    """
+    if path is None:
+        from uwlab_assets.robots.ur5e_robotiq_gripper.kinematics import compute_jacobian_analytical
+
+        return compute_jacobian_analytical
+    module_name, _, attr = path.partition(":")
+    if not attr:
+        raise ValueError(f"jacobian_fn must be 'package.module:function', got {path!r}")
+    return getattr(importlib.import_module(module_name), attr)

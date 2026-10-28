@@ -36,6 +36,7 @@ class TorchDatasetFileHandler(DatasetFileHandlerBase):
     """
 
     def __init__(self):
+        """Constructor."""
         self._file_path: str | None = None
         self._episode_data: dict[str, Any] = {}
         self._episode_count: int = 0
@@ -43,7 +44,12 @@ class TorchDatasetFileHandler(DatasetFileHandlerBase):
         self._last_flush: float = -float("inf")
 
     def create(self, file_path: str, env_name: str | None = None):
-        """Create a new dataset file."""
+        """Create a new dataset file.
+
+        Args:
+            file_path: Path of the dataset file to write.
+            env_name: Name of the environment the data comes from (not stored by this handler).
+        """
         self._file_path = file_path
         self._episode_data = {}
         self._episode_count = 0
@@ -129,6 +135,9 @@ class TorchDatasetFileHandler(DatasetFileHandlerBase):
         Skipped while nothing new was written since the last flush, or while the last write is less than
         :attr:`flush_interval_s` old (unless ``force``). The write goes to a temporary file that is then renamed
         over the dataset file, so a reader (or a copy taken while recording) never sees a partial file.
+
+        Args:
+            force: Write even if the last write is less than :attr:`flush_interval_s` old.
         """
         if not (self._file_path and self._episode_data and self._dirty):
             return

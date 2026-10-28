@@ -131,7 +131,7 @@ class check_grasp_success(ManagerTermBase):
         # The fingers must have travelled at least this fraction of the open-to-close range: an object lying
         # across fully open fingers does not move either, but it is not grasped. Uses the task's gripper action.
         self.min_close_fraction = cfg.params.get("min_close_fraction", 0.1)
-        self._closure_joint_ids = None
+        self._closure_joint_ids: list[int] | None = None
         gripper_action_cfg = getattr(getattr(env.cfg, "actions", None), "gripper", None)
         close_expr = getattr(gripper_action_cfg, "close_command_expr", None)
         open_expr = getattr(gripper_action_cfg, "open_command_expr", None)
@@ -334,17 +334,6 @@ class check_reset_state_success(ManagerTermBase):
             self.require_assembly_success = torch.rand(env.num_envs, device=env.device) < self.assembly_success_prob
             self._pending_reflip = torch.zeros(env.num_envs, device=env.device, dtype=torch.bool)
 
-    def _resolve_grasp_event(self, env: ManagerBasedEnv):
-        """The grasp placement event term of this env, or None if the env has none (checked once)."""
-        if self._grasp_event is None and self.grasp_event_name is not None:
-            try:
-                self._grasp_event = env.event_manager.get_term_cfg(self.grasp_event_name).func
-            except (ValueError, KeyError, AttributeError):
-                self.grasp_event_name = None
-            if self._grasp_event is not None and not hasattr(self._grasp_event, "target_pos_obj"):
-                self._grasp_event, self.grasp_event_name = None, None
-        return self._grasp_event
-
     def reset(self, env_ids: torch.Tensor | None = None) -> None:
         super().reset(env_ids)
 
@@ -445,7 +434,7 @@ class check_reset_state_success(ManagerTermBase):
         # Reset initial positions on first check or after env reset
         excessive_pose_deviation = torch.zeros(env.num_envs, device=env.device, dtype=torch.bool)
         pos_below_threshold = torch.zeros(env.num_envs, device=env.device, dtype=torch.bool)
-        deviations = {}
+        deviations: dict[str, torch.Tensor] = {}
         for asset in self.assets_to_check:
             if asset is self.robot_asset:
                 asset_pos = asset.data.body_link_pos_w.torch[:, self.ee_body_idx].clone()
@@ -492,7 +481,7 @@ class check_reset_state_success(ManagerTermBase):
 
         reset_success = cheap_ok & collision_free & time_out
 
-        clauses = {}
+        clauses: dict[str, torch.Tensor] = {}
         if self.collect_funnel:
             clauses = {
                 "no_abnormal_gripper": ~abnormal_gripper_state,
@@ -503,7 +492,8 @@ class check_reset_state_success(ManagerTermBase):
                 "collision_free": collision_free,
             }
             for name, dev in deviations.items():
-                limit = self.max_robot_pos_deviation if name == self.robot_asset.cfg.prim_path.split("/")[-1] else self.max_object_pos_deviation
+                is_robot = name == self.robot_asset.cfg.prim_path.split("/")[-1]
+                limit = self.max_robot_pos_deviation if is_robot else self.max_object_pos_deviation
                 clauses[f"  dev_ok {name}"] = dev <= limit
                 clauses[f"  dev<3cm {name}"] = dev <= 0.03
 
@@ -538,8 +528,12 @@ class check_reset_state_success(ManagerTermBase):
                         ee_quat,
                     )
                     pos_err[eval_ids] = (ee_pos_obj - grasp_event.target_pos_obj[eval_ids]).norm(dim=1)
-                    ang_err[eval_ids] = math_utils.quat_error_magnitude(ee_quat_obj, grasp_event.target_quat_obj[eval_ids])
-                    at_grasp_pose[eval_ids] = (pos_err[eval_ids] < self.grasp_pos_tol) & (ang_err[eval_ids] < self.grasp_ang_tol)
+                    ang_err[eval_ids] = math_utils.quat_error_magnitude(
+                        ee_quat_obj, grasp_event.target_quat_obj[eval_ids]
+                    )
+                    at_grasp_pose[eval_ids] = (pos_err[eval_ids] < self.grasp_pos_tol) & (
+                        ang_err[eval_ids] < self.grasp_ang_tol
+                    )
                 reset_success = reset_success & at_grasp_pose
                 if self.collect_funnel:
                     clauses["grasp_pos_ok"] = pos_err < self.grasp_pos_tol
@@ -562,19 +556,42 @@ class check_reset_state_success(ManagerTermBase):
                 e_x, e_y, _ = math_utils.euler_xyz_from_quat(rel_quat)
                 euler_xy_dist = math_utils.wrap_to_pi(e_x).abs() + math_utils.wrap_to_pi(e_y).abs()
                 xyz_dist = torch.norm(rel_pos, dim=1)
-                assembly_success = (xyz_dist < self.assembly_pos_threshold) & (euler_xy_dist < self.assembly_ori_threshold)
+                assembly_success = (xyz_dist < self.assembly_pos_threshold) & (
+                    euler_xy_dist < self.assembly_ori_threshold
+                )
                 assembly_match[eval_ids] = torch.where(
                     self.require_assembly_success[eval_ids], assembly_success, ~assembly_success
                 )
             reset_success = reset_success & assembly_match
             self._pending_reflip |= reset_success
             if self.collect_funnel:
-                self.funnel["assembly_match"] = self.funnel.get("assembly_match", 0) + int((time_out & assembly_match).sum())
+                self.funnel["assembly_match"] = self.funnel.get("assembly_match", 0) + int(
+                    (time_out & assembly_match).sum()
+                )
 
         if self.collect_funnel:
             self.funnel["SUCCESS"] = self.funnel.get("SUCCESS", 0) + int(reset_success.sum())
 
         return reset_success
+
+    def _resolve_grasp_event(self, env: ManagerBasedEnv) -> ManagerTermBase | None:
+        """Resolve the grasp placement event term of this environment (looked up once).
+
+        Args:
+            env: The environment whose event manager is searched for ``grasp_event_name``.
+
+        Returns:
+            The event term that records ``target_pos_obj`` / ``target_quat_obj``, or None if the environment
+            has no such term.
+        """
+        if self._grasp_event is None and self.grasp_event_name is not None:
+            try:
+                self._grasp_event = env.event_manager.get_term_cfg(self.grasp_event_name).func
+            except (ValueError, KeyError, AttributeError):
+                self.grasp_event_name = None
+            if self._grasp_event is not None and not hasattr(self._grasp_event, "target_pos_obj"):
+                self._grasp_event, self.grasp_event_name = None, None
+        return self._grasp_event
 
 
 class check_obb_no_overlap_termination(ManagerTermBase):
@@ -901,11 +918,12 @@ class grasp_placement_failed(ManagerTermBase):
     """
 
     def __init__(self, cfg: TerminationTermCfg, env: ManagerBasedEnv):
+        """Constructor."""
         super().__init__(cfg, env)
         self.event_name = cfg.params.get("event_name", "reset_end_effector_pose_from_grasp_dataset")
         self.pos_tol = cfg.params.get("pos_tol", 0.01)
         self.ang_tol = cfg.params.get("ang_tol", 0.17)
-        self._event = None
+        self._event: ManagerTermBase | None = None
         self._checked = False
 
     def __call__(
@@ -915,6 +933,17 @@ class grasp_placement_failed(ManagerTermBase):
         pos_tol: float = 0.01,
         ang_tol: float = 0.17,
     ) -> torch.Tensor:
+        """Flag the environments whose last IK placement ended outside the tolerances.
+
+        Args:
+            env: The environment.
+            event_name: Name of the grasp placement event term whose IK errors are read.
+            pos_tol: Position tolerance [m] on the IK error.
+            ang_tol: Orientation tolerance [rad] on the IK error.
+
+        Returns:
+            Boolean tensor of shape (num_envs,), True where the placement missed its target.
+        """
         if not self._checked:
             self._checked = True
             try:
@@ -941,15 +970,27 @@ class reset_hold_lost(ManagerTermBase):
     """
 
     def __init__(self, cfg: TerminationTermCfg, env: ManagerBasedEnv):
+        """Constructor."""
         super().__init__(cfg, env)
         self.success_term_name = cfg.params.get("success_term_name", "success")
         self.deviation_margin = float(cfg.params.get("deviation_margin", 2.0))
-        self._term = None
+        self._term: ManagerTermBase | None = None
         self._checked = False
 
     def __call__(
         self, env: ManagerBasedEnv, success_term_name: str = "success", deviation_margin: float = 2.0
     ) -> torch.Tensor:
+        """Flag the environments whose hold can no longer pass the success term.
+
+        Args:
+            env: The environment.
+            success_term_name: Name of the ``check_reset_state_success`` term whose references and limits are read.
+            deviation_margin: Multiplier applied to the success term's deviation limits before comparing.
+
+        Returns:
+            Boolean tensor of shape (num_envs,), True where a tracked body dropped below the height threshold or
+            moved beyond the margin-scaled deviation limit.
+        """
         if not self._checked:
             self._checked = True
             try:

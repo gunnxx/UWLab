@@ -6,11 +6,11 @@
 """Event functions for manipulation tasks."""
 
 import logging
+import math
 import numpy as np
 import os
 import random
 import scipy.stats as stats
-import math
 import torch
 import trimesh
 import trimesh.transformations as tra
@@ -41,6 +41,8 @@ from uwlab_tasks.manager_based.manipulation.omnireset.mdp import utils
 
 from ..assembly_keypoints import Offset
 from .success_monitor_cfg import SuccessMonitorCfg
+
+logger = logging.getLogger(__name__)
 
 
 def apply_isaac_rtx_settings(
@@ -785,7 +787,7 @@ class reset_end_effector_from_grasp_dataset(ManagerTermBase):
                         open_fraction = (self.gripper_joint_positions[:, gripper_idx] - close_expr[joint_name]) / span
                         keep &= open_fraction < self.min_grasp_closure
             if not bool(keep.all()):
-                print(
+                logger.info(
                     f"[grasp dataset] dropping {int((~keep).sum())} of {num_grasps} grasps whose fingers stayed within "
                     f"{100 * (1 - self.min_grasp_closure):.0f}% of fully open (object was resting on the gripper)"
                 )
@@ -848,7 +850,10 @@ class reset_end_effector_from_grasp_dataset(ManagerTermBase):
 
         # Remember the target in the object's frame (variation included) for the grasp checks
         target_pos_w, target_quat_w = math_utils.combine_frame_transforms(
-            self.robot.data.root_link_pos_w[env_ids], self.robot.data.root_link_quat_w[env_ids], pos_b[env_ids], quat_b[env_ids]
+            self.robot.data.root_link_pos_w[env_ids],
+            self.robot.data.root_link_quat_w[env_ids],
+            pos_b[env_ids],
+            quat_b[env_ids],
         )
         self.target_pos_obj[env_ids], self.target_quat_obj[env_ids] = math_utils.subtract_frame_transforms(
             object_pos_w, object_quat_w, target_pos_w, target_quat_w
@@ -882,10 +887,10 @@ class reset_end_effector_from_grasp_dataset(ManagerTermBase):
         if self._ik_calls % self._ik_log_every == 1:
             pos_err, ang_err = self.ik_pos_error[env_ids], self.ik_ang_error[env_ids]
             reached = ((pos_err < 0.01) & (ang_err < 0.17)).float().mean().item()
-            print(
+            logger.info(
                 f"[grasp reset] IK within 1 cm / 10 deg: {100 * reached:.1f}% of {num_envs} envs | pos err median "
-                f"{100 * pos_err.median().item():.2f} cm, p90 {100 * pos_err.quantile(0.9).item():.2f} cm | ang err median "
-                f"{math.degrees(ang_err.median().item()):.1f} deg"
+                f"{100 * pos_err.median().item():.2f} cm, p90 {100 * pos_err.quantile(0.9).item():.2f} cm | "
+                f"ang err median {math.degrees(ang_err.median().item()):.1f} deg"
             )
 
         # Sample gripper joint positions using the same indices

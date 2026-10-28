@@ -61,7 +61,8 @@ class RelCartesianOSCActionCfg(ActionTermCfg):
     jacobian_fn: str | None = None
     """Import path ``"package.module:function"`` of the analytical Jacobian, called as ``fn(joint_pos, device=...)``
     with ``joint_pos`` of shape (N, num_joints) and returning (N, 6, num_joints) in the articulation root frame.
-    ``None`` uses the calibrated UR5e kinematics (:func:`uwlab_assets.robots.ur5e_robotiq_gripper.kinematics.compute_jacobian_analytical`)."""
+    ``None`` uses the calibrated UR5e kinematics
+    (:func:`uwlab_assets.robots.ur5e_robotiq_gripper.kinematics.compute_jacobian_analytical`)."""
 
     nullspace_stiffness: float = 0.0
     """Joint-space stiffness [N m/rad] of a posture task projected into the null space of the Jacobian. Useful for
@@ -71,4 +72,5 @@ class RelCartesianOSCActionCfg(ActionTermCfg):
     """Damping ratio of the null-space posture task (Kd = 2 * sqrt(Kp) * ratio)."""
 
     nullspace_joint_pos: dict[str, float] | None = None
-    """Posture target per joint name for the null-space task. ``None`` uses the articulation's default joint positions."""
+    """Posture target per joint name for the null-space task. ``None`` uses the articulation's default joint
+    positions."""
