@@ -1287,9 +1287,11 @@ class MultiResetManager(ManagerTermBase):
             nodal_velocity = asset_state["nodal_velocity"].clone()
             deformable_object.write_nodal_pos_to_sim(nodal_position, env_ids=env_ids)
             deformable_object.write_nodal_velocity_to_sim(nodal_velocity, env_ids=env_ids)
-        # rigid objects
+        # rigid objects (kinematic ones such as the table belong to the layout, not to the state: see
+        # utils.kinematic_rigid_object_names)
+        skip = utils.kinematic_rigid_object_names(self._env.scene)
         for asset_name, rigid_object in self._env.scene._rigid_objects.items():
-            if asset_name not in state["rigid_object"]:
+            if asset_name not in state["rigid_object"] or asset_name in skip:
                 continue
             asset_state = state["rigid_object"][asset_name]
             root_pose = asset_state["root_pose"].clone()

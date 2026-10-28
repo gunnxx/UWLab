@@ -605,3 +605,18 @@ def settle_robot(
     robot.write_joint_state_to_sim(default_joint_pos, default_joint_vel)
     robot.write_data_to_sim()
     robot.update(sim_dt)
+
+
+def kinematic_rigid_object_names(scene) -> set[str]:
+    """Names of the scene's rigid objects spawned with ``kinematic_enabled`` (tables, fixtures).
+
+    Their pose is part of the scene layout, not of a reset state: the G1-D table is such an object, and a reset-state
+    file recorded with one table size would otherwise move a differently sized table to the old centre when its
+    states are restored (the objects then rest on nothing). Recorders leave them out and resets do not restore them.
+    """
+    names = set()
+    for name, obj in getattr(scene, "_rigid_objects", {}).items():
+        rigid_props = getattr(getattr(obj.cfg, "spawn", None), "rigid_props", None)
+        if rigid_props is not None and getattr(rigid_props, "kinematic_enabled", False):
+            names.add(name)
+    return names
