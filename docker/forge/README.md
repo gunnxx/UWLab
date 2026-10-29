@@ -41,7 +41,7 @@ Cache and checkpoints land in `~/.cache/uwlab-local/robotics/twguntara/omni-rese
 cluster paths; TensorBoard files in `logs/rsl_rl/g1d_dex1_omnireset_agent/` (`g1_dex3_omnireset_agent/` for the
 G1 + Dex3). `ROBOT=g1_dex3` switches `g1d_pipeline.sh`, `run_local.sh` and `submit_g1d.sh` to the second robot:
 its own asset folder (`G1Dex3`), dataset folder (`OmniReset_g1_dex3`), cache (`omni-reset/g1_dex3`) and task ids
-(`OmniReset-G1Dex3-...`, `OmniReset-Dex3-GraspSampling-v0`); see `docs/COMMAND.md`.
+(`OmniReset-G1Dex3-...`, `OmniReset-Dex3-GraspSampling-v0`); see `docs/notes/commands/02_environments.md`.
 
 ### Watching an environment with a window
 
@@ -215,7 +215,7 @@ destination mirrors RSL-RL's log root, so a run that hit its duration cap contin
 
 The G1-D reset-state and grasp sets are recorded on the cluster by the `datasets` stage of
 `g1d_pipeline.sh` and cached under `/mnt/robotics/twguntara/omni-reset/g1d/datasets/`; later jobs with
-`STAGES=train` copy them from there. `docs/COMMAND.md` section 2 lists the recorders, the files each one
+`STAGES=train` copy them from there. `docs/notes/commands/03_datasets.md` lists the recorders, the files each one
 writes and the order they depend on. `submit_g1d.sh` dry-runs and submits after confirmation (`YES=1` skips
 the prompt):
 
