@@ -101,6 +101,17 @@ class grasp_sampling_event(ManagerTermBase):
         self.gripper_approach_direction = tuple(metadata.get("gripper_approach_direction"))
         self.grasp_align_axis = tuple(metadata.get("grasp_align_axis"))
         self.orientation_sample_axis = tuple(metadata.get("orientation_sample_axis"))
+        # The pinch point need not lie on the approach line through the gripper body origin (the Dex3's sits
+        # 9.8 cm along the fingers from the palm origin). ``gripper_offset.pos`` is the pinch point in the gripper
+        # frame: its component along the approach is the ``finger_offset`` the standoff sweep starts from, its
+        # component perpendicular to the approach a fixed translation of the body away from the grasp centre.
+        # Zero for the Robotiq and the Dex1, whose pinch point is on the approach line.
+        approach = np.asarray(self.gripper_approach_direction, dtype=np.float64)
+        approach = approach / np.linalg.norm(approach)
+        pinch = np.asarray(
+            (metadata.get("gripper_offset") or {}).get("pos", approach * self.finger_offset), dtype=np.float64
+        )
+        self.pinch_lateral_offset = pinch - float(pinch @ approach) * approach
         # Open-gripper joint targets: explicit per-joint map when the metadata has one (multi-joint grippers such
         # as the Dex1-1), else the legacy single Robotiq ``finger_joint``.
         self.gripper_joint_reset_config = metadata.get("gripper_open_joint_config") or {
@@ -362,7 +373,9 @@ class grasp_sampling_event(ManagerTermBase):
 
                     # Generate transforms for each standoff distance
                     for standoff_dist in standoff_distances:
-                        standoff_translation = gripper_approach_direction.numpy() * -float(standoff_dist)
+                        standoff_translation = -(
+                            gripper_approach_direction.numpy() * float(standoff_dist) + self.pinch_lateral_offset
+                        ).astype(np.float32)
                         standoff_transform = tra.translation_matrix(standoff_translation)
 
                         # Full transform: T_center * R_align * R_orient * T_standoff
