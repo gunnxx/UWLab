@@ -8,6 +8,7 @@ from __future__ import annotations
 import numpy as np
 
 import isaaclab.sim as sim_utils
+from isaaclab.sim.schemas.schemas_cfg import MassCfg
 from isaaclab.assets import AssetBaseCfg, RigidObjectCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg, ViewerCfg
 from isaaclab.managers import EventTermCfg as EventTerm
@@ -150,19 +151,42 @@ class GraspSamplingRewardsCfg:
     pass
 
 
-def make_object(usd_path: str):
+def make_object(
+    usd_path: str,
+    scale: tuple[float, float, float] = (1.0, 1.0, 1.0),
+    mass: float | None = None,
+    friction: float | None = None,
+):
+    """Rigid object variant of the grasp-sampling scene.
+
+    Args:
+        usd_path: USD file of the object.
+        scale: Spawn scale; a scaled variant gets its own dataset folder (:func:`~mdp.utils.object_dataset_name`).
+        mass: Mass (kg) authored on the object; ``None`` keeps the asset's mass or density.
+        friction: Static and dynamic friction coefficient bound to the object's colliders with the ``max`` combine
+            mode; ``None`` keeps the asset's material.
+
+    Returns:
+        The object configuration.
+    """
+    physics_material = None
+    if friction is not None:
+        physics_material = sim_utils.RigidBodyMaterialCfg(
+            static_friction=friction, dynamic_friction=friction, friction_combine_mode="max"
+        )
     return RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/InsertiveObject",
         spawn=sim_utils.UsdFileCfg(
             usd_path=usd_path,
-            scale=(1, 1, 1),
+            scale=scale,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 solver_position_iteration_count=4,
                 solver_velocity_iteration_count=0,
                 disable_gravity=False,
                 kinematic_enabled=False,
             ),
-            mass_props=None,
+            mass_props=MassCfg(mass=mass) if mass is not None else None,
+            physics_material=physics_material,
         ),
         init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, 1.0), rot=(0.0, 0.0, 0.0, 1.0)),
     )
@@ -173,6 +197,12 @@ variants = {
         "fbleg": make_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/FurnitureBench/SquareLeg/square_leg.usd"),
         "fbdrawerbottom": make_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/FurnitureBench/DrawerBottom/drawer_bottom.usd"),
         "peg": make_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Peg/peg.usd"),
+        "big-peg": make_object(
+            f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Peg/peg.usd",
+            scale=(2.0, 2.0, 2.0),
+            mass=0.15,
+            friction=0.6,
+        ),
         "cupcake": make_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/CupCake/cupcake.usd"),
         "cube": make_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/InsertiveCube/insertive_cube.usd"),
         "rectangle": make_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Rectangle/rectangle.usd"),

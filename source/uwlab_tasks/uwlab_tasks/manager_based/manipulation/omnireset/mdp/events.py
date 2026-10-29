@@ -192,7 +192,16 @@ class grasp_sampling_event(ManagerTermBase):
         mesh_schema = self._find_mesh_in_prim(prim)
 
         # Convert USD mesh to trimesh
-        return self._usd_mesh_to_trimesh(mesh_schema)
+        mesh = self._usd_mesh_to_trimesh(mesh_schema)
+
+        # The mesh points are authored at the asset's own size.
+        # Apply the scale if it is spawned at a different size.
+        scale = getattr(asset.cfg.spawn, "scale", None)
+        if scale is not None and any(abs(float(v) - 1.0) > 1e-9 for v in scale):
+            mesh.apply_scale([float(v) for v in scale])
+        logger.info(f"grasp_sampling_event: object mesh extents (m) {np.round(mesh.extents, 4).tolist()}")
+
+        return mesh
 
     def _find_mesh_in_prim(self, prim):
         """Find the first mesh under a prim."""
@@ -712,8 +721,8 @@ class reset_end_effector_from_grasp_dataset(ManagerTermBase):
         self._ik_calls = 0
 
     def _compute_grasp_dataset_path(self) -> str:
-        usd_path = self.fixed_asset.cfg.spawn.usd_path
-        obj_name = utils.object_name_from_usd(usd_path)
+        spawn = self.fixed_asset.cfg.spawn
+        obj_name = utils.object_dataset_name(spawn.usd_path, getattr(spawn, "scale", None))
         return f"{self.dataset_dir}/Grasps/{obj_name}/grasps.pt"
 
     def _load_and_precompute_grasps(self, env):

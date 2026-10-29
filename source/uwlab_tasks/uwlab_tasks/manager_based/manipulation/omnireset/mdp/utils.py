@@ -412,6 +412,29 @@ def object_name_from_usd(usd_path: str) -> str:
     return PurePosixPath(urlparse(usd_path).path).parent.name
 
 
+def object_dataset_name(usd_path: str, scale: tuple[float, float, float] | None = None) -> str:
+    """Name of the dataset folder of an object variant: :func:`object_name_from_usd` plus a scale suffix.
+
+    A variant that spawns the same USD at another scale is a different object for the grasp and reset-state
+    datasets, so the suffix keeps their folders apart: ``'Peg'`` at scale ``(2, 2, 2)`` is ``'Peg_x2'``, a
+    non-uniform ``(1, 1, 2)`` is ``'Peg_x1x1x2'``. Unit scale and ``None`` give the plain name.
+
+    Args:
+        usd_path: Path or URL of the object's USD file.
+        scale: Spawn scale of the object, as in ``RigidObjectCfg.spawn.scale``.
+
+    Returns:
+        The folder name.
+    """
+    name = object_name_from_usd(usd_path)
+    if scale is None or all(abs(float(v) - 1.0) < 1e-9 for v in scale):
+        return name
+    fmt = lambda v: f"{float(v):g}"  # noqa: E731
+    if all(abs(float(v) - float(scale[0])) < 1e-9 for v in scale):
+        return f"{name}_x{fmt(scale[0])}"
+    return f"{name}_x{'x'.join(fmt(v) for v in scale)}"
+
+
 def compute_pair_dir(*usd_paths: str) -> str:
     """Derive a human-readable directory name from one or more USD asset paths.
 

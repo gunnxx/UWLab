@@ -74,7 +74,7 @@ def main(env_cfg, agent_cfg) -> None:
 
     # Derive object name for output path
     object_usd_path = env_cfg.scene.object.spawn.usd_path
-    obj_name = task_mdp.utils.object_name_from_usd(object_usd_path)
+    obj_name = task_mdp.utils.object_dataset_name(object_usd_path, env_cfg.scene.object.spawn.scale)
     output_dir = os.path.join(args_cli.dataset_dir, "Grasps", obj_name)
     os.makedirs(output_dir, exist_ok=True)
 
