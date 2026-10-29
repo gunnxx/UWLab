@@ -539,6 +539,7 @@ class global_physics_control_event(ManagerTermBase):
         """Called when environments reset - disable gravity for positioning."""
         self.physics_sim_view.set_gravity(carb.Float3(0.0, 0.0, 0.0))
         self.gravity_enabled = False
+        self.force_torque_active = False
 
     def __call__(
         self,
@@ -568,10 +569,19 @@ class global_physics_control_event(ManagerTermBase):
         else:
             pass
 
-        if should_apply_force_torque:
-            # resolve environment ids
-            if env_ids is None:
-                env_ids = torch.arange(env.scene.num_envs, device=env.device)
+        # resolve environment ids
+        if env_ids is None:
+            env_ids = torch.arange(env.scene.num_envs, device=env.device)
+
+        # Disable force and torque application outside the active interval.
+        if not should_apply_force_torque:
+            if getattr(self, "force_torque_active", False):
+                for asset_cfg in self.force_torque_asset_cfgs:
+                    env.scene[asset_cfg.name].permanent_wrench_composer.reset(env_ids)
+                self.force_torque_active = False
+        # Apply force and torque application within the active interval.
+        else:
+            self.force_torque_active = True
             for asset_cfg in self.force_torque_asset_cfgs:
                 # extract the used quantities (to enable type-hinting)
                 asset: RigidObject | Articulation = env.scene[asset_cfg.name]
