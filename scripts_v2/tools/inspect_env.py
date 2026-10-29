@@ -295,7 +295,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: object):
     gripper_cfg = getattr(env_cfg.actions, "gripper", None)
     keep_gripper = args_cli.gripper == "keep" and gripper_cfg is not None and hasattr(gripper_cfg, "close_command_expr")
     if keep_gripper:
-        joint = next(iter(gripper_cfg.close_command_expr))
+        joint = next(  # the first joint that travels (the Dex3 thumb abduction has one target open and shut)
+            n
+            for n in gripper_cfg.close_command_expr
+            if abs(gripper_cfg.open_command_expr.get(n, 0.0) - gripper_cfg.close_command_expr[n]) > 1e-6
+        )
         joint_id = robot.find_joints([joint])[0][0]
         g_open = float(gripper_cfg.open_command_expr.get(joint, 0.0))
         g_closed = float(gripper_cfg.close_command_expr[joint])

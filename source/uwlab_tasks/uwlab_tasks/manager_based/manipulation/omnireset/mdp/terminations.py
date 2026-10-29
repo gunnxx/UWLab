@@ -294,7 +294,13 @@ class check_reset_state_success(ManagerTermBase):
             self.grasp_ang_tol = cfg.params.get("grasp_ang_tol", 0.26)
             self._grasp_event = None  # resolved on first call, the event manager may not exist yet
             gripper_action_cfg = env.cfg.actions.gripper
-            joint_names = list(gripper_action_cfg.close_command_expr.keys())
+            # joints whose open and closed targets coincide (the Dex3 thumb abduction) say nothing about closure
+            joint_names = [
+                n
+                for n in gripper_action_cfg.close_command_expr
+                if abs(gripper_action_cfg.open_command_expr.get(n, 0.0) - gripper_action_cfg.close_command_expr[n])
+                > 1e-6
+            ]
             self.grasp_joint_ids, _ = self.robot_asset.find_joints(joint_names, preserve_order=True)
             self.grasp_closed = torch.tensor(
                 [gripper_action_cfg.close_command_expr[n] for n in joint_names], device=env.device

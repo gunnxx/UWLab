@@ -102,7 +102,11 @@ def main(env_cfg, agent_cfg) -> None:
     # closed command on its first joint (Robotiq: finger_joint 0 -> 0.785 rad; Dex1: prismatic fingers).
     asset = env.unwrapped.scene["robot"]
     gripper_cfg = env_cfg.actions.gripper
-    gripper_joint = next(iter(gripper_cfg.close_command_expr))
+    gripper_joint = next(  # the first joint that travels (the Dex3 thumb abduction has one target open and shut)
+        n
+        for n in gripper_cfg.close_command_expr
+        if abs(gripper_cfg.open_command_expr.get(n, 0.0) - gripper_cfg.close_command_expr[n]) > 1e-6
+    )
     gripper_joint_id = asset.find_joints([gripper_joint])[0][0]
     gripper_open = float(gripper_cfg.open_command_expr.get(gripper_joint, 0.0))
     gripper_closed = float(gripper_cfg.close_command_expr[gripper_joint])

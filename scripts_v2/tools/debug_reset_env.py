@@ -142,7 +142,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: object):
         ee = arm._ee_body_idx
         q = robot.data.joint_pos.torch[:, jid]
         pos_b, quat_b = arm._get_ee_pose_root_frame()
-        from uwlab_assets.robots.unitree_g1d_dex1 import kinematics as kin
+        kin = _kinematics_module(args_cli.task)
 
         fk_pos, fk_rot = kin.compute_fk(q, device=str(env.device))
         rot_b = math_utils.matrix_from_quat(quat_b)
@@ -244,11 +244,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: object):
                 f"[sub] {i:2d} effort_tgt={_fmt(tgt, n=9, d=2)}"
                 f" applied={_fmt(robot.data.applied_torque.torch[0], n=9, d=2)}"
                 f" q_dot={_fmt(robot.data.joint_vel.torch[0], n=9, d=2)} |perr|={float(perr.norm()):.4f}"
-                f" |rot_err|={float(qe.norm()):.4f} finger_q={_fmt(robot.data.joint_pos.torch[0, 7:9], d=4)}"
-                f" finger_tgt={_fmt(robot.data.joint_pos_target.torch[0, 7:9], d=4)}"
+                f" |rot_err|={float(qe.norm()):.4f} finger_q={_fmt(robot.data.joint_pos.torch[0, 7:], d=4)}"
+                f" finger_tgt={_fmt(robot.data.joint_pos_target.torch[0, 7:], d=4)}"
             )
     if args_cli.stale_check:
-        from uwlab_assets.robots.unitree_g1d_dex1 import kinematics as kin
+        kin = _kinematics_module(args_cli.task)
 
         arm = env.action_manager.get_term("arm")
         jid = arm._joint_ids
@@ -370,6 +370,21 @@ def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: object):
 # ===============
 # Private Helpers
 # ===============
+
+
+def _kinematics_module(task: str):
+    """The analytical-kinematics module of the robot a task id names.
+
+    Args:
+        task: Registered task id (``OmniReset-G1Dex3-...`` or ``OmniReset-G1dDex1-...``).
+
+    Returns:
+        ``uwlab_assets.robots.<robot>.kinematics`` of that robot.
+    """
+    import importlib
+
+    package = "unitree_g1_dex3" if "G1Dex3" in task else "unitree_g1d_dex1"
+    return importlib.import_module(f"uwlab_assets.robots.{package}.kinematics")
 
 
 def _fmt(t: torch.Tensor, n: int = 4, d: int = 3) -> list:
