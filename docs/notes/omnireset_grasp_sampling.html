@@ -1,0 +1,991 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grasp Sampling Explained</title>
+<meta name="description" content="How the OmniReset grasp sampler places a hand on an object, before and after the Dex3 changes.">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
+<style>
+:root {
+  --bg: #fbfaf7;
+  --surface: #ffffff;
+  --ink: #1f2328;
+  --muted: #5b6470;
+  --rule: #e3e0d8;
+  --accent: #1f6f8b;
+  --accent-soft: #e4f1f6;
+  --before: #b5542a;
+  --before-soft: #f8e9e0;
+  --after: #2e7d4f;
+  --after-soft: #e3f2e8;
+  --code-bg: #f1efe9;
+  --object: #c9b48a;
+  --object-edge: #8a7a55;
+  --hand: #6a7fa8;
+  --hand-edge: #3f5380;
+  --ray: #b5542a;
+  --mark: #1f6f8b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15181c;
+    --surface: #1d2127;
+    --ink: #e8e6e1;
+    --muted: #a3aab4;
+    --rule: #30363f;
+    --accent: #6cb6d1;
+    --accent-soft: #1b2f38;
+    --before: #e0906a;
+    --before-soft: #3a2619;
+    --after: #7bc89a;
+    --after-soft: #1b3324;
+    --code-bg: #262b33;
+    --object: #a8946a;
+    --object-edge: #d8c79c;
+    --hand: #7f95c4;
+    --hand-edge: #b6c6ea;
+    --ray: #e0906a;
+    --mark: #6cb6d1;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15181c; --surface: #1d2127; --ink: #e8e6e1; --muted: #a3aab4; --rule: #30363f;
+  --accent: #6cb6d1; --accent-soft: #1b2f38; --before: #e0906a; --before-soft: #3a2619;
+  --after: #7bc89a; --after-soft: #1b3324; --code-bg: #262b33; --object: #a8946a; --object-edge: #d8c79c;
+  --hand: #7f95c4; --hand-edge: #b6c6ea; --ray: #e0906a; --mark: #6cb6d1;
+}
+* { box-sizing: border-box; }
+html { font-size: 17px; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  line-height: 1.6;
+}
+main { max-width: 820px; margin: 0 auto; padding: 48px 16px 96px; }
+header.title { margin-bottom: 40px; }
+header.title h1 { font-size: 2.1rem; line-height: 1.2; margin: 0 0 8px; font-weight: 600; }
+header.title p.sub { margin: 0; color: var(--muted); font-size: 1.05rem; }
+h2 { font-size: 1.45rem; margin: 56px 0 12px; font-weight: 600; line-height: 1.25; }
+h3 { font-size: 1.1rem; margin: 32px 0 8px; font-weight: 600; }
+p { margin: 0 0 16px; }
+code, kbd {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 0.86em;
+  background: var(--code-bg); padding: 1px 5px; border-radius: 4px;
+}
+code.var { color: var(--accent); background: var(--accent-soft); }
+pre {
+  background: var(--code-bg); padding: 14px 16px; border-radius: 8px; overflow-x: auto;
+  font-size: 0.82rem; line-height: 1.5; margin: 0 0 18px;
+}
+pre code { background: none; padding: 0; font-size: inherit; }
+figure { margin: 24px 0 28px; }
+figure svg { width: 100%; height: auto; display: block; }
+figcaption { color: var(--muted); font-size: 0.92rem; margin-top: 8px; line-height: 1.5; }
+.katex-display { margin: 14px 0 18px; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
+.tag {
+  display: inline-block; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.72rem;
+  letter-spacing: 0.04em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; margin-right: 6px;
+  vertical-align: middle;
+}
+.tag.before { background: var(--before-soft); color: var(--before); }
+.tag.after { background: var(--after-soft); color: var(--after); }
+.callout {
+  border-left: 3px solid var(--accent); background: var(--surface); padding: 12px 16px; margin: 20px 0;
+  border-radius: 0 8px 8px 0;
+}
+.callout.before { border-color: var(--before); }
+.callout.after { border-color: var(--after); }
+.callout p:last-child { margin-bottom: 0; }
+.warning {
+  display: flex; gap: 12px; align-items: flex-start;
+  border: 1px solid var(--before); background: var(--before-soft); color: var(--ink);
+  padding: 12px 14px; margin: 12px 0 16px; border-radius: 8px; font-size: 0.95rem;
+}
+.warning .icon { flex: 0 0 auto; width: 22px; height: 22px; margin-top: 2px; }
+.warning strong { color: var(--before); }
+.warning p { margin: 0 0 6px; }
+.warning p:last-child { margin-bottom: 0; }
+.example {
+  border: 1px solid var(--rule); background: var(--surface); border-radius: 8px;
+  padding: 12px 14px; margin: 14px 0 4px; font-size: 0.95rem;
+}
+.example p { margin: 0 0 8px; }
+.example p:last-child { margin-bottom: 0; }
+.example strong { color: var(--accent); }
+table.compact { margin: 6px 0 10px; font-size: 0.88rem; }
+table.compact th, table.compact td { padding: 5px 8px; }
+table { border-collapse: collapse; width: 100%; margin: 12px 0 24px; font-size: 0.92rem; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 0.82rem; letter-spacing: 0.03em; text-transform: uppercase; }
+.steps { counter-reset: step; padding: 0; margin: 0 0 20px; list-style: none; }
+.steps > li { position: relative; padding-left: 44px; margin-bottom: 22px; }
+.steps > li::before {
+  counter-increment: step; content: counter(step);
+  position: absolute; left: 0; top: 2px; width: 30px; height: 30px; border-radius: 50%;
+  background: var(--accent); color: #fff; font-weight: 700; font-size: 0.9rem;
+  display: flex; align-items: center; justify-content: center; font-family: system-ui, sans-serif;
+}
+.steps > li > strong { display: block; margin-bottom: 4px; }
+nav.toc { background: var(--surface); border: 1px solid var(--rule); border-radius: 10px; padding: 16px 20px; }
+nav.toc ol { margin: 8px 0 0; padding-left: 22px; }
+nav.toc li { margin: 3px 0; }
+a { color: var(--accent); }
+.svg-text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 13px; fill: var(--ink); }
+.svg-small { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; font-size: 11.5px; fill: var(--muted); }
+.svg-math { font-family: Georgia, serif; font-style: italic; font-size: 14px; fill: var(--ink); }
+.theme-switch {
+  position: fixed; top: 14px; right: 14px; z-index: 10;
+  display: inline-flex; gap: 2px; padding: 3px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--rule); box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.theme-switch button {
+  border: 0; background: transparent; color: var(--muted); cursor: pointer;
+  font-size: 0.78rem; padding: 5px 11px; border-radius: 999px; line-height: 1;
+}
+.theme-switch button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.theme-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+@media (max-width: 600px) { html { font-size: 16px; } h2 { margin-top: 44px; } .theme-switch { top: 8px; right: 8px; } }
+</style>
+<script>
+  // apply the remembered theme before the first paint, so the page does not flash
+  try {
+    var t = localStorage.getItem("grasp-sampling-theme");
+    if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+  } catch (e) {}
+</script>
+</head>
+<body>
+<div class="theme-switch" role="group" aria-label="Colour theme">
+  <button type="button" data-theme-choice="system">System</button>
+  <button type="button" data-theme-choice="light">Light</button>
+  <button type="button" data-theme-choice="dark">Dark</button>
+</div>
+<main>
+
+<header class="title">
+  <h1>How the OmniReset grasp sampler places a hand on an object</h1>
+  <p class="sub">A step by step walk through the antipodal sampler as it was, the reasons it fell short for the Dex3 hand and the big peg, and the fixed and nominal grasps that were added. Every symbol in the formulas is tied to the variable that holds it in <code>mdp/events.py</code>.</p>
+</header>
+
+<nav class="toc">
+  <strong>Contents</strong>
+  <ol>
+    <li><a href="#purpose">What the sampler is for</a></li>
+    <li><a href="#frames">The frames and the numbers each hand brings</a></li>
+    <li><a href="#antipodal">The original sampler, one step at a time</a></li>
+    <li><a href="#limits">Three things the original sampler could not do</a></li>
+    <li><a href="#scale">Change one: the mesh takes the spawn scale</a></li>
+    <li><a href="#lateral">Change two: a pinch point beside the approach line</a></li>
+    <li><a href="#nominal">Change three: a sampler that starts from grasps written by hand</a></li>
+    <li><a href="#precedence">How the three sources fit together</a></li>
+    <li><a href="#after">From a candidate to a recorded grasp</a></li>
+    <li><a href="#glossary">Glossary of symbols and variables</a></li>
+  </ol>
+</nav>
+
+<!-- ============================================================================================== -->
+<h2 id="purpose">1. What the sampler is for</h2>
+
+<p>The reset-state datasets of OmniReset need grasps that are known to hold. The grasp-sampling task produces them. It spawns a floating hand and one object in each of thousands of environments, places the open hand at a candidate pose around the object, closes it, lets physics settle, pokes the object a little, and finally asks whether the object is still in the hand. The poses that pass are written to <code>Grasps/&lt;object&gt;/grasps.pt</code> as the pose of the gripper body expressed in the object frame, together with the finger joint positions at that moment.</p>
+
+<p>The part this page explains is the first box of that pipeline, the one that decides where the open hand is placed. It lives in the event term <code class="var">grasp_sampling_event</code> in <code>mdp/events.py</code>. It computes a list of candidate poses once, when the first reset happens, and then every reset draws one candidate per environment at random from that list.</p>
+
+<figure>
+<svg viewBox="0 0 820 150" role="img" aria-label="Pipeline from candidate generation to a recorded grasp">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/>
+    </marker>
+    <marker id="arr-ray" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--ray)"/>
+    </marker>
+    <marker id="arr-mark" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--mark)"/>
+    </marker>
+    <marker id="arr-hand" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--hand-edge)"/>
+    </marker>
+  </defs>
+  <g class="svg-text" text-anchor="middle">
+    <rect x="8" y="30" width="150" height="70" rx="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+    <text x="83" y="58">candidate poses</text>
+    <text x="83" y="78" class="svg-small">once, object frame</text>
+    <rect x="188" y="30" width="120" height="70" rx="10" fill="var(--surface)" stroke="var(--rule)"/>
+    <text x="248" y="58">pick one</text>
+    <text x="248" y="78" class="svg-small">per env, per reset</text>
+    <rect x="338" y="30" width="120" height="70" rx="10" fill="var(--surface)" stroke="var(--rule)"/>
+    <text x="398" y="58">place hand</text>
+    <text x="398" y="78" class="svg-small">world frame</text>
+    <rect x="488" y="30" width="120" height="70" rx="10" fill="var(--surface)" stroke="var(--rule)"/>
+    <text x="548" y="58">close, settle, poke</text>
+    <text x="548" y="78" class="svg-small">4 s episode</text>
+    <rect x="638" y="30" width="174" height="70" rx="10" fill="var(--surface)" stroke="var(--rule)"/>
+    <text x="725" y="58">judge and record</text>
+    <text x="725" y="78" class="svg-small">check<tspan dy="4" font-size="75%">grasp</tspan><tspan dy="-4"></tspan>_success</text>
+    <line x1="158" y1="65" x2="186" y2="65" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arr)"/>
+    <line x1="308" y1="65" x2="336" y2="65" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arr)"/>
+    <line x1="458" y1="65" x2="486" y2="65" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arr)"/>
+    <line x1="608" y1="65" x2="636" y2="65" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arr)"/>
+    <text x="83" y="130" class="svg-small">this page</text>
+    <text x="548" y="130" class="svg-small">section 9</text>
+  </g>
+</svg>
+<figcaption>The grasp-sampling episode. Candidate generation runs once and is the subject of sections 3 to 8. The judging step is summarised in section 9.</figcaption>
+</figure>
+
+<!-- ============================================================================================== -->
+<h2 id="frames">2. The frames and the numbers each hand brings</h2>
+
+<p>Two frames matter. The <em>object frame</em> \(O\) is attached to the object's root prim. For the peg its origin is at the centre of the block and \(z\) points along the long axis, so a standing peg has \(z\) pointing up. Every candidate pose is expressed in this frame, which is why a recorded grasp stays valid wherever the object later lies. The <em>gripper frame</em> \(G\) is the frame of the rigid body that the sampler moves. For the Robotiq it is the base link, for the Dex1 the gripper base and for the Dex3 the palm link <code>right_hand_palm_link</code>. A candidate is the homogeneous transform</p>
+
+\[ {}^{O}\mathbf{T}_{G} = \begin{bmatrix} \mathbf{R} &amp; \mathbf{t} \\ \mathbf{0}^\top &amp; 1 \end{bmatrix}, \]
+
+<p>which maps a point written in the gripper frame to the same point written in the object frame. In the code one candidate is a 4 by 4 NumPy array, and the whole list is stacked into the tensor <code class="var">self.grasp_candidates</code>.</p>
+
+<p>The sampler does not know what a hand looks like. It reads a handful of numbers from the <code>metadata.yaml</code> next to the hand's USD file, through <code>utils.read_metadata_from_usd_directory</code>. These are the numbers and the symbols this page uses for them.</p>
+
+<table>
+<thead><tr><th>Symbol</th><th>Meaning</th><th>Metadata key and attribute</th><th>Dex1</th><th>Dex3</th></tr></thead>
+<tbody>
+<tr><td>\(\hat{\mathbf{a}}\)</td><td>Approach direction, in \(G\). The hand moves along it to reach the object.</td><td><code>gripper_approach_direction</code>, <code class="var">self.gripper_approach_direction</code></td><td>\((1,0,0)\)</td><td>\((0,1,0)\), the palm normal</td></tr>
+<tr><td>\(\hat{\mathbf{g}}\)</td><td>Grasp alignment axis, in \(G\). The sampler lines this axis up with the line between the two contact points.</td><td><code>grasp_align_axis</code>, <code class="var">self.grasp_align_axis</code></td><td>\((1,0,0)\)</td><td>\((0,1,0)\)</td></tr>
+<tr><td>\(\hat{\mathbf{o}}\)</td><td>Orientation sampling axis, in \(G\). The hand is spun about it to enumerate orientations.</td><td><code>orientation_sample_axis</code>, <code class="var">self.orientation_sample_axis</code></td><td>\((1,0,0)\)</td><td>\((0,1,0)\)</td></tr>
+<tr><td>\(f\)</td><td>Finger offset, in metres. The distance from the body origin to the pinch point measured along \(\hat{\mathbf{a}}\).</td><td><code>finger_offset</code>, <code class="var">self.finger_offset</code></td><td>0.12</td><td>0.072</td></tr>
+<tr><td>\(c_f\)</td><td>Finger clearance, in metres. The depth along the approach over which an object ends up held: on the Dex1 the pad length behind the fingertips, on the Dex3 the pocket in front of the palm, measured as 5.0 to 8.5 cm.</td><td><code>finger_clearance</code>, <code class="var">self.finger_clearance</code></td><td>0.066</td><td>0.03</td></tr>
+<tr><td>\(w\)</td><td>Maximum aperture, in metres. The widest span the fingers can take.</td><td><code>maximum_aperture</code>, <code class="var">self.gripper_maximum_aperture</code></td><td>0.0948</td><td>0.09</td></tr>
+<tr><td>\(\mathbf{p}\)</td><td>Pinch point, in \(G\). Where the fingertips meet when the hand closes on nothing.</td><td><code>gripper_offset.pos</code>, read into the local <code>pinch</code></td><td>\((0.12,0,0)\)</td><td>\((0.098,0.072,0)\)</td></tr>
+</tbody>
+</table>
+
+<p>Notice that for every hand in the repository the three axes \(\hat{\mathbf{a}}\), \(\hat{\mathbf{g}}\) and \(\hat{\mathbf{o}}\) are the same vector. That coincidence shapes what the original sampler can and cannot do, and section 4 comes back to it. Notice also where the pinch point sits. For the Dex1 it lies on the approach line, \(\mathbf{p} = f\hat{\mathbf{a}}\). For the Dex3 it does not. The thumb and the two fingertips meet 7.2 cm in front of the palm along the palm normal, which is \(f\), but also 9.8 cm along the palm's \(x\) axis, out where the fingers are. The sampler splits the pinch point into the part along the approach and the part across it,</p>
+
+\[ \mathbf{p}_{\perp} \;=\; \mathbf{p} - (\mathbf{p}\cdot\hat{\mathbf{a}})\,\hat{\mathbf{a}}, \]
+
+<p>which is <code class="var">self.pinch_lateral_offset</code>. It is the zero vector for the Robotiq and the Dex1 and \((0.098, 0, 0)\) for the Dex3.</p>
+
+<figure>
+<svg viewBox="0 0 820 360" role="img" aria-label="Every metadata quantity drawn on the Dex1 and the Dex3, to scale, with the body origin">
+  <g class="svg-text">
+    <!-- ============================== Dex1 ============================== -->
+    <text x="20" y="24" font-weight="600">Dex1</text>
+    <text x="62" y="24" class="svg-small">(the Robotiq has the same layout)</text>
+    <!-- base: 5.4 cm from the body origin to the finger root -->
+    <rect x="60" y="95" width="81" height="170" rx="6" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1.5"/>
+    <text x="100" y="250" text-anchor="middle" class="svg-small" fill="#fff" opacity="0.9">base</text>
+    <!-- fingers: 6.6 cm of pad, the whole finger grips -->
+    <rect x="141" y="97" width="99" height="12" rx="3" fill="var(--hand-edge)" stroke="var(--hand-edge)" stroke-width="1.2"/>
+    <rect x="141" y="251" width="99" height="12" rx="3" fill="var(--hand-edge)" stroke="var(--hand-edge)" stroke-width="1.2"/>
+    <text x="190" y="90" text-anchor="middle" class="svg-small">finger pad</text>
+    <!-- approach -->
+    <line x1="60" y1="180" x2="300" y2="180" stroke="var(--hand-edge)" stroke-width="2" marker-end="url(#arr-hand)"/>
+    <text x="150" y="170" class="svg-math">â = ĝ = ô</text>
+    <!-- spin -->
+    <path d="M 294 162 a 7 18 0 1 0 0 36" fill="none" stroke="var(--mark)" stroke-width="1.5" marker-end="url(#arr-mark)"/>
+    <text x="306" y="210" class="svg-math">θ</text>
+    <text x="320" y="210" class="svg-small">spin about ô</text>
+    <!-- origin with its triad -->
+    <line x1="60" y1="180" x2="96" y2="180" stroke="var(--ink)" stroke-width="2" marker-end="url(#arr)"/>
+    <text x="80" y="198" class="svg-math">x<tspan dy="4" font-size="75%">G</tspan><tspan dy="-4"></tspan></text>
+    <line x1="60" y1="180" x2="60" y2="144" stroke="var(--ink)" stroke-width="2" marker-end="url(#arr)"/>
+    <text x="40" y="140" class="svg-math">z<tspan dy="4" font-size="75%">G</tspan><tspan dy="-4"></tspan></text>
+    <circle cx="60" cy="180" r="5.5" fill="var(--bg)" stroke="var(--ink)" stroke-width="1.4"/>
+    <line x1="56" y1="176" x2="64" y2="184" stroke="var(--ink)" stroke-width="1.3"/>
+    <line x1="64" y1="176" x2="56" y2="184" stroke="var(--ink)" stroke-width="1.3"/>
+    <text x="18" y="184" class="svg-math">y<tspan dy="4" font-size="75%">G</tspan><tspan dy="-4"></tspan></text>
+    <text x="20" y="64" class="svg-small">G is the body origin,</text>
+    <text x="20" y="78" class="svg-small">at the back of the base</text>
+    <!-- pinch point -->
+    <circle cx="240" cy="180" r="5" fill="var(--mark)"/>
+    <text x="246" y="162" class="svg-math">p</text>
+    <!-- f dimension from the origin -->
+    <line x1="60" y1="268" x2="60" y2="302" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <line x1="240" y1="186" x2="240" y2="302" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <path d="M60 300 L240 300" stroke="var(--muted)" stroke-width="1" marker-start="url(#arr)" marker-end="url(#arr)"/>
+    <text x="150" y="318" text-anchor="middle" class="svg-math">f = 0.12</text>
+    <!-- c_f dimension: the whole finger -->
+    <line x1="141" y1="93" x2="141" y2="60" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <line x1="240" y1="95" x2="240" y2="60" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <path d="M141 62 L240 62" stroke="var(--muted)" stroke-width="1" marker-start="url(#arr)" marker-end="url(#arr)"/>
+    <text x="190" y="54" text-anchor="middle" class="svg-math">c<tspan dy="4" font-size="75%">f</tspan><tspan dy="-4"></tspan> = 0.066</text>
+    <!-- w dimension -->
+    <line x1="242" y1="109" x2="272" y2="109" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <line x1="242" y1="251" x2="272" y2="251" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <path d="M268 109 L268 251" stroke="var(--muted)" stroke-width="1" marker-start="url(#arr)" marker-end="url(#arr)"/>
+    <text x="276" y="140" class="svg-math">w = 0.0948</text>
+    <text x="20" y="346" class="svg-small">f = 5.4 cm of base + 6.6 cm of finger. p = (0.12, 0, 0) = f â, so p⊥ = 0.</text>
+
+    <!-- ============================== Dex3 ============================== -->
+    <text x="450" y="24" font-weight="600">Dex3</text>
+    <!-- palm -->
+    <rect x="448" y="40" width="32" height="215" rx="8" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1.5"/>
+    <text x="464" y="150" text-anchor="middle" class="svg-small" fill="#fff" opacity="0.9" transform="rotate(-90 464 150)">palm</text>
+    <!-- fingers: proximal segment out of the palm, distal pad parallel to the approach -->
+    <path d="M480 52 L555 30" fill="none" stroke="var(--hand)" stroke-width="10" stroke-linecap="round"/>
+    <path d="M555 30 L607 30" fill="none" stroke="var(--hand-edge)" stroke-width="10" stroke-linecap="round"/>
+    <path d="M480 70 L555 48" fill="none" stroke="var(--hand)" stroke-width="10" stroke-linecap="round" opacity="0.6"/>
+    <path d="M555 48 L607 48" fill="none" stroke="var(--hand-edge)" stroke-width="10" stroke-linecap="round" opacity="0.6"/>
+    <!-- thumb -->
+    <path d="M480 226 L555 165" fill="none" stroke="var(--hand)" stroke-width="11" stroke-linecap="round"/>
+    <path d="M555 165 L607 165" fill="none" stroke="var(--hand-edge)" stroke-width="11" stroke-linecap="round"/>
+    <text x="492" y="108" class="svg-small">dark: the pocket</text>
+    <!-- approach -->
+    <line x1="480" y1="244" x2="606" y2="244" stroke="var(--hand-edge)" stroke-width="2" marker-end="url(#arr-hand)"/>
+    <text x="522" y="234" class="svg-math">â = ĝ = ô</text>
+    <!-- spin -->
+    <path d="M 598 230 a 6 14 0 1 0 0 28" fill="none" stroke="var(--mark)" stroke-width="1.5" marker-end="url(#arr-mark)"/>
+    <text x="604" y="276" class="svg-math">θ</text>
+    <!-- origin with its triad -->
+    <line x1="480" y1="244" x2="516" y2="244" stroke="var(--ink)" stroke-width="2" marker-end="url(#arr)"/>
+    <text x="498" y="262" class="svg-math">y<tspan dy="4" font-size="75%">G</tspan><tspan dy="-4"></tspan></text>
+    <line x1="480" y1="244" x2="480" y2="208" stroke="var(--ink)" stroke-width="2" marker-end="url(#arr)"/>
+    <text x="486" y="206" class="svg-math">x<tspan dy="4" font-size="75%">G</tspan><tspan dy="-4"></tspan></text>
+    <circle cx="480" cy="244" r="5.5" fill="var(--bg)" stroke="var(--ink)" stroke-width="1.4"/>
+    <line x1="476" y1="240" x2="484" y2="248" stroke="var(--ink)" stroke-width="1.3"/>
+    <line x1="484" y1="240" x2="476" y2="248" stroke="var(--ink)" stroke-width="1.3"/>
+    <text x="440" y="266" class="svg-math">z<tspan dy="4" font-size="75%">G</tspan><tspan dy="-4"></tspan></text>
+    <text x="410" y="290" class="svg-small">G is the palm link origin,</text>
+    <text x="410" y="304" class="svg-small">at the wrist end of the palm</text>
+    <!-- decomposition of p -->
+    <circle cx="588" cy="244" r="3" fill="var(--mark)"/>
+    <line x1="588" y1="244" x2="588" y2="102" stroke="var(--mark)" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <circle cx="588" cy="97" r="5" fill="var(--mark)"/>
+    <text x="596" y="92" class="svg-math">p</text>
+    <!-- f dimension -->
+    <line x1="480" y1="250" x2="480" y2="334" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <line x1="588" y1="250" x2="588" y2="334" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <path d="M480 332 L588 332" stroke="var(--muted)" stroke-width="1" marker-start="url(#arr)" marker-end="url(#arr)"/>
+    <text x="534" y="350" text-anchor="middle" class="svg-math">f = 0.072</text>
+    <!-- p_perp dimension -->
+    <line x1="594" y1="97" x2="636" y2="97" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <line x1="612" y1="244" x2="636" y2="244" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <path d="M632 244 L632 97" stroke="var(--muted)" stroke-width="1" marker-start="url(#arr)" marker-end="url(#arr)"/>
+    <text x="640" y="150" class="svg-math">p⊥ = 0.098</text>
+    <!-- w dimension -->
+    <line x1="614" y1="30" x2="706" y2="30" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <line x1="614" y1="165" x2="706" y2="165" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <path d="M702 30 L702 165" stroke="var(--muted)" stroke-width="1" marker-start="url(#arr)" marker-end="url(#arr)"/>
+    <text x="696" y="112" text-anchor="end" class="svg-math">w = 0.09</text>
+    <!-- c_f dimension: the distal pad, measured along the approach -->
+    <line x1="555" y1="24" x2="555" y2="8" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <line x1="607" y1="24" x2="607" y2="8" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <path d="M555 10 L607 10" stroke="var(--muted)" stroke-width="1" marker-start="url(#arr)" marker-end="url(#arr)"/>
+    <text x="614" y="14" class="svg-math">c<tspan dy="4" font-size="75%">f</tspan><tspan dy="-4"></tspan> = 0.03</text>
+    <text x="680" y="14" class="svg-small">(pocket 0.05 to 0.085)</text>
+    <text x="640" y="196" class="svg-small">p = (0.098, 0.072, 0)</text>
+    <text x="640" y="211" class="svg-small">= f â + p⊥</text>
+  </g>
+</svg>
+<figcaption>Every quantity of the table drawn on the two hands, to scale at 15 pixels per centimetre, with the body origin \(G\) and its axes drawn where they really are. Both frames are right-handed, so the third axis points into the page, which the circled cross marks. The finger offset \(f\) is measured from \(G\) along the approach to the pinch point \(\mathbf{p}\). On the Dex1 that distance is the base plus the finger, and only the finger, the dark bars, can close on something, so the clearance \(c_f\) is the finger length. On the Dex3 the origin is the palm link's, and the dark segments mark the pocket in front of the palm's thumb edge, measured on the meshes to run from 5.0 to 8.5 cm along the approach, inside which the closing hand traps an object. The pinch point lies inside that pocket, 7.2 cm out, and the clearance \(c_f\) is the pocket's depth rounded to 3 cm. The aperture \(w\) is the open span between the pads, measured across the approach. The Dex3 pinch point also sits \(\mathbf{p}_\perp\) beside the approach line, along the palm's \(x\) axis, which the dashed teal line shows.</figcaption>
+</figure>
+
+<p>Besides the metadata, the event takes a few knobs from its configuration in <code>config/ur5e_robotiq_2f85/grasp_sampling_cfg.py</code>. The budget \(N_c\) is <code class="var">num_candidates</code> and is one million by default. The number of spins \(N_o\) is <code class="var">num_orientations</code>, sixteen by default. The number of standoff distances \(N_s\) is <code class="var">num_standoff_samples</code>, thirty two by default. The lateral jitter \(\sigma_\ell\) is <code class="var">lateral_sigma</code> and is zero by default, and the top-bias share \(\beta\) is <code class="var">top_bias_fraction</code>, one by default and one half for the Dex3.</p>
+
+<!-- ============================================================================================== -->
+<h2 id="antipodal">3. The original sampler, one step at a time</h2>
+
+<p><span class="tag before">before</span> Until these changes there was only one way to make candidates, the antipodal sampler in <code class="var">_sample_antipodal_grasps</code>. It is still there and it is still the fallback. The idea is old and simple. Pick a point on the surface, shoot a ray straight into the object, and wherever the ray comes out the other side you have a pair of opposite points that two fingers could squeeze between. Here is the procedure in the order the code runs it.</p>
+
+<ol class="steps">
+<li>
+<strong>Decide how many surface points to try.</strong>
+Every surface point will later be expanded into \(N_o \times N_s\) poses, so the number of surface points that fits the budget is
+\[ N_{\text{surf}} = \left\lfloor \frac{N_c}{N_o\,N_s} \right\rfloor, \]
+which is the local <code>num_surface_samples</code>. With the defaults that is \(10^6 / (16 \times 32) = 1953\) points.
+</li>
+
+<li>
+<strong>Sample the surface with a bias toward the top.</strong>
+The mesh is sampled ten times over, \(10\,N_{\text{surf}}\) points \(\mathbf{x}_i\) with the normals \(\hat{\mathbf{n}}_i\) of the faces they were drawn from, by <code>mesh.sample</code>. Each point gets a score with two parts,
+\[ \text{score}_i = \underbrace{\frac{z_i - z_{\min}}{z_{\max} - z_{\min}}}_{\text{high for points near the top}} \;+\; \underbrace{\max(n_{z,i},\,0)}_{\text{high for faces that look up}}, \]
+the array <code>top_bias_scores</code>. Here \(z_i\) is the height of the point in the object frame, \(z_{\min}\) and \(z_{\max}\) are the lowest and highest of the \(10\,N_{\text{surf}}\) sampled heights, and \(n_{z,i}\) is the \(z\) component of the face normal. The first part says where the point is, the second which way the surface faces there, so a point on the top face of the standing peg scores close to two while a point on a side face just below the top edge scores close to one. Up means the object's own \(z\), which is up only because the scene spawns the object at the identity orientation.
+The \(\lceil \beta N_{\text{surf}} \rceil\) best scoring points are kept, and the remaining \(N_{\text{surf}} - \lceil \beta N_{\text{surf}} \rceil\) are drawn uniformly from the rest. With \(\beta = 1\) every kept point is near the top of the object. The Dex3 configuration uses \(\beta = 0.5\) so that a lying peg, which can only be held across its diameter from above, also gets side points.
+</li>
+
+<li>
+<strong>Find the opposite point.</strong>
+From each kept point a ray is cast inward along \(-\hat{\mathbf{n}}_i\) with <code>mesh.ray.intersects_location</code>. Of all the hits, the furthest one that is still within the aperture is taken,
+\[ \mathbf{y}_i = \arg\max_{\mathbf{h}\in\text{hits}_i}\; \lVert \mathbf{h} - \mathbf{x}_i \rVert \quad\text{subject to}\quad \lVert \mathbf{h} - \mathbf{x}_i \rVert \le w, \]
+the local <code>opposing_point</code>. If no hit is within \(w\) the point is dropped.
+<div class="warning" role="note">
+  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 L22 20 L2 20 Z" fill="none" stroke="var(--before)" stroke-width="1.8" stroke-linejoin="round"/><line x1="12" y1="9" x2="12" y2="14.5" stroke="var(--before)" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="17.3" r="1.1" fill="var(--before)"/></svg>
+  <div>
+    <p><strong>This test checks the wrong length.</strong> It compares the aperture with how far the ray travels through the object. For the hands in this repository the hand later approaches along that same ray, so the length being checked is how deep the object is in front of the palm, not how wide it is between the fingers. On the standing big peg a ray from the top travels 12 cm, more than the 9 cm aperture, and the top approach is thrown away even though the 6 cm wide peg fits between the fingers.</p>
+    <p>The nominal grasp sampler of section 7 does not use the ray at all, so it is not affected. Section 4 shows the consequence in a diagram.</p>
+  </div>
+</div> The grasp axis and its length are
+\[ \ell_i = \lVert \mathbf{y}_i - \mathbf{x}_i \rVert, \qquad \hat{\mathbf{u}}_i = \frac{\mathbf{y}_i - \mathbf{x}_i}{\ell_i}, \]
+the locals <code>axis_length</code> and <code>grasp_axis</code>.
+</li>
+
+<li>
+<strong>Place the grasp centre on that axis.</strong>
+With the default <code>lateral_sigma</code> of zero, \(\rho_i\) is one half, so the grasp centre is the midpoint between the surface point and the opposite hit. For a point on the top face of a standing peg that puts the centre halfway down the peg, inside the solid. When \(\sigma_\ell &gt; 0\) the centre slides along the axis by a truncated normal draw \(\rho_i\) that stays between the two surface points,
+\[ \mathbf{c}_i = \mathbf{x}_i + \rho_i\,\ell_i\,\hat{\mathbf{u}}_i, \qquad \rho_i \sim \mathcal{N}_{[0,1]}\!\left(\tfrac{1}{2},\, \tfrac{\sigma_\ell}{\ell_i}\right), \]
+and \(\rho_i = \tfrac{1}{2}\) when \(\sigma_\ell = 0\). This is <code>grasp_center</code>.
+</li>
+
+<li>
+<strong>Orient the hand.</strong>
+The hand's alignment axis \(\hat{\mathbf{g}}\) is rotated onto the grasp axis \(\hat{\mathbf{u}}_i\) by the smallest rotation that does so, which <code>trimesh.geometry.align_vectors</code> computes and the code calls <code>align_matrix</code>,
+\[ \mathbf{R}_{\text{align},i} = \operatorname{Align}(\hat{\mathbf{g}} \to \hat{\mathbf{u}}_i). \]
+That fixes one axis of the hand and leaves it free to spin about that axis. The spin is enumerated,
+\[ \theta_k = -\pi + \frac{2\pi k}{N_o - 1}, \quad k = 0,\dots,N_o - 1, \qquad \mathbf{R}_{\text{spin}}(\theta_k) = \operatorname{Rot}(\hat{\mathbf{o}},\,\theta_k), \]
+the local <code>orient_tf_rot</code>, built from <code>rotation_angles</code>.
+</li>
+
+<li>
+<strong>Enumerate how far back the hand stands.</strong>
+The standoff \(s\) is the distance from the body origin to the pinch point along the approach. It starts at the finger offset, where the fingertips would close exactly on the centre, and grows until the hand is an object diagonal plus half the clearance further away,
+\[ s_j \in \operatorname{linspace}\!\left(f,\; f + d + \tfrac{c_f}{2},\; N_s\right), \qquad d = \lVert \text{mesh.extents} \rVert, \]
+the tensor <code>standoff_distances</code>. Here \(d\) is the diagonal of the object's bounding box, <code>mesh_diagonal</code>, about 14.7 cm for the big peg. The upper bound is only a generous limit that grows with the object. It has no derivation behind it, and the larger standoffs are mostly wasted, but they cost nothing to try.
+</li>
+
+<li>
+<strong>Compose the pose.</strong>
+For every combination of point, spin and standoff one transform is built,
+\[ {}^{O}\mathbf{T}_{G} = \operatorname{Trans}(\mathbf{c}_i)\;\mathbf{R}_{\text{align},i}\;\mathbf{R}_{\text{spin}}(\theta_k)\;\operatorname{Trans}(-\,s_j\,\hat{\mathbf{a}}). \]
+Read it from the right. The hand frame is first pulled back by \(s_j\) along its own approach axis, so that the point \(s_j\hat{\mathbf{a}}\) of the hand sits at the origin. It is then spun, aligned and finally carried to the grasp centre. The point of the hand that ends up at \(\mathbf{c}_i\) is therefore \(s_j\hat{\mathbf{a}}\), which for \(s_j = f\) is the pinch point of a hand whose pinch point is on the approach line. In the code this is the product <code>center_transform @ align_matrix @ orient_tf_rot @ standoff_transform</code>, and each result is appended to <code>grasp_transforms</code>.
+
+<div class="example">
+  <p><strong>Example: the Dex1 on the big peg, from the top.</strong> Suppose the sampled point is on the top face, so the grasp centre is 6 cm below it, halfway down the peg. The standoff then decides how deep the peg sits between the fingers.</p>
+  <table class="compact">
+    <thead><tr><th>Standoff</th><th>Fingertips</th><th>Pad on the peg</th><th>Result</th></tr></thead>
+    <tbody>
+      <tr><td>\(s = f\)</td><td>at the centre, 6 cm below the top</td><td>6 cm, the front of the base 6 mm above the top</td><td>deepest possible hold</td></tr>
+      <tr><td>\(s = f + 3\,\text{cm}\)</td><td>3 cm below the top</td><td>3 cm</td><td>a hold</td></tr>
+      <tr><td>\(s = f + 5.4\,\text{cm}\)</td><td>6 mm below the top</td><td>6 mm</td><td>the shallowest hold</td></tr>
+      <tr><td>\(s &gt; f + 6\,\text{cm}\)</td><td>above the top face</td><td>none</td><td>the fingers close on air</td></tr>
+    </tbody>
+  </table>
+  <p>Pulling the hand back by \(s - f\) therefore moves the fingertips up the peg, and the window of useful standoffs is the top 6 cm. In the antipodal sampler this top point never reaches step 7 on the big peg, since step 3 rejects it, but the fixed and nominal samplers build exactly this kind of pose.</p>
+</div>
+</li>
+</ol>
+
+<figure>
+<svg viewBox="0 0 820 330" role="img" aria-label="Antipodal sampling on a peg cross section">
+  <g class="svg-text">
+    <!-- object -->
+    <rect x="300" y="60" width="120" height="240" fill="var(--object)" stroke="var(--object-edge)" stroke-width="1.5"/>
+    <text x="360" y="320" text-anchor="middle" class="svg-small">object, frame O</text>
+    <!-- surface point and normal -->
+    <circle cx="300" cy="150" r="5" fill="var(--ray)"/>
+    <text x="268" y="140" class="svg-math">x</text>
+    <line x1="300" y1="150" x2="240" y2="150" stroke="var(--ray)" stroke-width="1.5" marker-end="url(#arr-ray)"/>
+    <text x="222" y="155" class="svg-math">n̂</text>
+    <!-- ray -->
+    <line x1="300" y1="150" x2="420" y2="150" stroke="var(--ray)" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arr-ray)"/>
+    <text x="330" y="140" class="svg-small">ray along −n̂</text>
+    <circle cx="420" cy="150" r="5" fill="var(--ray)"/>
+    <text x="430" y="140" class="svg-math">y</text>
+    <!-- grasp axis -->
+    <path d="M300 180 L420 180" stroke="var(--mark)" stroke-width="1.5" marker-start="url(#arr-mark)" marker-end="url(#arr-mark)"/>
+    <text x="360" y="200" text-anchor="middle" class="svg-math">ℓ ≤ w</text>
+    <!-- centre -->
+    <circle cx="360" cy="150" r="5" fill="var(--mark)"/>
+    <text x="352" y="172" class="svg-math">c</text>
+    <!-- hand, lying along the axis at the left -->
+    <g opacity="0.95">
+      <rect x="60" y="222" width="60" height="70" rx="6" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1.5"/>
+      <rect x="120" y="228" width="80" height="12" rx="3" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1.2"/>
+      <rect x="120" y="274" width="80" height="12" rx="3" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1.2"/>
+      <circle cx="90" cy="257" r="4" fill="var(--ink)"/>
+      <text x="84" y="310" class="svg-math">G</text>
+      <line x1="90" y1="257" x2="250" y2="257" stroke="var(--hand-edge)" stroke-width="1.8" marker-end="url(#arr-hand)"/>
+      <text x="255" y="262" class="svg-math">â = ĝ = ô</text>
+      <path d="M90 215 L200 215" stroke="var(--muted)" stroke-width="1" marker-start="url(#arr)" marker-end="url(#arr)"/>
+      <text x="145" y="208" text-anchor="middle" class="svg-math">s</text>
+    </g>
+    <!-- arrow from hand to its place -->
+    <path d="M200 257 C 260 257, 260 150, 300 150" fill="none" stroke="var(--muted)" stroke-width="1" stroke-dasharray="2 3"/>
+    <text x="40" y="40" class="svg-small">The hand is aligned so that ĝ lies along û, spun about ô by θ, and pulled back by s along â.</text>
+    <text x="40" y="58" class="svg-small">Because â = ĝ, the approach direction is the grasp axis itself.</text>
+    <!-- spin arc -->
+    <path d="M 560 150 a 40 40 0 1 1 -0.1 0" fill="none" stroke="var(--mark)" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <line x1="520" y1="150" x2="600" y2="150" stroke="var(--mark)" stroke-width="1.5" marker-end="url(#arr-mark)"/>
+    <text x="560" y="215" text-anchor="middle" class="svg-math">θ about ô</text>
+    <text x="560" y="233" text-anchor="middle" class="svg-small">16 values from −π to π</text>
+    <text x="700" y="150" text-anchor="middle" class="svg-small">× 32 standoffs</text>
+    <text x="700" y="168" text-anchor="middle" class="svg-small">= 512 poses per point</text>
+  </g>
+</svg>
+<figcaption>One surface point \(\mathbf{x}\) produces one grasp axis \(\hat{\mathbf{u}}\) through the opposite point \(\mathbf{y}\), one centre \(\mathbf{c}\), and then \(N_o \times N_s\) poses by spinning the hand about the axis and sliding it back along it.</figcaption>
+</figure>
+
+<div class="callout before">
+<p>Keep one picture in mind. Since \(\hat{\mathbf{a}}\) and \(\hat{\mathbf{g}}\) are the same vector for these hands, aligning \(\hat{\mathbf{g}}\) with the grasp axis means the hand <em>approaches along the line through the two contact points</em>. The direction in which the fingers actually close is then whatever the spin \(\theta_k\) happens to turn it to. The aperture test of step 3 is therefore not a test of how wide the fingers must open. It is a test of how deep the object is along the approach.</p>
+</div>
+
+<!-- ============================================================================================== -->
+<h2 id="limits">4. Three things the original sampler could not do</h2>
+
+<p>Each of these is dealt with by one of the changes that follow. The mesh size is fixed in section 5 and the fingertip offset in section 6. The top approach is handled by the nominal sampler of section 7, which does not use the faulty test at all. That test itself is still in the antipodal branch, so the first problem would come back if that branch were run on a tall object.</p>
+
+<h3>It could not approach a tall object from above</h3>
+
+<p>This one is best described as a bug. A correct antipodal sampler checks the width the fingers have to open to, which is the extent of the object across the direction the fingers close. The test in step 3 instead checks the length of the ray, and because step 5 aligns the approach with that ray, the ray length is the depth of the object in front of the palm. The two lengths agree only when the object is as deep as it is wide. On a tall object approached from above they differ by a lot, and the sampler rejects grasps that the hand could easily make.</p>
+
+<p>Take the big peg standing on the table. It is 6 by 6 by 12 cm. A surface point on its top face has an upward normal, so the inward ray goes straight down through the whole block and comes out 12 cm later at the bottom face. The test \(\ell \le w\) compares 12 cm with the 9 cm aperture of the Dex3 and rejects the point. Every top point fails in the same way, so the sampler offered no approach from above at all. Points on the sides pass, since the ray crosses only 6 cm there, and they give horizontal approaches. For the standing G1 the horizontal approach is the awkward one. The right arm reaches the peg most comfortably coming down on it at about 45 degrees, and that pose simply is not in the candidate set.</p>
+
+<figure>
+<svg viewBox="0 0 820 300" role="img" aria-label="Rays through the big peg from the top and from the side">
+  <g class="svg-text">
+    <rect x="200" y="40" width="120" height="240" fill="var(--object)" stroke="var(--object-edge)" stroke-width="1.5"/>
+    <text x="260" y="25" text-anchor="middle" class="svg-small">big peg, 6 × 6 × 12 cm</text>
+    <!-- top ray -->
+    <circle cx="260" cy="40" r="5" fill="var(--ray)"/>
+    <line x1="260" y1="40" x2="260" y2="280" stroke="var(--ray)" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arr-ray)"/>
+    <text x="268" y="160" class="svg-math">ℓ = 12 cm &gt; w</text>
+    <text x="268" y="180" class="svg-small" fill="var(--before)">rejected</text>
+    <!-- side ray -->
+    <circle cx="200" cy="230" r="5" fill="var(--ray)"/>
+    <line x1="200" y1="230" x2="320" y2="230" stroke="var(--ray)" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#arr-ray)"/>
+    <text x="80" y="226" class="svg-math">ℓ = 6 cm ≤ w</text>
+    <text x="110" y="246" class="svg-small" fill="var(--after)">accepted</text>
+    <!-- wanted approach -->
+    <g>
+      <line x1="560" y1="60" x2="470" y2="150" stroke="var(--hand-edge)" stroke-width="2.5" marker-end="url(#arr-hand)"/>
+      <rect x="440" y="150" width="90" height="150" fill="var(--object)" stroke="var(--object-edge)" stroke-width="1.5"/>
+      <text x="575" y="55" class="svg-small">the approach the G1 can reach</text>
+      <text x="575" y="73" class="svg-small">45° from above, not on any</text>
+      <text x="575" y="91" class="svg-small">surface normal's line</text>
+      <path d="M 485 150 a 35 35 0 0 1 25 -25" fill="none" stroke="var(--muted)" stroke-width="1"/>
+      <text x="520" y="140" class="svg-small">45°</text>
+    </g>
+  </g>
+</svg>
+<figcaption>On the standing big peg every top ray is longer than the aperture, so the antipodal sampler only yields horizontal approaches. The oblique approach on the right is not reachable by construction, because the approach always lies along a ray that entered the mesh along a surface normal.</figcaption>
+</figure>
+
+<h3>It put the Dex3's fingertips beside the object</h3>
+
+<p>Step 7 places the point \(s\hat{\mathbf{a}}\) of the hand at the grasp centre. For a hand whose pinch point lies on the approach line that is the right point. For the Dex3 the pinch point is \(\mathbf{p} = (0.098, 0.072, 0)\) in the palm frame while \(s\hat{\mathbf{a}}\) at the first standoff is \((0, 0.072, 0)\). The difference is \(\mathbf{p}_\perp\), 9.8 cm along the palm's \(x\) axis. The original composition therefore put the palm normal through the grasp centre and the thumb and fingertips 9.8 cm away from it, closing on air.</p>
+
+<h3>It grasped the mesh at the wrong size</h3>
+
+<p>The big peg is not a new USD file. It is the peg USD spawned with a scale of two. The sampler extracts the mesh from the USD prim in <code class="var">_extract_mesh_from_asset</code>, and the points it read were the authored ones at 3 by 3 by 6 cm. Every centre and every standoff was computed for a block half the size of the one in the simulation.</p>
+
+<!-- ============================================================================================== -->
+<h2 id="scale">5. Change one: the mesh takes the spawn scale</h2>
+
+<p><span class="tag after">after</span> This is the smallest change. After the mesh is converted to a trimesh, the spawn scale \(\mathbf{k}\) of the object asset is applied to its vertices,</p>
+
+\[ \mathbf{v}' = \operatorname{diag}(\mathbf{k})\,\mathbf{v}, \qquad \mathbf{k} = \texttt{asset.cfg.spawn.scale}, \]
+
+<p>through <code>mesh.apply_scale</code>, and the resulting extents are logged so that a wrong size shows up in the console. For the big peg the log line reads <code>object mesh extents (m) [0.06, 0.06, 0.12]</code>. The dataset folder also carries the scale now, <code>Grasps/Peg_x2</code> instead of <code>Grasps/Peg</code>, through <code>utils.object_dataset_name</code>, so grasps of the two sizes never mix.</p>
+
+<!-- ============================================================================================== -->
+<h2 id="lateral">6. Change two: a pinch point beside the approach line</h2>
+
+<p><span class="tag after">after</span> The fix for the Dex3's fingertips is to pull the hand back by the whole pinch point, not just by its component along the approach. The pinch point at standoff \(s\) is</p>
+
+\[ \mathbf{p}(s) = s\,\hat{\mathbf{a}} + \mathbf{p}_\perp, \]
+
+<p>and the last factor of the composition in step 7 becomes</p>
+
+\[ {}^{O}\mathbf{T}_{G} = \operatorname{Trans}(\mathbf{c}_i)\;\mathbf{R}_{\text{align},i}\;\mathbf{R}_{\text{spin}}(\theta_k)\;\operatorname{Trans}\!\big(-\,\mathbf{p}(s_j)\big). \]
+
+<p>In the code the local <code>standoff_translation</code> is now <code>-(gripper_approach_direction * standoff_dist + self.pinch_lateral_offset)</code>. Written out without the homogeneous matrices, with \(\mathbf{R} = \mathbf{R}_{\text{align}}\mathbf{R}_{\text{spin}}\), the position of the gripper body is</p>
+
+\[ \mathbf{t} = \mathbf{c} - \mathbf{R}\,\mathbf{p}(s), \]
+
+<p>which says exactly what one wants: rotate the pinch point into the object frame and step back from the centre by that much. For the Dex1 and the Robotiq \(\mathbf{p}_\perp = \mathbf{0}\) and the formula is the old one, so their candidates do not move. The same formula is reused by the new samplers below through <code class="var">_body_transforms</code>, which takes a batch of rotations, centres and standoffs and returns the batch of transforms.</p>
+
+<figure>
+<svg viewBox="0 0 820 340" role="img" aria-label="Dex3 placement before and after the lateral offset, seen from above">
+  <g class="svg-text">
+    <!-- ============================== before ============================== -->
+    <text x="20" y="24" font-weight="600" fill="var(--before)">before</text>
+    <text x="80" y="24" class="svg-small">the body steps back by s â only</text>
+    <rect x="250" y="170" width="60" height="60" fill="var(--object)" stroke="var(--object-edge)" stroke-width="1.5"/>
+    <text x="318" y="196" class="svg-small">peg from above,</text>
+    <text x="318" y="211" class="svg-small">6 × 6 cm</text>
+    
+    <!-- before: palm -->
+    <rect x="187" y="64" width="21" height="143" rx="6" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1.5"/>
+    <text x="197.5" y="140" text-anchor="middle" class="svg-small" fill="#fff" opacity="0.9" transform="rotate(-90 197.5 140)">palm</text>
+    <!-- fingers: out of the palm top, then the pocket pads parallel to the approach -->
+    <path d="M208 76 L258 49" fill="none" stroke="var(--hand)" stroke-width="8" stroke-linecap="round" opacity="0.6"/>
+    <path d="M258 49 L293 49" fill="none" stroke="var(--hand-edge)" stroke-width="8" stroke-linecap="round" opacity="0.6"/>
+    <path d="M208 72 L258 57" fill="none" stroke="var(--hand)" stroke-width="8" stroke-linecap="round"/>
+    <path d="M258 57 L293 57" fill="none" stroke="var(--hand-edge)" stroke-width="8" stroke-linecap="round"/>
+    <text x="300" y="53" class="svg-small">fingers</text>
+    <!-- thumb: out of the lower palm, pad parallel to the approach -->
+    <path d="M208 190 L258 147" fill="none" stroke="var(--hand)" stroke-width="9" stroke-linecap="round"/>
+    <path d="M258 147 L293 147" fill="none" stroke="var(--hand-edge)" stroke-width="9" stroke-linecap="round"/>
+    <text x="300" y="151" class="svg-small">thumb</text>
+    <!-- origin and approach -->
+    <circle cx="208" cy="200" r="4" fill="var(--ink)"/>
+    <text x="194" y="218" class="svg-math">G</text>
+    <line x1="208" y1="200" x2="308" y2="200" stroke="var(--hand-edge)" stroke-width="1.8" marker-end="url(#arr-hand)"/>
+    <text x="236" y="218" class="svg-math">s â</text>
+    <circle cx="280" cy="200" r="5" fill="var(--mark)"/>
+    <text x="288" y="222" class="svg-math">c</text>
+    <circle cx="280" cy="102" r="5" fill="var(--before)"/>
+    <text x="268" y="96" class="svg-math">p</text>
+    <line x1="280" y1="195" x2="280" y2="107" stroke="var(--before)" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <text x="288" y="130" class="svg-math">p⊥ = 9.8 cm</text>
+    <text x="20" y="300" class="svg-small">The palm normal runs through c, but the pocket is 9.8 cm higher,</text>
+    <text x="20" y="316" class="svg-small">so the thumb and fingers close on air beside the peg.</text>
+
+    <!-- ============================== after ============================== -->
+    <text x="430" y="24" font-weight="600" fill="var(--after)">after</text>
+    <text x="478" y="24" class="svg-small">the body steps back by s â + p⊥</text>
+    <rect x="660" y="130" width="60" height="60" fill="var(--object)" stroke="var(--object-edge)" stroke-width="1.5"/>
+    <text x="728" y="156" class="svg-small">peg from above,</text>
+    <text x="728" y="171" class="svg-small">6 × 6 cm</text>
+    
+    <!-- after: palm -->
+    <rect x="597" y="122" width="21" height="143" rx="6" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1.5"/>
+    <text x="607.5" y="198" text-anchor="middle" class="svg-small" fill="#fff" opacity="0.9" transform="rotate(-90 607.5 198)">palm</text>
+    <!-- fingers: out of the palm top, then the pocket pads parallel to the approach -->
+    <path d="M618 134 L668 107" fill="none" stroke="var(--hand)" stroke-width="8" stroke-linecap="round" opacity="0.6"/>
+    <path d="M668 107 L703 107" fill="none" stroke="var(--hand-edge)" stroke-width="8" stroke-linecap="round" opacity="0.6"/>
+    <path d="M618 130 L668 115" fill="none" stroke="var(--hand)" stroke-width="8" stroke-linecap="round"/>
+    <path d="M668 115 L703 115" fill="none" stroke="var(--hand-edge)" stroke-width="8" stroke-linecap="round"/>
+    <text x="710" y="111" class="svg-small">fingers</text>
+    <!-- thumb: out of the lower palm, pad parallel to the approach -->
+    <path d="M618 248 L668 205" fill="none" stroke="var(--hand)" stroke-width="9" stroke-linecap="round"/>
+    <path d="M668 205 L703 205" fill="none" stroke="var(--hand-edge)" stroke-width="9" stroke-linecap="round"/>
+    <text x="710" y="209" class="svg-small">thumb</text>
+    <!-- origin and approach -->
+    <circle cx="618" cy="258" r="4" fill="var(--ink)"/>
+    <text x="604" y="276" class="svg-math">G</text>
+    <line x1="618" y1="258" x2="718" y2="258" stroke="var(--hand-edge)" stroke-width="1.8" marker-end="url(#arr-hand)"/>
+    <text x="646" y="276" class="svg-math">s â</text>
+    <line x1="690" y1="258" x2="690" y2="166" stroke="var(--mark)" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <circle cx="690" cy="258" r="3" fill="var(--mark)"/>
+    <text x="698" y="236" class="svg-math">p⊥</text>
+    <circle cx="690" cy="160" r="5" fill="var(--mark)"/>
+    <text x="670" y="156" class="svg-math">c = p</text>
+    <text x="430" y="300" class="svg-small">The body also steps down by p⊥, so the pocket lands on c</text>
+    <text x="430" y="316" class="svg-small">and the pads straddle the peg with 1.5 cm to spare on each side.</text>
+  </g>
+</svg>
+<figcaption>The Dex3 coming in from the side on the standing big peg, seen from above at 10 pixels per centimetre, so the square is the peg's cross-section and the hand squeezes across its 6 cm width. The hand is the silhouette of section 2: palm, two fingers and thumb, with the dark pads marking the pocket. Before the change the body was placed so that the point \(s\hat{\mathbf{a}}\) on the palm normal sat at the centre, which left the pocket 9.8 cm to the side of the peg. After the change the body is placed by \(\mathbf{t} = \mathbf{c} - \mathbf{R}\,\mathbf{p}(s)\), with the lateral offset included, and the pocket lands on the centre.</figcaption>
+</figure>
+
+<!-- ============================================================================================== -->
+<h2 id="nominal">7. Change three: a sampler that starts from grasps written by hand</h2>
+
+<p><span class="tag after">after</span> The first problem of section 4 could have been attacked by repairing the antipodal sampler. Instead a second sampler was put next to it. It does not read the mesh to decide where to grasp. It starts from one or more grasps that a person has written down, the <em>nominal grasps</em>, and scatters candidates around them. For the Dex3 that is how the 45 degree approach from above, which no ray through the mesh can produce, became a candidate at all.</p>
+
+<p>How it relates to what came before is simple to state. It is an addition, a new branch in <code class="var">_generate_grasp_candidates</code> with four new helper methods, and the antipodal code is untouched. It also replaces only the candidate stage. The random pick per reset, the move into the world frame and everything in section 9 run on its list exactly as they ran on the antipodal list.</p>
+
+<p>Seen against the seven steps of section 3, the antipodal sampler has two halves. Steps 1 to 4 decide <em>where</em> to grasp by reading the mesh, and steps 5 to 7 decide <em>how the hand sits</em> there. The new sampler drops the first half and takes the answer from the written grasp. For the second half it keeps the same operations, but where the antipodal sampler enumerates a grid of spins and standoffs it draws random perturbations instead.</p>
+
+<table class="compact">
+<thead><tr><th>Antipodal sampler</th><th>Nominal sampler</th><th>Relation</th></tr></thead>
+<tbody>
+<tr><td>Centre from the midpoint of a ray through the mesh (steps 3 and 4)</td><td><code>center</code> of the written grasp, plus a small random jitter</td><td>replaced by an input</td></tr>
+<tr><td>Align the hand's alignment axis with the ray (step 5)</td><td>Align the hand's approach axis with the written <code>approach</code></td><td>same operation, the direction is given instead of computed</td></tr>
+<tr><td>Spin about the hand's spin axis, sixteen values of \(\theta\) (step 5)</td><td>Written roll, pitch and yaw, plus a random rotation inside a cone</td><td>generalised, a tilt is possible and not only a spin</td></tr>
+<tr><td>Standoff sweep of thirty two values from \(f\) upward (step 6)</td><td>Written <code>standoff</code>, \(f\) by default, plus a random extra pull back</td><td>a short random range instead of a long sweep</td></tr>
+<tr><td>Body pulled back by the pinch point (step 7)</td><td>The same pull back, through <code>_body_transforms</code></td><td>identical formula</td></tr>
+</tbody>
+</table>
+
+<p>The rest of this section follows that order. First how a grasp is written down and turned into one pose, then how candidates are scattered around it, and last a small switch that pins the sampler to the written pose alone, which is how the Dex3 grasps were tuned.</p>
+
+<h3>7.1 Writing a grasp down</h3>
+
+<p>A written grasp, which the code calls a <em>spec</em>, is a dictionary with four entries. All of them are in the object frame, so a grasp written for the standing peg keeps its meaning wherever the peg later lies.</p>
+
+<table>
+<thead><tr><th>Key</th><th>Symbol</th><th>Meaning</th><th>Default</th></tr></thead>
+<tbody>
+<tr><td><code>center</code></td><td>\(\mathbf{c}\)</td><td>The pinch point, in the object frame, in metres.</td><td>\((0,0,0)\)</td></tr>
+<tr><td><code>approach</code></td><td>\(\hat{\mathbf{a}}_O\)</td><td>The direction, in the object frame, that the hand's approach axis is turned onto.</td><td>\((0,0,-1)\), straight down onto a standing object</td></tr>
+<tr><td><code>rpy_deg</code></td><td>\((\phi, \vartheta, \psi)\)</td><td>Extra roll, pitch and yaw in degrees about the object's fixed \(x\), \(y\) and \(z\) axes, applied in that order after the alignment and about the pinch point.</td><td>\((0,0,0)\)</td></tr>
+<tr><td><code>standoff</code></td><td>\(s\)</td><td>Distance from the body origin to the pinch point along the approach, in metres.</td><td><code>None</code>, which means \(f\)</td></tr>
+</tbody>
+</table>
+
+<p>The method <code class="var">_grasp_frame</code> turns a spec into a rotation, a centre and a standoff. The rotation is built in two stages, first the smallest rotation that brings the hand's approach axis onto the requested one and then the three fixed-axis turns,</p>
+
+\[ \mathbf{R}_{\text{nom}} = \mathbf{R}_z(\psi)\,\mathbf{R}_y(\vartheta)\,\mathbf{R}_x(\phi)\;\operatorname{Align}(\hat{\mathbf{a}} \to \hat{\mathbf{a}}_O). \]
+
+<p>In the code the alignment is again <code>trimesh.geometry.align_vectors</code> and the roll, pitch and yaw product is <code>tra.euler_matrix(roll, pitch, yaw, axes="sxyz")</code>. The leading <code>s</code> in <code>sxyz</code> means static axes, so the roll is applied first about the object's \(x\), then the pitch about the object's \(y\), then the yaw about the object's \(z\), which is why the matrices appear in reverse order when written as a product. Since the alignment is left-multiplied by these turns, they rotate the already aligned hand about axes that stay fixed in the object frame, which is the behaviour one wants from keyboard nudges in <code>inspect_env.py</code>. The transform is then the same body placement as in section 6,</p>
+
+\[ {}^{O}\mathbf{T}_{G} = \begin{bmatrix} \mathbf{R}_{\text{nom}} &amp; \mathbf{c} - \mathbf{R}_{\text{nom}}\,\mathbf{p}(s) \\ \mathbf{0}^\top &amp; 1 \end{bmatrix}, \]
+
+<p>computed by <code class="var">_grasp_transform</code>, which calls <code>_grasp_frame</code> and then <code>_body_transforms</code> with a batch of one.</p>
+
+<p>Since the spin axis and the approach axis coincide for these hands, a yaw about the approach does what the antipodal spin \(\theta\) does. Roll and pitch are what the antipodal sampler cannot express, because they tilt the approach itself.</p>
+
+<p>Here is how to read the Dex3's top grasp as it is written in <code>config/g1_dex3/grasp_sampling_cfg.py</code>. The centre is \((0, 0, 0.025)\), so the fingertips meet on the peg's axis 2.5 cm above its centre, which on the 12 cm big peg is 3.5 cm below the top face. The approach is \((0,0,-1)\), so the palm normal first points straight down. The roll of 45 degrees then tilts the hand about the object's \(x\) axis, and the result is the oblique approach from section 4. The side grasp is the same spec with a pitch of 90 degrees added, which lays the tilted hand over on its side.</p>
+
+<pre><code>DEX3_NOMINAL_TOP_GRASP = {
+    "center": (0.0, 0.0, DEX3_PINCH_HEIGHT),   # c, DEX3_PINCH_HEIGHT = 0.025
+    "approach": (0.0, 0.0, -1.0),              # a_O
+    "rpy_deg": (45.0, 0.0, 0.0),               # (phi, theta, psi)
+}
+DEX3_NOMINAL_SIDE_GRASP = {
+    "center": (0.0, 0.0, DEX3_PINCH_HEIGHT),
+    "approach": (0.0, 0.0, -1.0),
+    "rpy_deg": (45.0, 90.0, 0.0),
+}</code></pre>
+
+<figure>
+<svg viewBox="0 0 820 300" role="img" aria-label="Building the nominal top grasp in three stages">
+  <g class="svg-text">
+    <!-- stage 1 -->
+    <text x="40" y="28" font-weight="600">1. align â onto â<tspan dy="4" font-size="75%">O</tspan><tspan dy="-4"></tspan></text>
+    <rect x="90" y="120" width="50" height="160" fill="var(--object)" stroke="var(--object-edge)" stroke-width="1.5"/>
+    <circle cx="115" cy="175" r="5" fill="var(--mark)"/>
+    <text x="122" y="170" class="svg-math">c</text>
+    <rect x="95" y="50" width="40" height="40" rx="6" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1.5"/>
+    <line x1="115" y1="90" x2="115" y2="165" stroke="var(--hand-edge)" stroke-width="2" marker-end="url(#arr-hand)"/>
+    <text x="125" y="120" class="svg-math">â<tspan dy="4" font-size="75%">O</tspan><tspan dy="-4"></tspan> = (0,0,−1)</text>
+    <!-- stage 2 -->
+    <text x="320" y="28" font-weight="600">2. roll 45° about object x</text>
+    <rect x="380" y="120" width="50" height="160" fill="var(--object)" stroke="var(--object-edge)" stroke-width="1.5"/>
+    <circle cx="405" cy="175" r="5" fill="var(--mark)"/>
+    <g transform="rotate(-45 405 175)">
+      <rect x="385" y="50" width="40" height="40" rx="6" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1.5"/>
+      <line x1="405" y1="90" x2="405" y2="165" stroke="var(--hand-edge)" stroke-width="2" marker-end="url(#arr-hand)"/>
+    </g>
+    <path d="M 405 110 a 65 65 0 0 1 46 19" fill="none" stroke="var(--muted)" stroke-width="1" marker-end="url(#arr)"/>
+    <text x="440" y="105" class="svg-math">φ</text>
+    <text x="320" y="296" class="svg-small">the turn is about c, so the pinch point stays put</text>
+    <!-- stage 3 -->
+    <text x="590" y="28" font-weight="600">3. step back by p(s)</text>
+    <rect x="650" y="120" width="50" height="160" fill="var(--object)" stroke="var(--object-edge)" stroke-width="1.5"/>
+    <circle cx="675" cy="175" r="5" fill="var(--mark)"/>
+    <g transform="rotate(-45 675 175)">
+      <rect x="655" y="40" width="40" height="40" rx="6" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1.5"/>
+      <circle cx="675" cy="60" r="3.5" fill="var(--ink)"/>
+      <line x1="675" y1="80" x2="675" y2="168" stroke="var(--hand-edge)" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <text x="683" y="120" class="svg-math">s â</text>
+      <line x1="600" y1="60" x2="668" y2="60" stroke="var(--mark)" stroke-width="1.5" stroke-dasharray="4 3"/>
+    </g>
+    <text x="590" y="296" class="svg-small">t = c − R p(s), p⊥ included</text>
+  </g>
+</svg>
+<figcaption>The three stages of <code>_grasp_frame</code> and <code>_body_transforms</code> for the Dex3 top grasp. The alignment points the palm normal down, the roll tilts it by 45 degrees about the object's \(x\) axis through the pinch point, and the body is placed so that the pinch point lands on \(\mathbf{c}\).</figcaption>
+</figure>
+
+<h3>7.2 Scattering candidates around the nominal grasps</h3>
+
+<p>One written pose is not a dataset. The recorded grasps must survive the closing and the pokes, and a single hand-authored pose may or may not, so what is wanted is a neighbourhood of it that is dense enough for the judge to sort the part that holds from the part that does not. The method <code class="var">_sample_nominal_grasps</code> takes the list of specs in <code class="var">nominal_grasps</code> and scatters candidates around each of them. Three knobs bound the scatter.</p>
+
+<table>
+<thead><tr><th>Parameter</th><th>Symbol</th><th>Meaning</th><th>Default</th></tr></thead>
+<tbody>
+<tr><td><code class="var">nominal_angle_max_deg</code></td><td>\(\alpha_{\max}\)</td><td>Largest rotation away from the nominal orientation, in degrees.</td><td>20</td></tr>
+<tr><td><code class="var">nominal_center_sigma</code></td><td>\(\sigma_c\)</td><td>Standard deviation of the pinch point jitter per axis, in metres.</td><td>0.005</td></tr>
+<tr><td><code class="var">nominal_standoff_range</code></td><td>\([s_{\text{lo}}, s_{\text{hi}}]\)</td><td>Extra standoff added to the nominal one, uniform, in metres. It pulls the hand back so that shallower holds are tried too.</td><td>\([0, 0.02]\)</td></tr>
+</tbody>
+</table>
+
+<p>The budget is split evenly. With \(K\) nominal grasps, which is the length of <code>self.nominal_grasps</code>, each one gets</p>
+
+\[ n = \left\lfloor \frac{\max(K, N_c)}{K} \right\rfloor \]
+
+<p>draws, the local <code>per_nominal</code>. For each nominal grasp the spec is first resolved by <code>_grasp_frame</code> into \(\mathbf{R}_{\text{nom}}\), \(\mathbf{c}_{\text{nom}}\) and \(s_{\text{nom}}\). Then for \(i = 0, \dots, n-1\) three independent perturbations are drawn.</p>
+
+<ol class="steps">
+<li>
+<strong>A rotation about a random axis through the pinch point.</strong>
+The axis \(\hat{\mathbf{k}}_i\) is uniform on the sphere, obtained by normalising a standard normal vector, and the angle is uniform up to the bound,
+\[ \hat{\mathbf{k}}_i = \frac{\mathbf{z}_i}{\lVert \mathbf{z}_i \rVert},\quad \mathbf{z}_i \sim \mathcal{N}(\mathbf{0}, \mathbf{I}_3), \qquad \alpha_i \sim \mathcal{U}[0, \alpha_{\max}], \qquad \mathbf{R}_i = \operatorname{Rot}(\hat{\mathbf{k}}_i, \alpha_i)\,\mathbf{R}_{\text{nom}}. \]
+The arrays are <code>axes</code>, <code>angles</code> and <code>rot_pert</code>, the last one built from a rotation vector \(\alpha_i \hat{\mathbf{k}}_i\) by <code>scipy.spatial.transform.Rotation.from_rotvec</code>. The perturbation is left-multiplied, so it is a rotation in the object frame, and since the placement formula turns about the pinch point it does not move the pinch point.
+</li>
+<li>
+<strong>A jitter of the pinch point.</strong>
+\[ \mathbf{c}_i = \mathbf{c}_{\text{nom}} + \boldsymbol{\varepsilon}_i, \qquad \boldsymbol{\varepsilon}_i \sim \mathcal{N}(\mathbf{0}, \sigma_c^2\,\mathbf{I}_3), \]
+the array <code>jitter</code>. With the default half a centimetre the fingertips land within about a centimetre of the nominal point almost always.
+</li>
+<li>
+<strong>An extra standoff.</strong>
+\[ s_i = s_{\text{nom}} + u_i, \qquad u_i \sim \mathcal{U}[s_{\text{lo}}, s_{\text{hi}}], \]
+the array <code>extra</code>. This is the only one of the three that slides the fingertips off the nominal point on purpose, back along the approach, where the object is held less deep in the hand.
+</li>
+</ol>
+
+<p>The first draw of each group has all three perturbations set to zero, so the exact nominal pose is always among the candidates. Finally all rotations, centres and standoffs are concatenated and handed to <code>_body_transforms</code>, which applies the placement formula of section 6 to the whole batch at once,</p>
+
+\[ {}^{O}\mathbf{T}_{G,i} = \begin{bmatrix} \mathbf{R}_i &amp; \mathbf{c}_i - \mathbf{R}_i\,\mathbf{p}(s_i) \\ \mathbf{0}^\top &amp; 1 \end{bmatrix}. \]
+
+<figure>
+<svg viewBox="0 0 820 300" role="img" aria-label="Perturbations around a nominal grasp">
+  <g class="svg-text">
+    <rect x="360" y="110" width="50" height="170" fill="var(--object)" stroke="var(--object-edge)" stroke-width="1.5"/>
+    <circle cx="385" cy="165" r="5" fill="var(--mark)"/>
+    <text x="392" y="160" class="svg-math">c<tspan dy="4" font-size="75%">nom</tspan><tspan dy="-4"></tspan></text>
+    <!-- nominal approach line at 45 degrees -->
+    <line x1="470" y1="80" x2="391" y2="159" stroke="var(--hand-edge)" stroke-width="2.5" marker-end="url(#arr-hand)"/>
+    <!-- cone of angles -->
+    <path d="M385 165 L500 95 A 130 130 0 0 1 505 150 Z" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1" opacity="0.8"/>
+    <text x="512" y="120" class="svg-math">α ≤ α<tspan dy="4" font-size="75%">max</tspan><tspan dy="-4"></tspan></text>
+    <text x="512" y="138" class="svg-small">about a random axis k̂</text>
+    <!-- jitter cloud -->
+    <circle cx="385" cy="165" r="16" fill="none" stroke="var(--mark)" stroke-width="1" stroke-dasharray="3 3"/>
+    <g fill="var(--mark)" opacity="0.8">
+      <circle cx="380" cy="160" r="2"/><circle cx="391" cy="170" r="2"/><circle cx="388" cy="158" r="2"/>
+      <circle cx="379" cy="171" r="2"/><circle cx="394" cy="163" r="2"/><circle cx="383" cy="176" r="2"/>
+    </g>
+    <text x="230" y="205" class="svg-math">ε ~ N(0, σ<tspan dy="4" font-size="75%">c</tspan><tspan dy="-4"></tspan>² I)</text>
+    <line x1="340" y1="200" x2="372" y2="178" stroke="var(--muted)" stroke-width="1"/>
+    <!-- standoff range along the approach -->
+    <g transform="rotate(-45 385 165)">
+      <rect x="378" y="40" width="14" height="22" fill="var(--after-soft)" stroke="var(--after)" stroke-width="1"/>
+      <text x="398" y="56" class="svg-math">u ~ U[s<tspan dy="4" font-size="75%">lo</tspan><tspan dy="-4"></tspan>, s<tspan dy="4" font-size="75%">hi</tspan><tspan dy="-4"></tspan>]</text>
+    </g>
+    <text x="40" y="40" class="svg-small">Each draw changes the orientation inside a cone, moves the pinch point inside a small</text>
+    <text x="40" y="58" class="svg-small">cloud and pulls the hand back by a little. The first draw of each group is the nominal pose itself.</text>
+  </g>
+</svg>
+<figcaption>The three perturbations of a nominal grasp. The cone bounds the orientation change, the dotted circle the pinch point jitter, and the shaded segment on the approach line the extra standoff.</figcaption>
+</figure>
+
+<div class="callout after">
+<p>Why perturb rather than enumerate, as the antipodal sampler does with its sixteen spins and thirty two standoffs? Because the nominal pose is already close to a good grasp. What is wanted is a neighbourhood of it dense enough that the judge can tell which part of the neighbourhood holds and which does not. A random scatter in all six degrees of freedom does that with the same budget, where a grid would have to choose a few axes and leave the others fixed.</p>
+</div>
+
+<h3>7.3 Pinning the sampler to one written grasp</h3>
+
+<p>To tune the Dex3 grasps in the first place, it helps to write one down, put the hand there, and look at it. That is what the <code class="var">fixed_grasp</code> parameter does. It is one spec of the same shape with an extra <code>enabled</code> flag. When the flag is true the candidate list has exactly one entry, built by <code class="var">_grasp_transform</code>, which is <code>_grasp_frame</code> followed by <code>_body_transforms</code> with a batch of one, and no scattering happens. It is a tool for looking, not for recording. <code>inspect_env.py</code> switches it on, turns the pose with the keyboard by editing the roll, pitch and yaw of the spec, and prints the resulting pose, and that is how the 45 degree roll and the 2.5 cm pinch height of the Dex3 grasps were found. The Dex3 configuration fills the fixed grasp with the top grasp but leaves it disabled, so the recorder is never affected by it.</p>
+
+<!-- ============================================================================================== -->
+<h2 id="precedence">8. How the three sources fit together</h2>
+
+<p>The entry point <code class="var">_generate_grasp_candidates</code> now has three branches and tries them in a fixed order. The fixed grasp wins when it is enabled. Otherwise the nominal grasps win when the list is non-empty. Otherwise the antipodal sampler runs as before. The two new branches are off in the shared Robotiq configuration, so the UR5e and the Dex1 tasks behave exactly as they did. The Dex3 configuration fills in the nominal list and sets the fixed grasp's values to the top grasp while leaving it disabled, so that <code>inspect_env.py</code> only has to flip the flag.</p>
+
+<figure>
+<svg viewBox="0 0 820 230" role="img" aria-label="Decision flow of the candidate generator">
+  <g class="svg-text" text-anchor="middle">
+    <rect x="20" y="80" width="150" height="56" rx="10" fill="var(--surface)" stroke="var(--rule)"/>
+    <text x="95" y="104">fixed<tspan dy="4" font-size="75%">grasp</tspan><tspan dy="-4"></tspan></text>
+    <text x="95" y="122" class="svg-small">enabled?</text>
+    <rect x="250" y="80" width="150" height="56" rx="10" fill="var(--surface)" stroke="var(--rule)"/>
+    <text x="325" y="104">nominal<tspan dy="4" font-size="75%">grasps</tspan><tspan dy="-4"></tspan></text>
+    <text x="325" y="122" class="svg-small">non-empty?</text>
+    <rect x="480" y="80" width="170" height="56" rx="10" fill="var(--before-soft)" stroke="var(--before)"/>
+    <text x="565" y="104">antipodal sampler</text>
+    <text x="565" y="122" class="svg-small">_sample<tspan dy="4" font-size="75%">antipodal</tspan><tspan dy="-4"></tspan>_grasps</text>
+    <line x1="170" y1="108" x2="248" y2="108" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arr)"/>
+    <text x="209" y="100" class="svg-small">no</text>
+    <line x1="400" y1="108" x2="478" y2="108" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arr)"/>
+    <text x="439" y="100" class="svg-small">no</text>
+    <line x1="95" y1="136" x2="95" y2="178" stroke="var(--after)" stroke-width="1.5" marker-end="url(#arr)"/>
+    <text x="110" y="162" class="svg-small" text-anchor="start">yes</text>
+    <rect x="20" y="180" width="150" height="40" rx="8" fill="var(--after-soft)" stroke="var(--after)"/>
+    <text x="95" y="205" class="svg-small">one pose, _grasp<tspan dy="4" font-size="75%">transform</tspan><tspan dy="-4"></tspan></text>
+    <line x1="325" y1="136" x2="325" y2="178" stroke="var(--after)" stroke-width="1.5" marker-end="url(#arr)"/>
+    <text x="340" y="162" class="svg-small" text-anchor="start">yes</text>
+    <rect x="250" y="180" width="150" height="40" rx="8" fill="var(--after-soft)" stroke="var(--after)"/>
+    <text x="325" y="205" class="svg-small">N<tspan dy="4" font-size="75%">c</tspan><tspan dy="-4"></tspan> poses, _sample<tspan dy="4" font-size="75%">nominal</tspan><tspan dy="-4"></tspan>_grasps</text>
+    <text x="565" y="170" class="svg-small">N<tspan dy="4" font-size="75%">c</tspan><tspan dy="-4"></tspan> poses from the mesh,</text>
+    <text x="565" y="188" class="svg-small">scaled, with p⊥ (sections 5 and 6)</text>
+    <text x="410" y="40">_generate<tspan dy="4" font-size="75%">grasp</tspan><tspan dy="-4"></tspan>_candidates</text>
+  </g>
+</svg>
+<figcaption>Precedence of the three candidate sources. Only the first branch that applies runs.</figcaption>
+</figure>
+
+<p>All of the knobs can be set from the command line through Hydra. A few that are useful while tuning:</p>
+
+<pre><code># pin the Dex3 to its nominal top grasp and look at it
+python scripts_v2/tools/inspect_env.py --task OmniReset-Dex3-GraspSampling-v0 --num_envs 1 --viz kit \
+    --gripper open --no_timeout --no_gravity env.scene.object=big-peg \
+    env.events.grasp_sampling.params.fixed_grasp.enabled=true
+
+# widen the scatter around the nominal grasps while recording
+python scripts_v2/tools/record_grasps.py --task OmniReset-Dex3-GraspSampling-v0 --num_envs 8192 \
+    env.scene.object=big-peg env.events.grasp_sampling.params.nominal_angle_max_deg=30 \
+    env.events.grasp_sampling.params.nominal_standoff_range=[0.0,0.03]</code></pre>
+
+<!-- ============================================================================================== -->
+<h2 id="after">9. From a candidate to a recorded grasp</h2>
+
+<p>For completeness, this is what happens to a candidate once it exists. On every reset the event draws an index per environment uniformly from the candidate list, <code>torch.randint(0, len(self.grasp_candidates), ...)</code>. It makes sure the hand is open and still, and then it composes the candidate with the object's current world pose,</p>
+
+\[ {}^{W}\mathbf{T}_{G} = {}^{W}\mathbf{T}_{O}\;{}^{O}\mathbf{T}_{G}, \]
+
+<p>in <code class="var">_apply_grasp_transforms_vectorized</code>, using <code>math_utils.combine_frame_transforms</code> on positions and quaternions, and writes the result as the root pose of the floating hand. The object itself is placed by a separate event at a fixed height with gravity switched off, so the hand and the object start the episode hanging in space in the candidate's relative arrangement.</p>
+
+<p>The binary gripper action then closes the hand. One second in, <code>global_physics_control_event</code> switches gravity on, and between one and two seconds it applies a small random force and torque to the object, which it now removes again once the window closes. At the last step of the four second episode <code>check_grasp_success</code> judges the result. The object must have stayed within 25 cm of where it started and above 25 cm height, it must have been still for five consecutive steps, no gripper joint may be moving abnormally, the hand's sampled surface points may not penetrate the object, and the closure joints must on average have travelled more than ten percent of the way from open to closed. When all of that holds, the recorder stores the pose of the gripper body in the object frame, recomputed from the final simulated poses rather than copied from the candidate, together with the hand's joint positions. Those are the grasps the reset-state tasks later read back.</p>
+
+<!-- ============================================================================================== -->
+<h2 id="glossary">10. Glossary of symbols and variables</h2>
+
+<table>
+<thead><tr><th>Symbol</th><th>Variable or expression</th><th>Where</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td>\(O\), \(G\)</td><td>object frame, gripper body frame</td><td>sections 2 and 9</td><td>Candidates are \({}^{O}\mathbf{T}_{G}\), the gripper body in the object frame.</td></tr>
+<tr><td>\({}^{O}\mathbf{T}_{G}\)</td><td><code>self.grasp_candidates[i]</code></td><td><code>__call__</code></td><td>One candidate, 4 by 4.</td></tr>
+<tr><td>\(\hat{\mathbf{a}}\)</td><td><code>self.gripper_approach_direction</code></td><td>metadata</td><td>Approach axis of the hand, in \(G\).</td></tr>
+<tr><td>\(\hat{\mathbf{g}}\)</td><td><code>self.grasp_align_axis</code></td><td>metadata</td><td>Axis aligned with the grasp axis, in \(G\).</td></tr>
+<tr><td>\(\hat{\mathbf{o}}\)</td><td><code>self.orientation_sample_axis</code></td><td>metadata</td><td>Axis the hand is spun about, in \(G\).</td></tr>
+<tr><td>\(f\)</td><td><code>self.finger_offset</code></td><td>metadata</td><td>Body origin to pinch point along \(\hat{\mathbf{a}}\), m.</td></tr>
+<tr><td>\(c_f\)</td><td><code>self.finger_clearance</code></td><td>metadata</td><td>Usable pad depth behind the fingertips, m. Also bounds the standoff sweep.</td></tr>
+<tr><td>\(w\)</td><td><code>self.gripper_maximum_aperture</code></td><td>metadata</td><td>Largest allowed \(\ell\), m.</td></tr>
+<tr><td>\(\mathbf{p}\)</td><td><code>pinch</code> from <code>gripper_offset.pos</code></td><td><code>__init__</code></td><td>Pinch point, in \(G\).</td></tr>
+<tr><td>\(\mathbf{p}_\perp\)</td><td><code>self.pinch_lateral_offset</code></td><td><code>__init__</code></td><td>Part of \(\mathbf{p}\) across the approach.</td></tr>
+<tr><td>\(\mathbf{p}(s)\)</td><td><code>pinch_local</code></td><td><code>_body_transforms</code></td><td>\(s\hat{\mathbf{a}} + \mathbf{p}_\perp\).</td></tr>
+<tr><td>\(N_c\)</td><td><code>self.num_candidates</code></td><td>params</td><td>Candidate budget.</td></tr>
+<tr><td>\(N_o\), \(N_s\)</td><td><code>self.num_orientations</code>, <code>self.num_standoff_samples</code></td><td>params</td><td>Spins and standoffs per surface point.</td></tr>
+<tr><td>\(N_{\text{surf}}\)</td><td><code>num_surface_samples</code></td><td><code>_sample_antipodal_grasps</code></td><td>\(\lfloor N_c / (N_o N_s) \rfloor\).</td></tr>
+<tr><td>\(\beta\)</td><td><code>self.top_bias_fraction</code></td><td>params</td><td>Share of surface points taken from the top-scored subset.</td></tr>
+<tr><td>\(\sigma_\ell\)</td><td><code>self.lateral_sigma</code></td><td>params</td><td>Jitter of the centre along the grasp axis.</td></tr>
+<tr><td>\(\mathbf{x}_i\), \(\hat{\mathbf{n}}_i\)</td><td><code>surface_points</code>, <code>surface_normals</code></td><td><code>_sample_antipodal_grasps</code></td><td>Sampled point and its face normal.</td></tr>
+<tr><td>\(\mathbf{y}_i\)</td><td><code>opposing_point</code></td><td><code>_sample_antipodal_grasps</code></td><td>Furthest ray hit within \(w\).</td></tr>
+<tr><td>\(\hat{\mathbf{u}}_i\), \(\ell_i\)</td><td><code>grasp_axis</code>, <code>axis_length</code></td><td><code>_sample_antipodal_grasps</code></td><td>Grasp axis and the contact distance.</td></tr>
+<tr><td>\(\mathbf{c}_i\)</td><td><code>grasp_center</code></td><td><code>_sample_antipodal_grasps</code></td><td>Where the pinch point is placed.</td></tr>
+<tr><td>\(\mathbf{R}_{\text{align}}\)</td><td><code>align_matrix</code></td><td><code>_sample_antipodal_grasps</code></td><td>Smallest rotation \(\hat{\mathbf{g}} \to \hat{\mathbf{u}}\).</td></tr>
+<tr><td>\(\theta_k\), \(\mathbf{R}_{\text{spin}}\)</td><td><code>rotation_angles</code>, <code>orient_tf_rot</code></td><td><code>_sample_antipodal_grasps</code></td><td>Spin about \(\hat{\mathbf{o}}\).</td></tr>
+<tr><td>\(s_j\), \(d\)</td><td><code>standoff_distances</code>, <code>mesh_diagonal</code></td><td><code>_sample_antipodal_grasps</code></td><td>Standoff sweep and the mesh diagonal that bounds it.</td></tr>
+<tr><td>\(\mathbf{k}\)</td><td><code>asset.cfg.spawn.scale</code></td><td><code>_extract_mesh_from_asset</code></td><td>Spawn scale applied to the mesh.</td></tr>
+<tr><td>\(\hat{\mathbf{a}}_O\), \((\phi,\vartheta,\psi)\), \(s\)</td><td><code>spec["approach"]</code>, <code>spec["rpy_deg"]</code>, <code>spec["standoff"]</code></td><td><code>_grasp_frame</code></td><td>A hand-authored grasp.</td></tr>
+<tr><td>\(\mathbf{R}_{\text{nom}}\), \(\mathbf{c}_{\text{nom}}\), \(s_{\text{nom}}\)</td><td><code>rot_nom</code>, <code>center_nom</code>, <code>standoff_nom</code></td><td><code>_sample_nominal_grasps</code></td><td>The resolved nominal grasp.</td></tr>
+<tr><td>\(K\), \(n\)</td><td><code>len(self.nominal_grasps)</code>, <code>per_nominal</code></td><td><code>_sample_nominal_grasps</code></td><td>Number of nominal grasps and draws per grasp.</td></tr>
+<tr><td>\(\alpha_{\max}\), \(\hat{\mathbf{k}}_i\), \(\alpha_i\)</td><td><code>self.nominal_angle_max_deg</code>, <code>axes</code>, <code>angles</code></td><td><code>_sample_nominal_grasps</code></td><td>Orientation perturbation.</td></tr>
+<tr><td>\(\sigma_c\), \(\boldsymbol{\varepsilon}_i\)</td><td><code>self.nominal_center_sigma</code>, <code>jitter</code></td><td><code>_sample_nominal_grasps</code></td><td>Pinch point perturbation.</td></tr>
+<tr><td>\([s_{\text{lo}}, s_{\text{hi}}]\), \(u_i\)</td><td><code>self.nominal_standoff_range</code>, <code>extra</code></td><td><code>_sample_nominal_grasps</code></td><td>Standoff perturbation.</td></tr>
+</tbody>
+</table>
+
+</main>
+<script>
+(function () {
+  var root = document.documentElement;
+  var buttons = document.querySelectorAll("[data-theme-choice]");
+  function current() {
+    return root.getAttribute("data-theme") || "system";
+  }
+  function paint() {
+    var c = current();
+    buttons.forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.themeChoice === c)); });
+  }
+  buttons.forEach(function (b) {
+    b.addEventListener("click", function () {
+      var choice = b.dataset.themeChoice;
+      if (choice === "system") root.removeAttribute("data-theme"); else root.setAttribute("data-theme", choice);
+      try {
+        if (choice === "system") localStorage.removeItem("grasp-sampling-theme");
+        else localStorage.setItem("grasp-sampling-theme", choice);
+      } catch (e) {}
+      paint();
+    });
+  });
+  paint();
+})();
+document.addEventListener("DOMContentLoaded", function () {
+  if (window.renderMathInElement) {
+    renderMathInElement(document.body, {
+      delimiters: [
+        { left: "\\[", right: "\\]", display: true },
+        { left: "\\(", right: "\\)", display: false }
+      ],
+      throwOnError: false
+    });
+  }
+});
+</script>
+</body>
+</html>

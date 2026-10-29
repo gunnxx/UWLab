@@ -1,0 +1,45 @@
+\documentclass{article}
+
+\usepackage[preprint]{corl_2026}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,fit,backgrounds}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepgfplotslibrary{groupplots}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{microtype}
+\usepackage{float}
+
+\input{shared_macros}
+\lstset{basicstyle=\ttfamily\scriptsize}
+
+% figure and table wrappers: placed exactly where they are referenced (no floating)
+\newenvironment{myfigure}{\begin{figure}[H]\centering}{\end{figure}}
+\newenvironment{mytable}{\begin{table}[H]\centering}{\end{table}}
+\newcommand{\myfigcaption}[2]{\caption{#2}\label{#1}}
+\newcommand{\mytabcaption}[2]{\caption{#2}\label{#1}}
+
+\title{Two Simulators, One Controller:\\ The Stage 1 and Stage 2 Training Recipe in OmniReset}
+
+\author{
+  Tri Wahyu Guntara\\
+  Training notes on the UWLab OmniReset code base\\
+}
+
+\raggedbottom
+
+\begin{document}
+\maketitle
+
+\input{body}
+
+\bibliography{references}
+
+\end{document}

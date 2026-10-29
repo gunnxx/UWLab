@@ -1,0 +1,50 @@
+\begin{thebibliography}{6}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Khatib(1987)]{khatib1987unified}
+O.~Khatib.
+\newblock A unified approach for motion and force control of robot
+  manipulators: The operational space formulation.
+\newblock \emph{IEEE Journal on Robotics and Automation}, 3\penalty0
+  (1):\penalty0 43--53, 1987.
+
+\bibitem[{UW Lab}(2026)]{omnireset2026}
+{UW Lab}.
+\newblock Emergent dexterity via diverse resets and large-scale reinforcement
+  learning.
+\newblock In \emph{International Conference on Learning Representations
+  (ICLR)}, 2026.
+\newblock arXiv:2603.15789.
+
+\bibitem[Mittal et~al.(2023)Mittal, Yu, Yu, Liu, Rudin, Hoeller, Yuan, Singh,
+  Guo, Mazhar, Mandlekar, Babich, State, Hutter, and Garg]{mittal2023orbit}
+M.~Mittal, C.~Yu, Q.~Yu, J.~Liu, N.~Rudin, D.~Hoeller, J.~L. Yuan, R.~Singh,
+  Y.~Guo, H.~Mazhar, A.~Mandlekar, B.~Babich, G.~State, M.~Hutter, and A.~Garg.
+\newblock Orbit: A unified simulation framework for interactive robot learning
+  environments.
+\newblock \emph{IEEE Robotics and Automation Letters}, 8\penalty0 (6):\penalty0
+  3740--3747, 2023.
+
+\bibitem[Schulman et~al.(2017)Schulman, Wolski, Dhariwal, Radford, and
+  Klimov]{schulman2017ppo}
+J.~Schulman, F.~Wolski, P.~Dhariwal, A.~Radford, and O.~Klimov.
+\newblock Proximal policy optimization algorithms.
+\newblock \emph{arXiv preprint arXiv:1707.06347}, 2017.
+
+\bibitem[Rudin et~al.(2022)Rudin, Hoeller, Reist, and Hutter]{rudin2022walk}
+N.~Rudin, D.~Hoeller, P.~Reist, and M.~Hutter.
+\newblock Learning to walk in minutes using massively parallel deep
+  reinforcement learning.
+\newblock In \emph{Conference on Robot Learning (CoRL)}, volume 164 of
+  \emph{Proceedings of Machine Learning Research}, pages 91--100, 2022.
+
+\bibitem[Bjelonic et~al.(2025)]{bjelonic2025pace}
+F.~Bjelonic et~al.
+\newblock {PACE}: Physics-aware calibration for sim-to-real transfer.
+\newblock \emph{arXiv preprint arXiv:2509.06342}, 2025.
+
+\end{thebibliography}
