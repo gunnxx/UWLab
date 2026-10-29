@@ -15,7 +15,8 @@
 # -t uwlab-omnireset:local docker/forge`), LOCAL_ROOT (default ~/.cache/uwlab-local), GPUS (docker
 # --gpus value, default all), plus every g1d_pipeline.sh knob (STAGES, INSERTIVE, RECEPTIVE, NUM_ENVS,
 # MAX_ITER, SEED, LOGGER, RESET_ENVS, NUM_RESETS, GRASP_ENVS, NUM_GRASPS, FORCE, EXTRA, ...), which
-# are forwarded when set. WANDB_API_KEY is forwarded when set.
+# are forwarded when set; ROBOT=g1_dex3 runs the standing G1 + Dex3 pipeline instead of the G1-D + Dex1.
+# WANDB_API_KEY is forwarded when set.
 #
 # Rendering: when DISPLAY is set the X socket is passed through, so commands run with --viz kit
 # (Isaac Lab 3.0 is headless otherwise) open the Kit window on this desktop (run `xhost +si:localuser:root` once per login so the root
@@ -46,7 +47,7 @@ for kv in "${SMOKE[@]}"; do
     v="${kv%%=*}"
     [[ "${MODE}" == pipeline && -z "${!v:-}" ]] && FWD+=(-e "${kv}")
 done
-for v in STAGES INSERTIVE RECEPTIVE SEED NUM_ENVS MAX_ITER LOGGER LOG_PROJECT RUN_NAME FORCE BUILD_ARGS \
+for v in ROBOT STAGES INSERTIVE RECEPTIVE SEED NUM_ENVS MAX_ITER LOGGER LOG_PROJECT RUN_NAME FORCE BUILD_ARGS \
          RESET_ENVS NUM_RESETS GRASP_ENVS NUM_GRASPS RESET_TYPES AUX_FROM_CACHE RESET_SYNC_S EXTRA SYNC_MINUTES \
          CACHE CKPT_DEST DEBUG_ENVS DEBUG_STEPS WANDB_API_KEY WANDB_ENTITY; do
     [[ -n "${!v:-}" ]] && FWD+=(-e "${v}=${!v}")
@@ -57,7 +58,7 @@ done
 # (both are gitignored). Files the container writes into the working copy are handed back to the
 # host user at exit.
 PREP="uwlab-init-cache; ln -sfn /isaac-sim ${CODE}/_isaac_sim; ln -sfn /opt/uwlab-deps/_isaaclab ${CODE}/_isaaclab; cd ${CODE}"
-FIX_OWNER="chown -R $(id -u):$(id -g) ${CODE}/logs ${CODE}/source/uwlab_assets/data/Robots/Unitree/G1dDex1 ${CODE}/source/uwlab_assets/data/Datasets 2>/dev/null || true"
+FIX_OWNER="chown -R $(id -u):$(id -g) ${CODE}/logs ${CODE}/source/uwlab_assets/data/Robots/Unitree ${CODE}/source/uwlab_assets/data/Datasets 2>/dev/null || true"
 
 if [[ "${MODE}" == pipeline ]]; then
     CMD="${PREP}; trap '${FIX_OWNER}' EXIT; bash docker/forge/g1d_pipeline.sh"

@@ -66,6 +66,21 @@
             "justMyCode": false
         },
         {
+            "name": "Datasets: record Dex3 grasps on the peg (128 envs, 32 grasps, headless)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scripts_v2/tools/record_grasps.py",
+            "args": [
+                "--task", "OmniReset-Dex3-GraspSampling-v0",
+                "--num_envs", "128", "--num_grasps", "32",
+                "--dataset_dir", "${workspaceFolder}/logs/debug_datasets/OmniReset_g1_dex3",
+                "--gripper_body_name", "right_hand_palm_link",
+                "env.scene.object=peg"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
             "name": "Datasets: record reset states, pick the family (256 envs, 8 states, headless)",
             "type": "debugpy",
             "request": "launch",
@@ -142,6 +157,11 @@
                 "OmniReset-G1dDex1-ObjectPartiallyAssembledEEAnywhere-v0",
                 "OmniReset-G1dDex1-ObjectPartiallyAssembledEEGrasped-v0",
                 "OmniReset-Dex1-GraspSampling-v0",
+                "OmniReset-G1Dex3-RelCartesianOSC-State-Play-v0",
+                "OmniReset-G1Dex3-ObjectAnywhereEEAnywhere-v0",
+                "OmniReset-G1Dex3-ObjectAnywhereEEGrasped-v0",
+                "OmniReset-G1Dex3-ObjectRestingEEGrasped-v0",
+                "OmniReset-Dex3-GraspSampling-v0",
                 "OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-Play-v0"
             ]
         }

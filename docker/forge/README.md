@@ -34,10 +34,14 @@ docker/forge/run_local.sh smoke          # G1-D assets -> tiny datasets -> 5 PPO
 docker/forge/run_local.sh smoke-train    # train stage only, from the cached assets/datasets
 docker/forge/run_local.sh                # interactive shell
 NUM_ENVS=256 MAX_ITER=20 docker/forge/run_local.sh smoke-train   # any g1d_pipeline.sh knob overrides
+ROBOT=g1_dex3 docker/forge/run_local.sh smoke                      # the standing G1 + Dex3 instead of the G1-D + Dex1
 ```
 
 Cache and checkpoints land in `~/.cache/uwlab-local/robotics/twguntara/omni-reset/`, mirroring the
-cluster paths; TensorBoard files in `logs/rsl_rl/g1d_dex1_omnireset_agent/`.
+cluster paths; TensorBoard files in `logs/rsl_rl/g1d_dex1_omnireset_agent/` (`g1_dex3_omnireset_agent/` for the
+G1 + Dex3). `ROBOT=g1_dex3` switches `g1d_pipeline.sh`, `run_local.sh` and `submit_g1d.sh` to the second robot:
+its own asset folder (`G1Dex3`), dataset folder (`OmniReset_g1_dex3`), cache (`omni-reset/g1_dex3`) and task ids
+(`OmniReset-G1Dex3-...`, `OmniReset-Dex3-GraspSampling-v0`); see `docs/COMMAND.md`.
 
 ### Watching an environment with a window
 

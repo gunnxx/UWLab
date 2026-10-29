@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# Runs INSIDE a Forge job (after the fork is cloned to ${CODE}): builds the G1-D + Dex1-1 assets, records the
-# OmniReset datasets for that robot, and trains stage 1. Each stage is cached on the shared blob disk so later
-# jobs can skip it.
+# Runs INSIDE a Forge job (after the fork is cloned to ${CODE}): builds the robot assets, records the OmniReset
+# datasets for that robot, and trains stage 1. Each stage is cached on the shared blob disk so later jobs can
+# skip it. Two robots share the pipeline; ROBOT picks the asset builder, the task ids and the cache folder:
+#
+#   ROBOT=g1d_dex1 (default)       Unitree G1-D (wheeled) + Dex1-1 gripper
+#   ROBOT=g1_dex3                  Unitree G1 (standing humanoid) + Dex3 hand
 #
 #   STAGES=assets,datasets,train   comma list; any subset, in this order
 #   INSERTIVE=peg RECEPTIVE=peghole
@@ -21,11 +24,27 @@ cd "${CODE}"
 STAGES="${STAGES:-assets,datasets,train}"
 INSERTIVE="${INSERTIVE:-peg}"
 RECEPTIVE="${RECEPTIVE:-peghole}"
-CACHE="${CACHE-/mnt/robotics/twguntara/omni-reset/g1d}"
+ROBOT="${ROBOT:-g1d_dex1}"
 FORCE="${FORCE:-0}"
 UNITREE_ROS="${UNITREE_ROS:-/workspace/unitree_ros}"
-ASSET_DIR="${CODE}/source/uwlab_assets/data/Robots/Unitree/G1dDex1"
-DATA_DIR="${CODE}/source/uwlab_assets/data/Datasets/OmniReset_g1d"
+# per-robot names: asset folder and files, dataset folder, task ids, the gripper body the grasps are recorded for
+case "${ROBOT}" in
+    g1d_dex1)
+        CACHE="${CACHE-/mnt/robotics/twguntara/omni-reset/g1d}"
+        ASSET_DIR="${CODE}/source/uwlab_assets/data/Robots/Unitree/G1dDex1"
+        DATA_DIR="${CODE}/source/uwlab_assets/data/Datasets/OmniReset_g1d"
+        ROBOT_USD=g1d_dex1_right_arm; GRIPPER_USD=dex1_gripper; GRIPPER_BODY=right_dex1_base_link
+        TASK_PREFIX=OmniReset-G1dDex1; GRASP_TASK=OmniReset-Dex1-GraspSampling-v0
+        EXPERIMENT=g1d_dex1_omnireset_agent ;;
+    g1_dex3)
+        CACHE="${CACHE-/mnt/robotics/twguntara/omni-reset/g1_dex3}"
+        ASSET_DIR="${CODE}/source/uwlab_assets/data/Robots/Unitree/G1Dex3"
+        DATA_DIR="${CODE}/source/uwlab_assets/data/Datasets/OmniReset_g1_dex3"
+        ROBOT_USD=g1_dex3_right_arm; GRIPPER_USD=dex3_hand; GRIPPER_BODY=right_hand_palm_link
+        TASK_PREFIX=OmniReset-G1Dex3; GRASP_TASK=OmniReset-Dex3-GraspSampling-v0
+        EXPERIMENT=g1_dex3_omnireset_agent ;;
+    *) echo "ROBOT must be g1d_dex1 or g1_dex3, got ${ROBOT}" >&2; exit 1 ;;
+esac
 RESET_ENVS="${RESET_ENVS:-2048}"
 NUM_RESETS="${NUM_RESETS:-10000}"
 GRASP_ENVS="${GRASP_ENVS:-8192}"
@@ -34,7 +53,7 @@ NUM_GRASPS="${NUM_GRASPS:-1000}"
 RESET_TYPES="${RESET_TYPES:-ObjectAnywhereEEAnywhere ObjectRestingEEGrasped ObjectAnywhereEEGrasped ObjectPartiallyAssembledEEGrasped}"
 VIS=(--visualizer none)
 
-log() { echo "[g1d $(date +%H:%M:%S)] $*"; }
+log() { echo "[${ROBOT} $(date +%H:%M:%S)] $*"; }
 has_stage() { [[ ",${STAGES}," == *",$1,"* ]]; }
 
 # Forge keeps only the tail of a job's log; persist the full transcript on the blob disk.
@@ -47,29 +66,41 @@ fi
 
 # ------------------------------------------------------------------------------------------------------ assets
 if has_stage assets; then
-    if [[ "${FORCE}" != 1 && -n "${CACHE}" && -f "${CACHE}/assets/g1d_dex1_right_arm.usd" ]]; then
+    if [[ "${FORCE}" != 1 && -n "${CACHE}" && -f "${CACHE}/assets/${ROBOT_USD}.usd" ]]; then
         log "assets: using cached ${CACHE}/assets"
         mkdir -p "${ASSET_DIR}" && rsync -a "${CACHE}/assets/" "${ASSET_DIR}/"
     else
-        log "assets: cloning unitree_ros (G1-D description + Dex1-1 meshes)"
         rm -rf "${UNITREE_ROS}"
         git clone -q --depth 1 --filter=blob:none --no-checkout https://github.com/unitreerobotics/unitree_ros.git "${UNITREE_ROS}"
-        (cd "${UNITREE_ROS}" && git sparse-checkout init --no-cone && git sparse-checkout set \
-            '/robots/g1_d_description/*' '/robots/g1_d_description/meshes/*' \
-            '/robots/g1_description/g1_29dof_mode_15_with_dex1_1.urdf' \
-            '/robots/g1_description/meshes/Dex1_*' '/robots/g1_description/meshes/dex1_col_*' && git checkout -q)
         # the importer appends _1, _2, ... when its output folder exists; start from a clean slate
-        rm -rf "${ASSET_DIR}"/g1d_dex1_right_arm "${ASSET_DIR}"/g1d_dex1_right_arm_* "${ASSET_DIR}"/dex1_gripper "${ASSET_DIR}"/dex1_gripper_* "${ASSET_DIR}"/*.usd
-        log "assets: building URDFs"
-        python -m uwlab_assets.robots.unitree_g1d_dex1.build_urdf --unitree-ros "${UNITREE_ROS}" --out-dir "${ASSET_DIR}" ${BUILD_ARGS:-}
+        rm -rf "${ASSET_DIR}/${ROBOT_USD}" "${ASSET_DIR}/${ROBOT_USD}"_* "${ASSET_DIR}/${GRIPPER_USD}" "${ASSET_DIR}/${GRIPPER_USD}"_* "${ASSET_DIR}"/*.usd
+        if [[ "${ROBOT}" == g1d_dex1 ]]; then
+            log "assets: cloning unitree_ros (G1-D description + Dex1-1 meshes)"
+            (cd "${UNITREE_ROS}" && git sparse-checkout init --no-cone && git sparse-checkout set \
+                '/robots/g1_d_description/*' '/robots/g1_d_description/meshes/*' \
+                '/robots/g1_description/g1_29dof_mode_15_with_dex1_1.urdf' \
+                '/robots/g1_description/meshes/Dex1_*' '/robots/g1_description/meshes/dex1_col_*' && git checkout -q)
+            log "assets: building URDFs"
+            python -m uwlab_assets.robots.unitree_g1d_dex1.build_urdf --unitree-ros "${UNITREE_ROS}" --out-dir "${ASSET_DIR}" ${BUILD_ARGS:-}
+        else
+            # the G1 URDF is vendored with the package (the robot's own, the gravity solver's); only the meshes come from unitree_ros
+            log "assets: cloning unitree_ros (G1 meshes)"
+            (cd "${UNITREE_ROS}" && git sparse-checkout init --no-cone && git sparse-checkout set '/robots/g1_description/meshes/*' && git checkout -q)
+            log "assets: building URDFs"
+            python -m uwlab_assets.robots.unitree_g1_dex3.build_urdf --meshes "${UNITREE_ROS}/robots/g1_description/meshes" --out-dir "${ASSET_DIR}" ${BUILD_ARGS:-}
+        fi
         # convert inside a Kit app (scripts/tools/convert_urdf.py imports pxr before launching and breaks here)
         log "assets: converting to USD (robot, fixed base)"
-        python scripts_v2/tools/convert_urdf_kit.py "${ASSET_DIR}/g1d_dex1_right_arm.urdf" "${ASSET_DIR}/g1d_dex1_right_arm.usd" \
+        python scripts_v2/tools/convert_urdf_kit.py "${ASSET_DIR}/${ROBOT_USD}.urdf" "${ASSET_DIR}/${ROBOT_USD}.usd" \
             --fix_base --joint_stiffness 0 --joint_damping 0 "${VIS[@]}"
         log "assets: converting to USD (gripper, fixed base: the sampler moves it by writing the root pose)"
-        python scripts_v2/tools/convert_urdf_kit.py "${ASSET_DIR}/dex1_gripper.urdf" "${ASSET_DIR}/dex1_gripper.usd" \
+        python scripts_v2/tools/convert_urdf_kit.py "${ASSET_DIR}/${GRIPPER_USD}.urdf" "${ASSET_DIR}/${GRIPPER_USD}.usd" \
             --fix_base --joint_stiffness 0 --joint_damping 0 "${VIS[@]}"
-        [[ -f "${ASSET_DIR}/g1d_dex1_right_arm.usd" && -f "${ASSET_DIR}/dex1_gripper.usd" ]] || { log "assets: USD conversion failed"; exit 1; }
+        [[ -f "${ASSET_DIR}/${ROBOT_USD}.usd" && -f "${ASSET_DIR}/${GRIPPER_USD}.usd" ]] || { log "assets: USD conversion failed"; exit 1; }
+        # the USD must carry the URDF's link masses (the alignment with the robot's gravity solver rests on it)
+        log "assets: checking the USD inertials against the URDF"
+        python scripts_v2/tools/check_usd_inertials.py "${ASSET_DIR}/${ROBOT_USD}.urdf" "${ASSET_DIR}/${ROBOT_USD}.usd"
+        python scripts_v2/tools/check_usd_inertials.py "${ASSET_DIR}/${GRIPPER_USD}.urdf" "${ASSET_DIR}/${GRIPPER_USD}.usd"
         ls -la "${ASSET_DIR}"
         if [[ -n "${CACHE}" ]]; then mkdir -p "${CACHE}/assets" && rsync -a "${ASSET_DIR}/" "${CACHE}/assets/" && log "assets: cached"; fi
     fi
@@ -77,9 +108,9 @@ fi
 
 # ------------------------------------------------------------------------------------------------------- debug
 if has_stage debug; then
-    log "debug: probing the Dex1 grasp environment (${INSERTIVE})"
-    [[ -f "${ASSET_DIR}/dex1_gripper.usd" ]] || { mkdir -p "${ASSET_DIR}" && rsync -a "${CACHE}/assets/" "${ASSET_DIR}/"; }
-    python scripts_v2/tools/debug_grasp_env.py --task OmniReset-Dex1-GraspSampling-v0 --num_envs "${DEBUG_ENVS:-16}" \
+    log "debug: probing the grasp environment (${INSERTIVE})"
+    [[ -f "${ASSET_DIR}/${GRIPPER_USD}.usd" ]] || { mkdir -p "${ASSET_DIR}" && rsync -a "${CACHE}/assets/" "${ASSET_DIR}/"; }
+    python scripts_v2/tools/debug_grasp_env.py --task "${GRASP_TASK}" --num_envs "${DEBUG_ENVS:-16}" \
         --steps "${DEBUG_STEPS:-300}" "${VIS[@]}" env.scene.object="${INSERTIVE}" || log "debug: probe exited with $?"
 fi
 
@@ -116,10 +147,10 @@ PY
             log "datasets: partial assemblies (${PAIR})"
             python scripts_v2/tools/record_partial_assemblies.py --task OmniReset-PartialAssemblies-v0 \
                 --num_envs 10 --num_trajectories 10 --dataset_dir "${DATA_DIR}" "${VIS[@]}" "${OBJ[@]}"
-            log "datasets: Dex1-1 grasps on ${INSERTIVE}"
-            python scripts_v2/tools/record_grasps.py --task OmniReset-Dex1-GraspSampling-v0 \
+            log "datasets: ${ROBOT} grasps on ${INSERTIVE}"
+            python scripts_v2/tools/record_grasps.py --task "${GRASP_TASK}" \
                 --num_envs "${GRASP_ENVS}" --num_grasps "${NUM_GRASPS}" --dataset_dir "${DATA_DIR}" \
-                --gripper_body_name right_dex1_base_link "${VIS[@]}" env.scene.object="${INSERTIVE}"
+                --gripper_body_name "${GRIPPER_BODY}" "${VIS[@]}" env.scene.object="${INSERTIVE}"
         fi
         # The recorder writes into the job's own file system, which disappears with the job: a max-duration kill
         # or a cancel used to lose every state recorded so far. Mirror the reset-state files to the cache every
@@ -136,7 +167,7 @@ PY
         fi
         for RT in ${RESET_TYPES}; do
             log "datasets: reset states ${RT}"
-            python scripts_v2/tools/record_reset_states.py --task "OmniReset-G1dDex1-${RT}-v0" \
+            python scripts_v2/tools/record_reset_states.py --task "${TASK_PREFIX}-${RT}-v0" \
                 --num_envs "${RESET_ENVS}" --num_reset_states "${NUM_RESETS}" --dataset_dir "${DATA_DIR}" "${VIS[@]}" "${OBJ[@]}"
             sync_resets && log "datasets: ${RT} mirrored to the cache"
         done
@@ -157,12 +188,12 @@ if has_stage bench; then
     if [[ -n "${CACHE}" && -d "${CACHE}/datasets" ]]; then mkdir -p "${DATA_DIR}" && rsync -a "${CACHE}/datasets/" "${DATA_DIR}/"; fi
     if ! compgen -G "${DATA_DIR}/Grasps/*/grasps.pt" > /dev/null; then
         log "bench: no grasp file cached, recording a small one"
-        python scripts_v2/tools/record_grasps.py --task OmniReset-Dex1-GraspSampling-v0 --num_envs 512 --num_grasps 200 \
-            --dataset_dir "${DATA_DIR}" --gripper_body_name right_dex1_base_link "${VIS[@]}" env.scene.object="${INSERTIVE}"
+        python scripts_v2/tools/record_grasps.py --task "${GRASP_TASK}" --num_envs 512 --num_grasps 200 \
+            --dataset_dir "${DATA_DIR}" --gripper_body_name "${GRIPPER_BODY}" "${VIS[@]}" env.scene.object="${INSERTIVE}"
     fi
     for n in ${BENCH_ENVS}; do
         log "bench: ${BENCH_TASK} with ${n} envs, ${BENCH_STEPS} steps"
-        python scripts_v2/tools/debug_reset_env.py --task "OmniReset-G1dDex1-${BENCH_TASK}-v0" --num_envs "${n}" \
+        python scripts_v2/tools/debug_reset_env.py --task "${TASK_PREFIX}-${BENCH_TASK}-v0" --num_envs "${n}" \
             --steps "${BENCH_STEPS}" --funnel --close_gripper "${VIS[@]}" "${OBJ[@]}" > "/tmp/bench_${n}.log" 2>&1 &
         BPID=$!; PEAK=0
         while kill -0 "${BPID}" 2>/dev/null; do
@@ -183,10 +214,10 @@ if has_stage train; then
     MAX_ITER="${MAX_ITER:-3000}"
     LOGGER="${LOGGER:-wandb}"
     LOG_PROJECT="${LOG_PROJECT:-omnireset}"
-    TASK="OmniReset-G1dDex1-RelCartesianOSC-State-v0"
+    TASK="${TASK_PREFIX}-RelCartesianOSC-State-v0"
     RUN_NAME="${RUN_NAME:-${TASK}-${INSERTIVE}-${RECEPTIVE}-s${SEED}}"
-    EXPERIMENT_DIR="logs/rsl_rl/g1d_dex1_omnireset_agent"
-    CKPT_DEST="${CKPT_DEST-/mnt/robotics/twguntara/omni-reset/g1d_dex1_omnireset_agent}"
+    EXPERIMENT_DIR="logs/rsl_rl/${EXPERIMENT}"
+    CKPT_DEST="${CKPT_DEST-/mnt/robotics/twguntara/omni-reset/${EXPERIMENT}}"
     SYNC_MINUTES="${SYNC_MINUTES:-10}"
 
     TRAIN=(python scripts/reinforcement_learning/rsl_rl/train.py --task "${TASK}" --num_envs "${NUM_ENVS}"
