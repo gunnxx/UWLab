@@ -233,7 +233,9 @@ class check_grasp_success(ManagerTermBase):
         if self._closure_joint_ids is not None:
             finger_pos = gripper_asset.data.joint_pos.torch[:, self._closure_joint_ids]
             closed_fraction = (finger_pos - self._closure_open) / (self._closure_close - self._closure_open)
-            grasp_success &= (closed_fraction > self.min_close_fraction).all(dim=1)
+            # the mean over the closure joints: on a multi-finger hand (Dex3) the object can lever one joint past
+            # its open target while the others close on it, and that is still a grasp
+            grasp_success &= closed_fraction.mean(dim=1) > self.min_close_fraction
 
         return grasp_success
 
@@ -501,9 +503,12 @@ class check_reset_state_success(ManagerTermBase):
             finger_pos = self.robot_asset.data.joint_pos.torch[:, self.grasp_joint_ids]
             # 0 = at the closed command (nothing between the fingers), 1 = at the open command
             open_fraction = ((finger_pos - self.grasp_closed) / (self.grasp_open - self.grasp_closed)).abs()
-            fingers_blocked = (
-                (open_fraction > self.grasp_min_open_fraction) & (open_fraction < self.grasp_max_open_fraction)
-            ).all(dim=1)
+            # mean over the closure joints instead of checking individual joints to accommodate
+            # multi-finger hands and it does not change the behavior for two-finger gripper
+            mean_open_fraction = open_fraction.mean(dim=1)
+            fingers_blocked = (mean_open_fraction > self.grasp_min_open_fraction) & (
+                mean_open_fraction < self.grasp_max_open_fraction
+            )
             ee_pos = self.robot_asset.data.body_link_pos_w.torch[:, self.ee_body_idx]
             object_near_ee = (self.grasp_object.data.root_pos_w.torch - ee_pos).norm(dim=1) < (
                 self.grasp_max_object_ee_dist
