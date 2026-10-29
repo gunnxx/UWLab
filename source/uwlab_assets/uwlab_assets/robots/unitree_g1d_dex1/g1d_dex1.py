@@ -86,10 +86,8 @@ G1D_VELOCITY_LIMITS = {
 
 DEX1_GRIPPER_ACTUATOR = ImplicitActuatorCfg(
     joint_names_expr=DEX1_FINGER_JOINT_REGEX,
-    # prismatic fingers: stiffness in N/m. A 30 mm peg stops the fingers 12 mm short of the closed command, so
-    # 2000 N/m saturates at the 20 N effort limit, roughly the Dex1-1's default grip force.
-    stiffness=2000.0,
-    damping=50.0,
+    stiffness=1000.0,
+    damping=100.0,
     effort_limit_sim=20.0,
     velocity_limit_sim=0.2,
 )
