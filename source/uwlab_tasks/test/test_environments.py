@@ -347,7 +347,7 @@ def test_grasp_sampling_preserves_asset_masses():
     )
     assert module.GraspSamplingSceneCfg().object.spawn.mass_props is None
     variants = module.variants["scene.object"]
-    assert set(variants) == {"peg", "big-peg", "cube", "cupcake", "rectangle", "fbleg", "fbdrawerbottom"}
+    assert set(variants) == {"peg", "big-peg", "peg-long", "cube", "cupcake", "rectangle", "fbleg", "fbdrawerbottom"}
     for name, object_cfg in variants.items():
         if name == "big-peg":
             # the one variant with an authored mass, that of the 3D-printed peg
@@ -376,6 +376,13 @@ def test_big_peg_pair_variants():
             # the 3D-printed peg's mass and the friction of the grasp-sampling variant
             assert peg.spawn.mass_props.mass == pytest.approx(0.2)
             assert peg.spawn.physics_material.static_friction == pytest.approx(0.6)
+        if name == "reset_states_cfg":
+            # written with MassCfg, which applies the mass API, so it takes effect on the peg; the unscaled and the
+            # long peg keep the asset's density mass like the grasp-sampling scene
+            assert type(peg.spawn.mass_props).__name__ == "MassCfg"
+            assert unit_peg.spawn.mass_props is None
+            assert module.variants["scene.insertive_object"]["peg-long"].spawn.mass_props is None
+            assert module.ResetStatesSceneCfg().insertive_object.spawn.mass_props is None
         if name == "rl_state_cfg":
             # training draws an absolute mass, so the big peg selects its own range
             mass_term = module.variants["events.randomize_insertive_object_mass"]["big-peg"]
@@ -395,6 +402,44 @@ def test_big_peg_pair_variants():
     assert metadata["assembled_offset"]["pos"][2] == 0.014837  # the input is left alone
     assert utils.scale_metadata(metadata, None) == metadata
     assert utils.scale_metadata(metadata, (1.0, 1.0, 1.0)) == metadata
+
+
+@pytest.mark.isaacsim_ci
+def test_long_peg_variants():
+    """The long peg is the peg stretched along z in the hole of unit size, with the assembly frame moved to match."""
+    utils = importlib.import_module("uwlab_tasks.manager_based.manipulation.omnireset.mdp.utils")
+    package = "uwlab_tasks.manager_based.manipulation.omnireset.config.ur5e_robotiq_2f85"
+    overrides = {"assembled_offset": {"pos": (0.0, 0.0, -0.03)}}
+    for name in ("partial_assemblies_cfg", "reset_states_cfg", "rl_state_cfg"):
+        module = importlib.import_module(f"{package}.{name}")
+        peg = module.variants["scene.insertive_object"]["peg-long"]
+        hole = module.variants["scene.receptive_object"]["peghole"]
+        assert peg.spawn.scale == (1.0, 1.0, 2.0)
+        assert peg.spawn.metadata_overrides == overrides
+        assert module.variants["scene.insertive_object"]["peg"].spawn.metadata_overrides is None
+        # the hole is not scaled with it, so the pair folder carries the suffix on the peg only
+        assert utils.pair_dataset_name(peg.spawn, hole.spawn) == "Peg_x1x1x2__PegHole"
+    grasp = importlib.import_module(f"{package}.grasp_sampling_cfg").variants["scene.object"]["peg-long"]
+    assert grasp.spawn.scale == (1.0, 1.0, 2.0)
+    assert utils.object_dataset_name(grasp.spawn.usd_path, grasp.spawn.scale) == "Peg_x1x1x2"
+
+    # the peg's metadata file: origin at the centre, bottom 3 cm below it, assembly frame at the origin
+    metadata = {
+        "assembled_offset": {"pos": [0.0, 0.0, 0.0], "quat": [0.0, 0.0, 0.0, 1.0]},
+        "bottom_offset": {"pos": [0.0, 0.0, -0.03], "quat": [0.0, 0.0, 0.0, 1.0]},
+    }
+    long_peg = utils.apply_metadata_overrides(utils.scale_metadata(metadata, (1.0, 1.0, 2.0)), overrides)
+    assert long_peg["bottom_offset"]["pos"] == pytest.approx([0.0, 0.0, -0.06])
+    assert long_peg["assembled_offset"]["pos"] == [0.0, 0.0, -0.03]  # a list, like the file's own sequences
+    assert long_peg["assembled_offset"]["quat"] == [0.0, 0.0, 0.0, 1.0]  # the override leaves the other key alone
+    assert metadata["assembled_offset"]["pos"] == [0.0, 0.0, 0.0]  # the input is left alone
+    assert utils.apply_metadata_overrides(metadata, None) == metadata
+    # the hole's metadata puts the assembly frame 0.014837 m above the hole frame and the hole bottom 0.015163 m
+    # below it; the long peg's centre then sits 3 cm higher than the unit peg's and its bottom meets the hole bottom
+    hole_assembled_z, hole_bottom_z = 0.014837, -0.015163
+    centre_z = hole_assembled_z - long_peg["assembled_offset"]["pos"][2]
+    assert centre_z == pytest.approx(0.044837)
+    assert centre_z + long_peg["bottom_offset"]["pos"][2] == pytest.approx(hole_bottom_z)
 
 
 @pytest.mark.parametrize("contract", ["asset", "armature"])

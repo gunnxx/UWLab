@@ -29,6 +29,7 @@ import warp as wp
 from isaaclab.assets import Articulation, RigidObject
 from isaaclab.scene import InteractiveScene
 from isaaclab.sim import UsdFileCfg
+from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, NVIDIA_NUCLEUS_DIR, retrieve_file_path
 from isaaclab.utils.seed import configure_seed
 from isaaclab.utils.warp import convert_to_warp_mesh
@@ -433,20 +434,65 @@ def scale_metadata(metadata: dict, scale: tuple[float, float, float] | None) -> 
     return scaled
 
 
+def apply_metadata_overrides(metadata: dict, overrides: dict | None) -> dict:
+    """Metadata with the entries of ``overrides`` written over it.
+
+    The merge is nested: a mapping in ``overrides`` replaces the keys it names inside the matching mapping of
+    the metadata and leaves its other keys alone, any other value replaces the entry outright. Tuples are stored
+    as lists, which is how the file reader hands sequences back, so the merged metadata is uniform.
+
+    Args:
+        metadata: Metadata as read by :func:`read_metadata_from_usd_directory`. It is not modified.
+        overrides: Entries to write, nested like the metadata. ``None`` or an empty mapping returns a copy of
+            the metadata unchanged.
+
+    Returns:
+        The merged metadata.
+    """
+    merged = copy.deepcopy(metadata)
+    if not overrides:
+        return merged
+    for key, value in overrides.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = apply_metadata_overrides(merged[key], value)
+        else:
+            merged[key] = list(value) if isinstance(value, tuple) else copy.deepcopy(value)
+    return merged
+
+
+@configclass
+class UsdFileWithMetadataCfg(UsdFileCfg):
+    """USD spawn configuration of an object whose metadata differs from the ``metadata.yaml`` beside its file.
+
+    The metadata files describe an asset at unit scale, paired with its partner at unit scale, and
+    :func:`scale_metadata` covers a variant that scales both objects alike. A variant that changes one object
+    of the pair only, such as a peg stretched along its axis in the hole of unit size, needs other offsets, and
+    this configuration carries them. :func:`read_asset_metadata` writes them over the scaled metadata.
+    """
+
+    metadata_overrides: dict | None = None
+    """Entries that replace those of the scaled metadata, nested like the file, for example
+    ``{"assembled_offset": {"pos": (0.0, 0.0, -0.03)}}``. Keys that are not named keep their scaled values.
+    ``None`` leaves the metadata as read."""
+
+
 def read_asset_metadata(asset: RigidObject | Articulation) -> dict:
     """Metadata of a scene asset at the scale it is spawned with.
 
     Reads the ``metadata.yaml`` next to the asset's USD file and applies :func:`scale_metadata` with the spawn
     scale, so that a scaled variant such as the big peg gets the assembled and bottom offsets of its own size.
+    A spawn configuration with ``metadata_overrides`` (:class:`UsdFileWithMetadataCfg`) then has those
+    written over the result by :func:`apply_metadata_overrides`.
 
     Args:
-        asset: The scene asset. Its ``cfg.spawn`` holds the USD path and the scale.
+        asset: The scene asset. Its ``cfg.spawn`` holds the USD path, the scale and any metadata overrides.
 
     Returns:
         The scaled metadata.
     """
     spawn = asset.cfg.spawn
-    return scale_metadata(read_metadata_from_usd_directory(spawn.usd_path), getattr(spawn, "scale", None))
+    metadata = scale_metadata(read_metadata_from_usd_directory(spawn.usd_path), getattr(spawn, "scale", None))
+    return apply_metadata_overrides(metadata, getattr(spawn, "metadata_overrides", None))
 
 
 def object_name_from_usd(usd_path: str) -> str:

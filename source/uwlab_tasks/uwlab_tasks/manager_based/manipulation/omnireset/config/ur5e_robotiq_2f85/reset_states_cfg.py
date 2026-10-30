@@ -15,6 +15,7 @@ from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
+from isaaclab.sim.schemas.schemas_cfg import MassCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 from isaaclab_physx.physics import PhysxCfg
@@ -46,8 +47,9 @@ class ResetStatesSceneCfg(InteractiveSceneCfg):
                 disable_gravity=False,
                 kinematic_enabled=False,
             ),
-            # assume very light
-            mass_props=sim_utils.MassPropertiesCfg(mass=0.001),
+            # the asset's own mass, as in grasp sampling: the peg has no mass authored, so PhysX takes it from its
+            # default density, 54 g for the unit peg
+            mass_props=None,
         ),
         init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0), rot=(0.0, 0.0, 0.0, 1.0)),
     )
@@ -461,18 +463,25 @@ class ResetStatesRewardsCfg:
 def make_insertive_object(
     usd_path: str,
     scale: tuple[float, float, float] = (1.0, 1.0, 1.0),
-    mass: float = 0.001,
+    mass: float | None = None,
     friction: float | None = None,
+    metadata_overrides: dict | None = None,
 ) -> RigidObjectCfg:
     """Insertive object variant of the scene.
+
+    The mass is written with ``MassCfg``, which applies the mass API to the prim, so it takes effect on assets that
+    have none authored such as the peg. The older ``MassPropertiesCfg`` only edits prims that already carry it.
 
     Args:
         usd_path: USD file of the object.
         scale: Spawn scale. A scaled variant reads and records its own dataset folder, see
             :func:`~mdp.utils.pair_dataset_name`, and its metadata offsets are scaled with it.
-        mass: Mass (kg) authored on the object.
+        mass: Mass (kg) authored on the object. ``None`` keeps the asset's mass or density, as the grasp-sampling
+            scene does, which is 54 g for the unit peg and 108 g for the long one.
         friction: Static and dynamic friction coefficient bound to the object's colliders with the ``max``
             combine mode, as the grasp-sampling scene authors it. ``None`` keeps the asset's material.
+        metadata_overrides: Metadata entries written over the scaled ones, for a variant whose partner is not
+            scaled with it, see :class:`~mdp.utils.UsdFileWithMetadataCfg`. ``None`` keeps the scaled metadata.
 
     Returns:
         The object configuration.
@@ -484,7 +493,7 @@ def make_insertive_object(
         )
     return RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/InsertiveObject",
-        spawn=sim_utils.UsdFileCfg(
+        spawn=task_mdp.UsdFileWithMetadataCfg(
             usd_path=usd_path,
             scale=scale,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
@@ -493,8 +502,9 @@ def make_insertive_object(
                 disable_gravity=False,
                 kinematic_enabled=False,
             ),
-            mass_props=sim_utils.MassPropertiesCfg(mass=mass),
+            mass_props=MassCfg(mass=mass) if mass is not None else None,
             physics_material=physics_material,
+            metadata_overrides=metadata_overrides,
         ),
         init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0), rot=(0.0, 0.0, 0.0, 1.0)),
     )
@@ -537,6 +547,14 @@ variants = {
         # the peg at twice the size, authored like the grasp-sampling variant: the printed peg's 200 g, friction 0.6
         "big-peg": make_insertive_object(
             f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Peg/peg.usd", scale=(2.0, 2.0, 2.0), mass=0.2, friction=0.6
+        ),
+        # the peg at twice the length, 3 x 3 x 12 cm, in the hole of unit size. Its bottom is 6 cm below its centre
+        # instead of 3 cm, so the assembly frame, which the unit peg carries at its centre, moves 3 cm below the
+        # long peg's centre for the two bottoms to meet
+        "peg-long": make_insertive_object(
+            f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Peg/peg.usd",
+            scale=(1.0, 1.0, 2.0),
+            metadata_overrides={"assembled_offset": {"pos": (0.0, 0.0, -0.03)}},
         ),
         "cupcake": make_insertive_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/CupCake/cupcake.usd"),
         "cube": make_insertive_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/InsertiveCube/insertive_cube.usd"),

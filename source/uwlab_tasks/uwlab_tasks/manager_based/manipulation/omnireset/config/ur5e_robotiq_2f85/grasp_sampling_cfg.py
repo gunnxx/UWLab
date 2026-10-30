@@ -210,6 +210,8 @@ variants = {
             mass=0.2,
             friction=0.6,
         ),
+        # the peg at twice the length, 3 x 3 x 12 cm; the sampler needs no metadata, so the stretch is all there is
+        "peg-long": make_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Peg/peg.usd", scale=(1.0, 1.0, 2.0)),
         "cupcake": make_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/CupCake/cupcake.usd"),
         "cube": make_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/InsertiveCube/insertive_cube.usd"),
         "rectangle": make_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Rectangle/rectangle.usd"),

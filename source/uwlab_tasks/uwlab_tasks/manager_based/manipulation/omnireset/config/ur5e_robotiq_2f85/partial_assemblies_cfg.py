@@ -190,20 +190,24 @@ class PartialAssembliesActionsCfg:
     pass
 
 
-def make_insertive_object(usd_path: str, scale: tuple[float, float, float] = (1.0, 1.0, 1.0)) -> RigidObjectCfg:
+def make_insertive_object(
+    usd_path: str, scale: tuple[float, float, float] = (1.0, 1.0, 1.0), metadata_overrides: dict | None = None
+) -> RigidObjectCfg:
     """Insertive object variant of the partial-assemblies scene.
 
     Args:
         usd_path: USD file of the object.
         scale: Spawn scale. A scaled variant records to its own dataset folder, see
             :func:`~mdp.utils.pair_dataset_name`, and its metadata offsets are scaled with it.
+        metadata_overrides: Metadata entries written over the scaled ones, for a variant whose partner is not
+            scaled with it, see :class:`~mdp.utils.UsdFileWithMetadataCfg`. ``None`` keeps the scaled metadata.
 
     Returns:
         The object configuration.
     """
     return RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/InsertiveObject",
-        spawn=sim_utils.UsdFileCfg(
+        spawn=task_mdp.UsdFileWithMetadataCfg(
             usd_path=usd_path,
             scale=scale,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
@@ -213,6 +217,7 @@ def make_insertive_object(usd_path: str, scale: tuple[float, float, float] = (1.
                 kinematic_enabled=False,
             ),
             mass_props=sim_utils.MassPropertiesCfg(mass=0.001),
+            metadata_overrides=metadata_overrides,
         ),
         init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, OBJECT_SPAWN_HEIGHT * 2), rot=(0.0, 0.0, 0.0, 1.0)),
     )
@@ -253,6 +258,14 @@ variants = {
         ),
         "peg": make_insertive_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Peg/peg.usd"),
         "big-peg": make_insertive_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Peg/peg.usd", scale=(2.0, 2.0, 2.0)),
+        # the peg at twice the length, 3 x 3 x 12 cm, in the hole of unit size. Its bottom is 6 cm below its centre
+        # instead of 3 cm, so the assembly frame, which the unit peg carries at its centre, moves 3 cm below the
+        # long peg's centre for the two bottoms to meet
+        "peg-long": make_insertive_object(
+            f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Peg/peg.usd",
+            scale=(1.0, 1.0, 2.0),
+            metadata_overrides={"assembled_offset": {"pos": (0.0, 0.0, -0.03)}},
+        ),
         "cupcake": make_insertive_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/CupCake/cupcake.usd"),
         "cube": make_insertive_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/InsertiveCube/insertive_cube.usd"),
         "rectangle": make_insertive_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Rectangle/rectangle.usd"),

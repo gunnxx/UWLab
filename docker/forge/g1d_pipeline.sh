@@ -124,7 +124,7 @@ if has_stage datasets; then
     # scale suffix for a scaled variant (see mdp/utils.pair_dataset_name)
     PAIR="$(python - "${INSERTIVE}" "${RECEPTIVE}" <<'PY'
 import sys
-names = {"peg": "Peg", "peghole": "PegHole", "big-peg": "Peg_x2", "big-peghole": "PegHole_x2",
+names = {"peg": "Peg", "peghole": "PegHole", "big-peg": "Peg_x2", "big-peghole": "PegHole_x2", "peg-long": "Peg_x1x1x2",
          "fbleg": "SquareLeg", "fbtabletop": "SquareTableTop",
          "fbdrawerbottom": "DrawerBottom", "fbdrawerbox": "DrawerBox", "cupcake": "CupCake", "plate": "Plate",
          "rectangle": "Rectangle", "wall": "Wall"}

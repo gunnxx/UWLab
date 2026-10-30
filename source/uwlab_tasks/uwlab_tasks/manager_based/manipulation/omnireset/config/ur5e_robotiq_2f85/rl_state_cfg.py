@@ -621,6 +621,7 @@ def make_insertive_object(
     scale: tuple[float, float, float] = (1.0, 1.0, 1.0),
     mass: float = 0.001,
     friction: float | None = None,
+    metadata_overrides: dict | None = None,
 ) -> RigidObjectCfg:
     """Insertive object variant of the scene.
 
@@ -631,6 +632,8 @@ def make_insertive_object(
         mass: Mass (kg) authored on the object.
         friction: Static and dynamic friction coefficient bound to the object's colliders with the ``max``
             combine mode, as the grasp-sampling scene authors it. ``None`` keeps the asset's material.
+        metadata_overrides: Metadata entries written over the scaled ones, for a variant whose partner is not
+            scaled with it, see :class:`~mdp.utils.UsdFileWithMetadataCfg`. ``None`` keeps the scaled metadata.
 
     Returns:
         The object configuration.
@@ -642,7 +645,7 @@ def make_insertive_object(
         )
     return RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/InsertiveObject",
-        spawn=sim_utils.UsdFileCfg(
+        spawn=task_mdp.UsdFileWithMetadataCfg(
             usd_path=usd_path,
             scale=scale,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
@@ -653,6 +656,7 @@ def make_insertive_object(
             ),
             mass_props=sim_utils.MassPropertiesCfg(mass=mass),
             physics_material=physics_material,
+            metadata_overrides=metadata_overrides,
         ),
         init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, 0.0), rot=(0.0, 0.0, 0.0, 1.0)),
     )
@@ -695,6 +699,14 @@ variants = {
         # the peg at twice the size, authored like the grasp-sampling variant: the printed peg's 200 g, friction 0.6
         "big-peg": make_insertive_object(
             f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Peg/peg.usd", scale=(2.0, 2.0, 2.0), mass=0.2, friction=0.6
+        ),
+        # the peg at twice the length, 3 x 3 x 12 cm, in the hole of unit size. Its bottom is 6 cm below its centre
+        # instead of 3 cm, so the assembly frame, which the unit peg carries at its centre, moves 3 cm below the
+        # long peg's centre for the two bottoms to meet
+        "peg-long": make_insertive_object(
+            f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Peg/peg.usd",
+            scale=(1.0, 1.0, 2.0),
+            metadata_overrides={"assembled_offset": {"pos": (0.0, 0.0, -0.03)}},
         ),
         "cupcake": make_insertive_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/CupCake/cupcake.usd"),
         "cube": make_insertive_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/InsertiveCube/insertive_cube.usd"),

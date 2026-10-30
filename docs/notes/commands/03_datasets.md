@@ -63,6 +63,11 @@ grasp step below takes `env.scene.object=big-peg`. Every file then lands under `
 authored at 200 g, the weight of the printed one, and training draws its mass from a range around that, see
 [page 4](04_training.md).
 
+There is also `peg-long`, the peg stretched to twice its length, 3 x 3 x 12 cm, which goes in the unit `peghole`.
+Only the peg is scaled, so its folders are `Peg_x1x1x2__PegHole` and `Peg_x1x1x2`, and its variant moves the
+assembly frame 3 cm down the peg so the longer peg still bottoms out in the hole. It keeps the asset's density, so
+it weighs twice what the unit peg does, and the default training mass range covers it.
+
 The sizes in the commands are the ones the recorded sets were made with. Smaller numbers are fine for a first
 pass, and the pipeline's smoke sizes at the end of this page finish in minutes.
 
@@ -138,9 +143,10 @@ is among the candidates. Its standoffs stay within the pocket's depth. These cho
 command line; the Dex3 already sets it in its config, so the override is harmless there. [How the grasp sampler works](../omnireset_grasp_sampling.html) explains the
 sampler's mechanics, and its section 7 the Dex3's convention and where the hand-tuned 45 degree tilt sits in it.
 
-The scene's object is a Hydra choice. Besides `peg` there are `fbleg`, `fbdrawerbottom` and `big-peg`, which
-is the peg at twice the size with an authored mass of 150 g and a friction of 0.6, made for the Dex3. A
-scaled variant records to its own folder, so the big peg writes `Grasps/Peg_x2/grasps.pt`.
+The scene's object is a Hydra choice. Besides `peg` there are `fbleg`, `fbdrawerbottom`, `big-peg`, which
+is the peg at twice the size with an authored mass of 200 g and a friction of 0.6, made for the Dex3, and
+`peg-long`, the peg at twice the length. A scaled variant records to its own folder, so the big peg writes
+`Grasps/Peg_x2/grasps.pt` and the long peg `Grasps/Peg_x1x1x2/grasps.pt`.
 
 What to expect: `Grasps/Peg/grasps.pt` under the dataset root. The recorder writes the file at most once a
 minute, so a run killed early keeps what it had.
