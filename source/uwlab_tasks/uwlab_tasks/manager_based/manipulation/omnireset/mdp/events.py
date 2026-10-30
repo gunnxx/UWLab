@@ -108,6 +108,9 @@ class grasp_sampling_event(ManagerTermBase):
         # the rest are uniform over the surface so that side grasps exist too (a lying peg can only be grasped
         # from above across its diameter, which the top-biased cap grasps cannot do)
         self.top_bias_fraction = float(cfg.params.get("top_bias_fraction", 1.0))
+        # standoffs within the finger clearance about the pinch depth, instead of the sweep from the pinch depth out
+        # by an object diagonal, see ``_sample_antipodal_grasps``
+        self.standoffs_within_clearance = bool(cfg.params.get("standoffs_within_clearance", False))
 
         # Read parameters from object metadata
         gripper_asset = env.scene[self.gripper_cfg.name]
@@ -119,8 +122,36 @@ class grasp_sampling_event(ManagerTermBase):
         self.finger_offset = metadata.get("finger_offset")
         self.finger_clearance = metadata.get("finger_clearance")
         self.gripper_approach_direction = tuple(metadata.get("gripper_approach_direction"))
-        self.grasp_align_axis = tuple(metadata.get("grasp_align_axis"))
-        self.orientation_sample_axis = tuple(metadata.get("orientation_sample_axis"))
+        # ``grasp_align_axis`` is the hand axis the antipodal sampler lays along the pinch line, the ray through the
+        # object, and ``orientation_sample_axis`` the hand axis it then spins the hand about. Three conventions are
+        # in use:
+        #   - both the approach (Robotiq, Dex1): the hand comes in along the pinch line, the spin is a wrist roll
+        #     and the aperture test compares the aperture with the object's depth along the approach;
+        #   - both the squeeze axis (Dex3 metadata, palm x): the fingers close along the pinch line and the spin
+        #     chooses the side the palm comes from;
+        #   - a yawed axis, 45 degrees from the squeeze axis in the palm plane, as both (Dex3 configuration): the
+        #     squeeze crosses the pinch line at 45 degrees, on a square peg across its diagonal, and the spin sweeps
+        #     the hand around the pinch line with that yaw kept.
+        # The spin is about ``orientation_sample_axis``. When the two axes differ, the spin keeps the spin axis fixed
+        # and turns the alignment axis off the ray, which the log points out.
+        # Both axes can be overridden per run or per configuration, which is how the Dex3 sets its convention
+        # without rebuilding the asset.
+        override_align = cfg.params.get("grasp_align_axis")
+        override_spin = cfg.params.get("orientation_sample_axis")
+        self.grasp_align_axis = tuple(override_align or metadata.get("grasp_align_axis"))
+        self.orientation_sample_axis = tuple(
+            override_spin or metadata.get("orientation_sample_axis", self.grasp_align_axis)
+        )
+        align = np.asarray(self.grasp_align_axis, dtype=np.float64)
+        spin = np.asarray(self.orientation_sample_axis, dtype=np.float64)
+        cosine = float(align @ spin) / (np.linalg.norm(align) * np.linalg.norm(spin))
+        if abs(abs(cosine) - 1.0) > 1e-6:
+            logger.info(
+                f"grasp_sampling_event: grasp_align_axis {self.grasp_align_axis} and orientation_sample_axis"
+                f" {self.orientation_sample_axis} are {math.degrees(math.acos(max(-1.0, min(1.0, cosine)))):.1f} deg"
+                " apart: the hand is laid on the pinch line with that yaw and rolls about the spin axis through the"
+                " centre"
+            )
         # The pinch point need not lie on the approach line through the gripper body origin (the Dex3's sits
         # 9.8 cm along the fingers from the palm origin). ``gripper_offset.pos`` is the pinch point in the gripper
         # frame: its component along the approach is the ``finger_offset`` the standoff sweep starts from, its
@@ -167,6 +198,9 @@ class grasp_sampling_event(ManagerTermBase):
         visualize_grasps: bool = False,
         visualization_scale: float = 0.01,
         top_bias_fraction: float = 1.0,
+        standoffs_within_clearance: bool = False,
+        grasp_align_axis: list[float] | None = None,
+        orientation_sample_axis: list[float] | None = None,
         fixed_grasp: dict | None = None,
         nominal_grasps: list[dict] | None = None,
         nominal_angle_max_deg: float = 20.0,
@@ -176,11 +210,13 @@ class grasp_sampling_event(ManagerTermBase):
         """Execute grasp sampling event - sample from pre-computed candidates."""
         # Generate grasp candidates if not already done
         if self.grasp_candidates is None:
-            candidates_list = self._generate_grasp_candidates()
-            # Convert to tensor for efficient indexing
-            self.grasp_candidates = torch.stack(
-                [torch.tensor(candidate, dtype=torch.float32, device=env.device) for candidate in candidates_list]
-            )
+            candidates = np.asarray(self._generate_grasp_candidates(), dtype=np.float32)
+            if candidates.ndim != 3 or len(candidates) == 0:
+                raise ValueError(
+                    "grasp_sampling_event: no grasp candidates; the object may be wider than the aperture everywhere"
+                    " or the surface budget too small"
+                )
+            self.grasp_candidates = torch.as_tensor(candidates, device=env.device)
 
             # Visualize grasp poses if requested
             if self.visualize_grasps:
@@ -192,9 +228,8 @@ class grasp_sampling_event(ManagerTermBase):
         self._ensure_stable_gripper_state(env, gripper_asset, env_ids)
         # Second: Open gripper to prepare for grasping
         self._open_gripper(env, gripper_asset, env_ids)
-        # Randomly sample grasp candidates for the environments being reset
-        num_envs_reset = len(env_ids)
-        grasp_indices = torch.randint(0, len(self.grasp_candidates), (num_envs_reset,), device=env.device)
+        # One candidate per environment being reset, drawn at random
+        grasp_indices = torch.randint(0, len(self.grasp_candidates), (len(env_ids),), device=env.device)
 
         # Apply grasp transforms to gripper (vectorized for multiple environments)
         sampled_transforms = self.grasp_candidates[grasp_indices]
@@ -211,6 +246,9 @@ class grasp_sampling_event(ManagerTermBase):
 
         In order of precedence: the single ``fixed_grasp`` when it is enabled, perturbations of the
         ``nominal_grasps`` when that list is non-empty, else antipodal samples of the object mesh.
+
+        Returns:
+            The candidate transforms, as a list of 4x4 arrays or one (N, 4, 4) array.
         """
         if self.fixed_grasp and self.fixed_grasp.get("enabled", False):
             transform = self._grasp_transform(self.fixed_grasp)
@@ -394,7 +432,21 @@ class grasp_sampling_event(ManagerTermBase):
         return trimesh.Trimesh(vertices=vertices.numpy(), faces=faces.numpy(), process=False)
 
     def _sample_antipodal_grasps(self, mesh):
-        """Sample antipodal grasp poses on a mesh using proper gripper parameterization."""
+        """Sample antipodal grasp poses on the object mesh.
+
+        From each sampled surface point a ray is cast into the object. The ray and its far hit are the pinch line,
+        accepted when its length is within the aperture. The hand's ``grasp_align_axis`` is laid along that line by
+        the smallest rotation, the hand is spun about the line in ``num_orientations`` steps and pulled back along
+        its approach by each of ``num_standoff_samples`` standoffs. Which hand axis is laid along the line is the
+        metadata's choice, see the constructor: the approach for the Robotiq and Dex1, the squeeze axis for the Dex3.
+
+        Args:
+            mesh: The object mesh in the object frame, at the spawned scale.
+
+        Returns:
+            The candidate gripper-body transforms in the object frame, shape (N, 4, 4), float32, ordered by surface
+            point, then spin, then standoff.
+        """
         # Extract parameters with defaults
         num_surface_samples = max(1, int(self.num_candidates // (self.num_orientations * self.num_standoff_samples)))
 
@@ -405,19 +457,29 @@ class grasp_sampling_event(ManagerTermBase):
         grasp_align_axis = torch.tensor(self.grasp_align_axis, dtype=torch.float32)
         grasp_align_axis = grasp_align_axis / torch.norm(grasp_align_axis)
 
-        orientation_sample_axis = torch.tensor(self.orientation_sample_axis, dtype=torch.float32)
-        orientation_sample_axis = orientation_sample_axis / torch.norm(orientation_sample_axis)
 
         # Simple mesh-adaptive standoff: use bounding box diagonal for size-aware clearance
         mesh_extents = mesh.extents
         mesh_diagonal = np.linalg.norm(mesh_extents)
 
-        # Handle standoff distance(s) with mesh-adaptive bonus
-        standoff_distances = torch.linspace(
-            self.finger_offset,
-            self.finger_offset + mesh_diagonal + self.finger_clearance / 2,
-            self.num_standoff_samples,
-        )
+        # Standoffs, the distance from the body origin to the point placed on the centre, along the approach. The
+        # legacy sweep runs from the pinch depth f outward by an object diagonal, which suits hands that approach
+        # along the pinch line and can hold the object anywhere along it. Within the clearance it runs over the
+        # finger clearance centred on f, the span over which a pocket still holds the centre. One standoff is f.
+        if self.num_standoff_samples <= 1:
+            standoff_distances = torch.tensor([self.finger_offset])
+        elif self.standoffs_within_clearance:
+            standoff_distances = torch.linspace(
+                self.finger_offset - self.finger_clearance / 2,
+                self.finger_offset + self.finger_clearance / 2,
+                self.num_standoff_samples,
+            )
+        else:
+            standoff_distances = torch.linspace(
+                self.finger_offset,
+                self.finger_offset + mesh_diagonal + self.finger_clearance / 2,
+                self.num_standoff_samples,
+            )
 
         max_gripper_width = self.gripper_maximum_aperture
 
@@ -453,80 +515,71 @@ class grasp_sampling_event(ManagerTermBase):
             surface_points, ray_directions, multiple_hits=True
         )
 
-        grasp_transforms = []
-
-        # Process each sampled point to find valid grasp candidates
+        # Pinch lines: for each surface point the far ray hit within the aperture, and the centre on that line.
+        centers, axes = [], []
         for point_idx in range(len(surface_points)):
-            # Find intersection points for this ray
             ray_hits = ray_intersections[ray_indices == point_idx]
-
             if len(ray_hits) == 0:
                 continue
-
-            # Find the furthest intersection point for more stable grasps
+            # the furthest hit within the aperture, for the most stable pinch
             if len(ray_hits) > 1:
                 distances = torch.norm(torch.tensor(ray_hits) - torch.tensor(surface_points[point_idx]), dim=1)
                 valid_indices = torch.where(distances <= max_gripper_width)[0]
-                if len(valid_indices) > 0:
-                    furthest_idx = valid_indices[torch.argmax(distances[valid_indices])]
-                    opposing_point = ray_hits[furthest_idx]
-                else:
+                if len(valid_indices) == 0:
                     continue
+                opposing_point = ray_hits[valid_indices[torch.argmax(distances[valid_indices])]]
             else:
                 opposing_point = ray_hits[0]
                 distance = torch.norm(torch.tensor(opposing_point) - torch.tensor(surface_points[point_idx]))
                 if distance > max_gripper_width:
                     continue
-
-            # Calculate grasp axis and distance
             grasp_axis = opposing_point - surface_points[point_idx]
-            axis_length = torch.norm(torch.tensor(grasp_axis))
+            axis_length = float(np.linalg.norm(grasp_axis))
+            if not (axis_length > trimesh.tol.zero and axis_length <= max_gripper_width):
+                continue
+            grasp_axis = grasp_axis / axis_length
+            # the centre: the midpoint, or a truncated-normal draw along the line when lateral_sigma > 0
+            if self.lateral_sigma > 0:
+                midpoint_ratio = 0.5
+                sigma_ratio = self.lateral_sigma / axis_length
+                a = (0.0 - midpoint_ratio) / sigma_ratio
+                b = (1.0 - midpoint_ratio) / sigma_ratio
+                center_offset_ratio = stats.truncnorm(a, b, loc=midpoint_ratio, scale=sigma_ratio).rvs()
+            else:
+                center_offset_ratio = 0.5
+            centers.append(surface_points[point_idx] + grasp_axis * axis_length * center_offset_ratio)
+            axes.append(grasp_axis)
+        if not centers:
+            return np.zeros((0, 4, 4), dtype=np.float32)
+        centers = np.asarray(centers, dtype=np.float64)  # (P, 3)
+        axes = np.asarray(axes, dtype=np.float64)  # (P, 3)
 
-            if axis_length > trimesh.tol.zero and axis_length <= max_gripper_width:
-                grasp_axis = grasp_axis / axis_length.numpy()
-
-                # Calculate grasp center with optional lateral perturbation
-                if self.lateral_sigma > 0:
-                    midpoint_ratio = 0.5
-                    sigma_ratio = self.lateral_sigma / axis_length.numpy()
-                    a = (0.0 - midpoint_ratio) / sigma_ratio
-                    b = (1.0 - midpoint_ratio) / sigma_ratio
-                    truncated_dist = stats.truncnorm(a, b, loc=midpoint_ratio, scale=sigma_ratio)
-                    center_offset_ratio = truncated_dist.rvs()
-                    grasp_center = surface_points[point_idx] + grasp_axis * axis_length.numpy() * center_offset_ratio
-                else:
-                    grasp_center = surface_points[point_idx] + grasp_axis * axis_length.numpy() * 0.5
-
-                # Generate different orientations around each grasp axis
-                rotation_angles = torch.linspace(-torch.pi, torch.pi, self.num_orientations)
-
-                for angle in rotation_angles:
-                    # Align the gripper's grasp_align_axis with the computed grasp axis
-                    align_matrix = trimesh.geometry.align_vectors(grasp_align_axis.numpy(), grasp_axis)
-                    center_transform = tra.translation_matrix(grasp_center)
-
-                    # Create orientation transformation
-                    orient_tf_rot = tra.rotation_matrix(angle=angle.item(), direction=orientation_sample_axis.numpy())
-
-                    # Generate transforms for each standoff distance
-                    for standoff_dist in standoff_distances:
-                        standoff_translation = -(
-                            gripper_approach_direction.numpy() * float(standoff_dist) + self.pinch_lateral_offset
-                        ).astype(np.float32)
-                        standoff_transform = tra.translation_matrix(standoff_translation)
-
-                        # Full transform: T_center * R_align * R_orient * T_standoff
-                        align_mat = torch.tensor(align_matrix, dtype=torch.float32)
-                        full_orientation_tf = torch.matmul(align_mat, torch.tensor(orient_tf_rot, dtype=torch.float32))
-                        full_orientation_tf = torch.matmul(
-                            full_orientation_tf, torch.tensor(standoff_transform, dtype=torch.float32)
-                        )
-                        grasp_world_tf = torch.matmul(
-                            torch.tensor(center_transform, dtype=torch.float32), full_orientation_tf
-                        )
-                        grasp_transforms.append(grasp_world_tf.numpy())
-
-        return grasp_transforms
+        # Every pose is T = Trans(c) R_align R_spin Trans(-s a - p_lat), built for all points, spins and standoffs
+        # at once: the alignment lays grasp_align_axis along the pinch line by the smallest rotation, the spin turns
+        # the hand about orientation_sample_axis in the hand frame, and the pull-back moves the hand along its
+        # approach in the hand frame.
+        align_axis = grasp_align_axis.numpy().astype(np.float64)
+        align = np.stack([trimesh.geometry.align_vectors(align_axis, u)[:3, :3] for u in axes])  # (P, 3, 3)
+        spin_axis = np.asarray(self.orientation_sample_axis, dtype=np.float64)
+        spin_axis = spin_axis / np.linalg.norm(spin_axis)
+        rotation_angles = torch.linspace(-torch.pi, torch.pi, self.num_orientations).numpy()
+        spins = np.stack(
+            [tra.rotation_matrix(angle=float(angle), direction=spin_axis)[:3, :3] for angle in rotation_angles]
+        )  # (N_o, 3, 3)
+        approach = gripper_approach_direction.numpy().astype(np.float64)
+        standoffs = standoff_distances.numpy().astype(np.float64)
+        pullbacks = -(standoffs[:, None] * approach[None, :] + self.pinch_lateral_offset[None, :])  # (N_s, 3)
+        rotations = np.einsum("pij,ojk->poik", align, spins)  # (P, N_o, 3, 3)
+        translations = centers[:, None, None, :] + np.einsum("poik,sk->posi", rotations, pullbacks)  # (P, N_o, N_s, 3)
+        shape = (len(centers), self.num_orientations, self.num_standoff_samples)
+        transforms = np.tile(np.eye(4, dtype=np.float64), (*shape, 1, 1))
+        transforms[..., :3, :3] = rotations[:, :, None, :, :]
+        transforms[..., :3, 3] = translations
+        logger.info(
+            f"grasp_sampling_event: {transforms.size // 16} antipodal candidates from {len(centers)} pinch lines,"
+            f" {self.num_orientations} spins and {self.num_standoff_samples} standoffs"
+        )
+        return transforms.reshape(-1, 4, 4).astype(np.float32)
 
     def _apply_grasp_transform_to_gripper(self, env, gripper_asset, grasp_transform, env_idx):
         """Apply grasp transform to gripper asset."""

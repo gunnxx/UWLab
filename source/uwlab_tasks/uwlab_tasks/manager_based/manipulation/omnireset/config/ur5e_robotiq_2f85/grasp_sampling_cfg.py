@@ -92,10 +92,17 @@ class GraspSamplingEventCfg:
             "gripper_cfg": SceneEntityCfg("robot", body_names="robotiq_base_link"),
             "num_candidates": 1e6,
             "num_standoff_samples": 32,
+            # standoffs run from the pinch depth outward by an object diagonal; True runs them over the finger
+            # clearance about the pinch depth instead, for a hand whose pocket has to hold the centre (the Dex3)
+            "standoffs_within_clearance": False,
             "num_orientations": 16,
             "lateral_sigma": 0.0,
             "visualize_grasps": False,
             "visualization_scale": 0.01,
+            # override the metadata's alignment and spin axes for one run (gripper body frame), e.g. to look at
+            # another convention in the inspector; they should stay parallel, a non-parallel pair only warns
+            "grasp_align_axis": None,
+            "orientation_sample_axis": None,
             # one hand-authored grasp instead of the sampled set, for inspecting a nominal pose: enable it and give
             # the pinch point and approach in the object frame, e.g. a top grasp 1.5 cm below the top of the
             # standing peg is center=[0,0,0.015] approach=[0,0,-1]; rpy_deg tilts and turns the hand about the
