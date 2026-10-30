@@ -216,6 +216,46 @@ def test_collision_asset_paths_and_frames(monkeypatch, pattern):
     assert hasher.root_prim_hashes[0] != hasher.root_prim_hashes[1]
 
 
+@pytest.mark.isaacsim_ci
+def test_collision_hasher_keeps_only_the_links_own_colliders(monkeypatch):
+    """A link prim that contains its child links (the Kit URDF importer's layout) samples only its own colliders."""
+    module = importlib.import_module("uwlab_tasks.manager_based.manipulation.omnireset.mdp.rigid_object_hasher")
+    stage = Usd.Stage.CreateInMemory()
+    for index in range(2):
+        elbow = f"/World/envs/env_{index}/Robot/elbow"
+        UsdPhysics.RigidBodyAPI.Apply(UsdGeom.Xform.Define(stage, elbow).GetPrim())
+        UsdPhysics.CollisionAPI.Apply(UsdGeom.Cube.Define(stage, f"{elbow}/shell/col").GetPrim())
+        wrist = f"{elbow}/wrist"
+        UsdPhysics.RigidBodyAPI.Apply(UsdGeom.Xform.Define(stage, wrist).GetPrim())
+        UsdPhysics.CollisionAPI.Apply(UsdGeom.Cube.Define(stage, f"{wrist}/col").GetPrim())
+        UsdPhysics.CollisionAPI.Apply(UsdGeom.Cube.Define(stage, f"{wrist}/finger/col").GetPrim())
+    monkeypatch.setattr(module.stage_utils, "get_current_stage", lambda: stage)
+    monkeypatch.setattr(module.stage_utils, "get_current_stage_id", lambda: None)
+    monkeypatch.setattr(module, "HASH_STORE", {"warp_mesh_store": {}, "__stage_id__": None})
+    monkeypatch.setattr(
+        module,
+        "find_matching_prim_paths",
+        lambda expr, stage=None: find_matching_prim_paths(expr, stage=stage),
+        raising=False,
+    )
+    monkeypatch.setattr(
+        module,
+        "get_all_matching_child_prims",
+        lambda path, **kwargs: get_all_matching_child_prims(path, stage=stage, **kwargs),
+    )
+    elbow_hasher = module.RigidObjectHasher(2, "/World/envs/env_.*/Robot/elbow", device="cpu")
+    assert [str(p.GetPath()) for p in elbow_hasher.collider_prims] == [
+        f"/World/envs/env_{index}/Robot/elbow/shell/col" for index in range(2)
+    ]
+    wrist_hasher = module.RigidObjectHasher(2, "/World/envs/env_.*/Robot/elbow/wrist", device="cpu")
+    assert [str(p.GetPath()) for p in wrist_hasher.collider_prims] == [
+        f"/World/envs/env_{index}/Robot/elbow/wrist/{name}" for index in range(2) for name in ("col", "finger/col")
+    ]
+    # a wrapper prim without the rigid-body API keeps every collider under it, as the objects rely on
+    robot_hasher = module.RigidObjectHasher(2, "/World/envs/env_.*/Robot", device="cpu")
+    assert len(robot_hasher.collider_prims) == 6
+
+
 @pytest.mark.parametrize("term_name", ["check_grasp_success", "check_reset_state_success"])
 @pytest.mark.parametrize("object_kind", ["rigid", "collection"])
 @pytest.mark.isaacsim_ci

@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>How the Collision Check Sees the Robot</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script>
+window.MathJax = { tex: { inlineMath: [['\\(', '\\)']], displayMath: [['\\[', '\\]']] }, svg: { fontCache: 'global' }, options: { skipHtmlTags: ['script','noscript','style','textarea','pre','code'] } };
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.js" async></script>
+<style>
+/* Layout: one textbook reading column (~68ch) with a chapter rail on wide screens; figures may bleed to the column edge. */
+:root {
+  --bg: #f6f7f5;
+  --fg: #1b2227;
+  --muted: #5a6670;
+  --rule: #d3dadb;
+  --panel: #ffffff;
+  --accent: #1e6b86;
+  --accent-ink: #15516a;
+  --accent-soft: #e2eef2;
+  --code-bg: #ecf0ef;
+  --warn-soft: #f6ecdc;
+  --warn: #8a5a12;
+  --font-body: "Newsreader", "Iowan Old Style", Georgia, serif;
+  --font-ui: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #131a1e; --fg: #e3e8e9; --muted: #98a6ad; --rule: #2b353b; --panel: #1a2227;
+    --accent: #6db4cd; --accent-ink: #8fcbe0; --accent-soft: #1c2f37; --code-bg: #0f1518;
+    --warn-soft: #2d2518; --warn: #e0b36a; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #131a1e; --fg: #e3e8e9; --muted: #98a6ad; --rule: #2b353b; --panel: #1a2227;
+  --accent: #6db4cd; --accent-ink: #8fcbe0; --accent-soft: #1c2f37; --code-bg: #0f1518;
+  --warn-soft: #2d2518; --warn: #e0b36a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { color-scheme: light; }
+body {
+  margin: 0;
+  background: var(--bg); color: var(--fg);
+  font-family: var(--font-body); font-size: 1.125rem; line-height: 1.6;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: env(safe-area-inset-top, 0px) calc(4rem + env(safe-area-inset-bottom, 0px));
+}
+img { max-width: 100%; }
+.page { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 1fr; gap: 0 3rem; }
+@media (min-width: 960px) { .page { grid-template-columns: 200px minmax(0, 1fr); } }
+nav.rail { display: none; }
+@media (min-width: 960px) {
+  nav.rail { display: block; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 1.5rem); align-self: start; padding-top: 3.2rem; font-family: var(--font-ui); font-size: 0.8rem; }
+  nav.rail ol { list-style: none; margin: 0; padding: 0; border-left: 1px solid var(--rule); }
+  nav.rail li a { display: block; padding: 0.3rem 0 0.3rem 0.9rem; color: var(--muted); text-decoration: none; border-left: 2px solid transparent; margin-left: -1px; line-height: 1.3; }
+  nav.rail li a:hover, nav.rail li a:focus-visible { color: var(--accent-ink); border-left-color: var(--accent); outline: none; }
+  nav.rail .num { color: var(--accent); font-weight: 600; margin-right: 0.35rem; }
+}
+main { min-width: 0; max-width: 68ch; }
+header.title { padding-top: 3rem; margin-bottom: 2.5rem; border-bottom: 1px solid var(--rule); padding-bottom: 1.5rem; }
+.eyebrow { font-family: var(--font-ui); font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+h1 { font-family: var(--font-body); font-weight: 500; font-size: clamp(2rem, 5vw, 2.9rem); line-height: 1.1; margin: 0.4rem 0 0.8rem; text-wrap: balance; letter-spacing: -0.01em; }
+.lede { font-size: 1.2rem; color: var(--muted); margin: 0; font-style: italic; }
+h2 { font-family: var(--font-body); font-weight: 600; font-size: 1.75rem; line-height: 1.2; margin: 3rem 0 1rem; text-wrap: balance; }
+h2 .num { color: var(--accent); font-family: var(--font-ui); font-weight: 600; font-size: 0.9rem; letter-spacing: 0.08em; display: block; margin-bottom: 0.3rem; }
+h3 { font-family: var(--font-ui); font-weight: 600; font-size: 1rem; margin: 2rem 0 0.6rem; color: var(--fg); }
+p { margin: 0 0 1rem; }
+a { color: var(--accent-ink); }
+code, pre { font-family: var(--font-mono); font-size: 0.86em; }
+code { background: var(--code-bg); padding: 0.08em 0.35em; border-radius: 3px; }
+pre { background: var(--code-bg); padding: 0.9rem 1.1rem; border-radius: 4px; overflow-x: auto; line-height: 1.5; margin: 0 0 1.2rem; }
+pre code { background: none; padding: 0; }
+ul, ol { padding-left: 1.4rem; margin: 0 0 1rem; }
+li { margin-bottom: 0.35rem; }
+figure { margin: 1.6rem 0 1.8rem; }
+figure svg { max-width: 100%; height: auto; display: block; }
+figcaption { font-family: var(--font-ui); font-size: 0.82rem; color: var(--muted); margin-top: 0.6rem; line-height: 1.45; }
+figcaption b { color: var(--fg); font-weight: 600; }
+.box { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 0.9rem 1.1rem; margin: 1.4rem 0; border-radius: 0 4px 4px 0; }
+.box .label { font-family: var(--font-ui); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-ink); font-weight: 600; display: block; margin-bottom: 0.3rem; }
+.box p:last-child { margin-bottom: 0; }
+.box.note { border-left-color: var(--warn); background: var(--warn-soft); }
+.box.note .label { color: var(--warn); }
+table { border-collapse: collapse; width: 100%; font-family: var(--font-ui); font-size: 0.86rem; margin: 1rem 0 1.5rem; font-variant-numeric: tabular-nums; }
+.tablewrap { overflow-x: auto; }
+th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+th { font-weight: 600; color: var(--muted); font-size: 0.76rem; letter-spacing: 0.06em; text-transform: uppercase; }
+td code { font-size: 0.82em; }
+.eq { margin: 0.6rem 0 1.2rem; overflow-x: auto; }
+dl { margin: 0 0 1rem; }
+dt { font-family: var(--font-ui); font-weight: 600; font-size: 0.95rem; margin-top: 0.7rem; }
+dd { margin: 0.1rem 0 0 0; }
+details { border: 1px solid var(--rule); border-radius: 4px; padding: 0.6rem 0.9rem; margin: 0 0 0.7rem; background: var(--panel); }
+summary { cursor: pointer; font-family: var(--font-ui); font-weight: 500; font-size: 0.95rem; }
+summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+details p { margin: 0.6rem 0 0; }
+.svgtext { font-family: var(--font-ui); font-size: 12px; fill: var(--fg); }
+.svgmuted { font-family: var(--font-ui); font-size: 11px; fill: var(--muted); }
+.svgmono { font-family: var(--font-mono); font-size: 10.5px; fill: var(--muted); }
+.nodebox { fill: var(--panel); stroke: var(--rule); stroke-width: 1.2; }
+.nodebox.key { stroke: var(--accent); stroke-width: 1.5; }
+.edge { stroke: var(--muted); stroke-width: 1.3; fill: none; }
+.edge.key { stroke: var(--accent); }
+.band { fill: var(--accent-soft); stroke: none; }
+.band.fail { fill: var(--warn-soft); }
+footer { margin-top: 4rem; padding-top: 1rem; border-top: 1px solid var(--rule); font-family: var(--font-ui); font-size: 0.8rem; color: var(--muted); }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+html { scroll-behavior: smooth; }
+</style>
+</head>
+<body>
+
+<div class="page">
+<nav class="rail" aria-label="Chapters">
+  <ol>
+    <li><a href="#ch1"><span class="num">1</span>Why the test looks for collisions</a></li>
+    <li><a href="#ch2"><span class="num">2</span>Bodies, colliders and prims</a></li>
+    <li><a href="#ch3"><span class="num">3</span>Measuring a distance to a mesh</a></li>
+    <li><a href="#ch4"><span class="num">4</span>Points ride on their own link</a></li>
+    <li><a href="#ch5"><span class="num">5</span>The phantom hand</a></li>
+    <li><a href="#ch6"><span class="num">6</span>The fix, and what it changes</a></li>
+    <li><a href="#ch7"><span class="num">7</span>Reading a debug block</a></li>
+    <li><a href="#ch8"><span class="num">8</span>Check your understanding</a></li>
+  </ol>
+</nav>
+
+<main>
+<header class="title">
+  <div class="eyebrow">OmniReset · UWLab · Isaac Lab 3.0</div>
+  <h1>How the Collision Check Sees the Robot</h1>
+  <p class="lede">What a collider is, how the success test measures the gap between the hand and the objects, and how a quirk in the way the G1 robots are stored made the test see hands that were not there.</p>
+</header>
+
+<h2 id="ch1"><span class="num">Chapter 1</span>Why the success test looks for collisions</h2>
+
+<p>Every reset state that the recorder writes to disk will one day be the first frame of a training episode. The policy starts there and physics takes over. If the hand in that frame already overlaps the peg by a few millimetres, the very first physics step pushes the two apart, the peg jumps, and the episode begins with a kick that the policy never asked for. If the fingers overlap the hole block, the kick can throw the arm. A library of such states teaches the policy that the world is jumpy and unfair, which is not what we want it to learn.</p>
+
+<p>Physics itself does not forbid these overlaps. A rigid-body simulator tolerates small interpenetrations and resolves them over a step or two, which is why a hold can look perfectly calm in the viewport while the fingers sit a millimetre inside the peg. The success test therefore does its own measurement at the end of a hold. It asks, for each pair that matters, how deep the closest point of one body sits inside the other, and it compares that depth with a small allowance.</p>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Pair</th><th>Allowed penetration</th><th>Why that number</th></tr></thead>
+  <tbody>
+    <tr><td>robot against the insertive object</td><td>0.5 mm</td><td>Fingers that hold a peg touch it, and the solver leaves them a hair inside. Half a millimetre is contact, not a crash.</td></tr>
+    <tr><td>robot against the receptive object</td><td>0</td><td>The hand has no business touching the hole block in a recorded state.</td></tr>
+    <tr><td>insertive against receptive object</td><td>1 mm</td><td>A partially inserted peg rests on the hole's wall. One millimetre is a resting contact under the solver's tolerance.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>The code that performs this measurement is the <em>collision analyzer</em>, one instance per row of the table, created by <code>check_reset_state_success</code> in <code>mdp/terminations.py</code>. The rest of this note explains what it measures, how it measures it, and the mistake that was hiding in the first step.</p>
+
+<h2 id="ch2"><span class="num">Chapter 2</span>Bodies, colliders and prims</h2>
+
+<p>Three words come up constantly, and they are easy to mix up.</p>
+
+<dl>
+  <dt>Body</dt>
+  <dd>A rigid body is a piece of the world that moves as one unit. The peg is one body. The robot is many bodies, one per link, joined by joints. A body has a pose, which is a position and an orientation, and physics updates that pose every step.</dd>
+  <dt>Collider</dt>
+  <dd>A collider is the shape physics uses to decide whether two bodies touch. It is attached to a body and moves with it. A collider is usually simpler than what you see on screen. The peg you see is a textured box, and its collider is a box of eight corners. The hole block's collider is a mesh of 2 444 vertices, because a hole cannot be approximated by anything simpler. A body can carry several colliders, and the Dex1 base link carries a convex hull for its housing.</dd>
+  <dt>Prim</dt>
+  <dd>A prim is a node in the USD scene file. Everything in the scene is a prim, arranged in a tree with paths that look like directories, for example <code>/World/envs/env_0/Robot/right_elbow_link</code>. A prim becomes a body when the file applies the <code>RigidBodyAPI</code> to it, and a prim becomes a collider when the file applies the <code>CollisionAPI</code> to it. The two labels are independent, and a collider prim normally sits somewhere below its body prim in the tree.</dd>
+</dl>
+
+<p>The last point is the one to hold on to. Physics does not care how deep a collider prim sits below its body in the tree. It walks up from the collider until it meets a prim with the <code>RigidBodyAPI</code>, and that body owns the collider. Any code that reads the tree itself has to use the same rule, and we will see in chapter 5 what happens when it does not.</p>
+
+<figure>
+<svg viewBox="0 0 820 230" role="img" aria-label="A body prim with a collider prim below it, and what the viewer shows versus what physics uses">
+  <rect x="30" y="20" width="360" height="190" rx="6" class="nodebox"/>
+  <text x="48" y="44" class="svgtext" font-weight="600">What you see</text>
+  <rect x="70" y="70" width="120" height="110" rx="3" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.2"/>
+  <rect x="82" y="82" width="96" height="86" fill="none" stroke="var(--accent)" stroke-width="0.6" stroke-dasharray="2 3"/>
+  <text x="130" y="200" class="svgmuted" text-anchor="middle">visual mesh, textured</text>
+  <text x="230" y="90" class="svgtext">one prim for the body</text>
+  <text x="230" y="110" class="svgmono">InsertiveObject</text>
+  <text x="230" y="130" class="svgmono">  visuals/peg</text>
+  <text x="230" y="150" class="svgmono">  collisions/peg</text>
+  <rect x="430" y="20" width="360" height="190" rx="6" class="nodebox"/>
+  <text x="448" y="44" class="svgtext" font-weight="600">What physics uses</text>
+  <rect x="470" y="70" width="120" height="110" rx="3" fill="none" stroke="var(--warn)" stroke-width="2"/>
+  <circle cx="470" cy="70" r="3" fill="var(--warn)"/><circle cx="590" cy="70" r="3" fill="var(--warn)"/>
+  <circle cx="470" cy="180" r="3" fill="var(--warn)"/><circle cx="590" cy="180" r="3" fill="var(--warn)"/>
+  <text x="530" y="200" class="svgmuted" text-anchor="middle">collider, a box of 8 corners</text>
+  <text x="630" y="90" class="svgtext">RigidBodyAPI on the body prim</text>
+  <text x="630" y="110" class="svgtext">CollisionAPI on the shape</text>
+  <text x="630" y="140" class="svgmuted">the collider belongs to the</text>
+  <text x="630" y="156" class="svgmuted">nearest body above it in the tree</text>
+</svg>
+<figcaption>The peg as a prim tree. The visual mesh is what the renderer draws and the collider is what physics touches. Both sit below the body prim, and the collider is owned by that body because it is the nearest prim above it that carries the <code>RigidBodyAPI</code>.</figcaption>
+</figure>
+
+<h2 id="ch3"><span class="num">Chapter 3</span>Measuring a distance to a mesh</h2>
+
+<p>How far is the hand from the peg? The honest answer involves two complicated shapes, so the analyzer simplifies one side. It scatters sample points over the surface of the robot's colliders and measures each point against the object's mesh. The smallest value over all points is the answer.</p>
+
+<h3>Step 1, sample the robot</h3>
+
+<p>When the environment starts, the analyzer picks 1 024 points on the surface of each robot link it has been told to watch, spread evenly by farthest-point sampling so that no part of the link is missed. For the G1-D that list is the three shoulder links, the elbow, the three wrist links and the three Dex1 links, ten links and 10 240 points. The points are stored once, in the link's own frame, because the link's shape never changes.</p>
+
+<h3>Step 2, move the points to where the link is now</h3>
+
+<p>At the end of a hold the analyzer reads each link's current pose and carries the stored points along. A point \(\mathbf{q}^{\ell}\) stored in the frame of link \(\ell\) appears in the world at</p>
+
+<div class="eq">\[ \mathbf{q}^{w} = \mathbf{R}_{\ell}\,\mathbf{q}^{\ell} + \mathbf{t}_{\ell}, \]</div>
+
+<p>where \(\mathbf{R}_{\ell}\) and \(\mathbf{t}_{\ell}\) are the link's rotation and position. The object has a pose too, so the point is then expressed in the object's frame, \(\mathbf{q}^{o} = \mathbf{R}_{o}^{\top}(\mathbf{q}^{w} - \mathbf{t}_{o})\), which lets the object's mesh stay where it was loaded.</p>
+
+<h3>Step 3, ask the mesh</h3>
+
+<p>Each point is handed to a Warp mesh query, which returns the closest point \(\mathbf{c}\) on the mesh surface and a sign \(s\) that is \(+1\) when the query point lies outside the solid and \(-1\) when it lies inside. The signed distance is</p>
+
+<div class="eq">\[ d(\mathbf{q}) = s \,\lVert \mathbf{q} - \mathbf{c} \rVert , \]</div>
+
+<p>positive for a gap and negative for a penetration. The analyzer keeps the minimum over all points of all watched links, and the pair passes when</p>
+
+<div class="eq">\[ \min_i d(\mathbf{q}_i) \;\ge\; d_{\min}, \]</div>
+
+<p>with \(d_{\min}\) the allowance from the table in chapter 1. The query is limited to a radius \(d_{\max}\) of 0.5 m. A point with no mesh within that radius returns no closest point, and the analyzer records \(+0.5\) for it, meaning "nothing anywhere near".</p>
+
+<figure>
+<svg viewBox="0 0 820 260" role="img" aria-label="Sample points on a finger pad next to the peg, one outside with a positive distance and one inside with a negative distance">
+  <rect x="330" y="40" width="160" height="190" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  <text x="410" y="135" class="svgtext" text-anchor="middle">peg collider</text>
+  <rect x="150" y="70" width="170" height="130" rx="10" fill="var(--panel)" stroke="var(--muted)" stroke-width="1.5"/>
+  <text x="235" y="140" class="svgmuted" text-anchor="middle">finger pad</text>
+  <g fill="var(--fg)">
+    <circle cx="160" cy="90" r="2.5"/><circle cx="175" cy="72" r="2.5"/><circle cx="210" cy="72" r="2.5"/><circle cx="250" cy="72" r="2.5"/><circle cx="290" cy="72" r="2.5"/>
+    <circle cx="160" cy="130" r="2.5"/><circle cx="160" cy="170" r="2.5"/><circle cx="175" cy="198" r="2.5"/><circle cx="215" cy="198" r="2.5"/><circle cx="255" cy="198" r="2.5"/><circle cx="295" cy="198" r="2.5"/>
+    <circle cx="318" cy="100" r="2.5"/><circle cx="318" cy="160" r="2.5"/>
+  </g>
+  <circle cx="318" cy="100" r="4.5" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+  <line x1="318" y1="100" x2="330" y2="100" stroke="var(--accent)" stroke-width="1.5"/>
+  <circle cx="330" cy="100" r="2.5" fill="var(--accent)"/>
+  <text x="300" y="30" class="svgtext" text-anchor="end">outside, \(s = +1\), \(d = +1.2\) cm</text>
+  <line x1="302" y1="34" x2="316" y2="94" class="edge"/>
+  <circle cx="337" cy="160" r="2.5" fill="var(--warn)"/>
+  <circle cx="337" cy="160" r="4.5" fill="none" stroke="var(--warn)" stroke-width="1.5"/>
+  <line x1="337" y1="160" x2="330" y2="160" stroke="var(--warn)" stroke-width="1.5"/>
+  <text x="560" y="175" class="svgtext">inside, \(s = -1\), \(d = -0.7\) mm</text>
+  <line x1="556" y1="170" x2="342" y2="161" class="edge"/>
+  <text x="560" y="205" class="svgmuted">the analyzer reports the smallest \(d\)</text>
+  <text x="560" y="221" class="svgmuted">over every sampled point</text>
+</svg>
+<figcaption>Sample points on a finger pad beside the peg. For each point the mesh query finds the closest surface point and a sign. The pad is pressed a little into the peg, so one of its points lies inside and reports a negative distance. That smallest value is what the pair is judged on, here against the half-millimetre allowance.</figcaption>
+</figure>
+
+<div class="box">
+<span class="label">The sign-only mode</span>
+<p>When an allowance is exactly zero, as for the robot against the hole block, the analyzer skips the length and keeps only the sign. Any point inside makes the pair report \(-1\), and no point inside leaves it at \(+0.5\). This is why a debug block shows <code>min_signed_dist=-1.00000</code> for that pair instead of a millimetre figure. It is a yes or no, not a depth.</p>
+</div>
+
+<h2 id="ch4"><span class="num">Chapter 4</span>Points ride on their own link</h2>
+
+<p>Step 2 contains an assumption that is easy to overlook. The stored points of a link are moved with that link's pose and nothing else. A point sampled on the fingertip must be stored in the fingertip's frame and moved with the fingertip. If it were stored in the elbow's frame and moved with the elbow, it would be correct only while the wrist stayed exactly as it was when the point was sampled, which is the rest pose of the robot file.</p>
+
+<p>Write the fingertip's pose as the elbow's pose followed by the chain of wrist joints between them, \(\mathbf{T}_{h} = \mathbf{T}_{e}\,\mathbf{T}_{e\to h}(\boldsymbol{\theta})\), where \(\boldsymbol{\theta}\) holds the wrist angles. A fingertip point stored in the elbow frame at the rest pose and carried by the elbow lands at</p>
+
+<div class="eq">\[ \mathbf{T}_{e}\,\mathbf{T}_{e\to h}(\boldsymbol{\theta}_0)\,\mathbf{q}^{h} \quad\text{instead of}\quad \mathbf{T}_{e}\,\mathbf{T}_{e\to h}(\boldsymbol{\theta})\,\mathbf{q}^{h}. \]</div>
+
+<p>The two agree only when \(\boldsymbol{\theta} = \boldsymbol{\theta}_0\). Bend the wrist by sixty degrees and the stored copy of the fingertip stays on the straight line through the forearm, about twenty centimetres from the real one on the G1. The analyzer would then measure a fingertip that does not exist.</p>
+
+<h2 id="ch5"><span class="num">Chapter 5</span>The phantom hand</h2>
+
+<p>This is exactly what happened on the G1-D and the G1 with the Dex3, and the reason is how their files are laid out. The UR5e file lists its links side by side under the robot prim. The two G1 files were produced by the Kit URDF importer, which nests each link prim inside its parent link, so the tree follows the kinematic chain.</p>
+
+<pre><code>Robot
+└─ torso_link
+   └─ right_shoulder_pitch_link
+      └─ right_shoulder_roll_link
+         └─ right_shoulder_yaw_link
+            └─ right_elbow_link            ← body, with its own collider below it
+               └─ right_wrist_roll_link    ← also a body, and also below the elbow prim
+                  └─ right_wrist_pitch_link
+                     └─ right_wrist_yaw_link
+                        └─ right_dex1_base_link
+                           ├─ right_dex1_finger_link_1
+                           └─ right_dex1_finger_link_2</code></pre>
+
+<p>The analyzer builds a link's point cloud by collecting every collider prim below that link's prim. On the UR5e that rule finds exactly the link's own colliders. On the G1 it finds the link's own collider and then every collider of every link further down the chain, because they all sit below the elbow prim in the tree. The elbow's cloud ends up containing the forearm, the wrist and the whole hand, all expressed in the elbow frame at the rest pose and all carried around rigidly by the elbow. The same happens one level down for each wrist link.</p>
+
+<figure>
+<svg viewBox="0 0 820 250" role="img" aria-label="Chain of link prims from the elbow to the fingers, with the colliders the old rule attached to the elbow versus the new rule">
+  <rect x="20" y="88" width="790" height="56" class="band fail"/>
+  <text x="30" y="80" class="svgmuted">old rule: every collider below the elbow prim counts as the elbow</text>
+  <rect x="20" y="166" width="118" height="56" class="band"/>
+  <text x="30" y="246" class="svgmuted">new rule: only the collider whose nearest body above it is the elbow</text>
+  <g class="svgmono" style="font-size:9.5px">
+    <rect x="28" y="96" width="102" height="40" rx="4" class="nodebox key"/><text x="79" y="113" text-anchor="middle" class="svgtext" style="font-size:11px">right_elbow</text><text x="79" y="128" text-anchor="middle" class="svgmuted">body</text>
+    <rect x="160" y="96" width="102" height="40" rx="4" class="nodebox"/><text x="211" y="113" text-anchor="middle" class="svgtext" style="font-size:11px">wrist_roll</text><text x="211" y="128" text-anchor="middle" class="svgmuted">body</text>
+    <rect x="292" y="96" width="102" height="40" rx="4" class="nodebox"/><text x="343" y="113" text-anchor="middle" class="svgtext" style="font-size:11px">wrist_pitch</text><text x="343" y="128" text-anchor="middle" class="svgmuted">body</text>
+    <rect x="424" y="96" width="102" height="40" rx="4" class="nodebox"/><text x="475" y="113" text-anchor="middle" class="svgtext" style="font-size:11px">wrist_yaw</text><text x="475" y="128" text-anchor="middle" class="svgmuted">body</text>
+    <rect x="556" y="96" width="102" height="40" rx="4" class="nodebox"/><text x="607" y="113" text-anchor="middle" class="svgtext" style="font-size:11px">dex1_base</text><text x="607" y="128" text-anchor="middle" class="svgmuted">body</text>
+    <rect x="688" y="96" width="112" height="40" rx="4" class="nodebox"/><text x="744" y="113" text-anchor="middle" class="svgtext" style="font-size:11px">finger_1, finger_2</text><text x="744" y="128" text-anchor="middle" class="svgmuted">bodies</text>
+  </g>
+  <g class="edge"><line x1="130" y1="116" x2="160" y2="116"/><line x1="262" y1="116" x2="292" y2="116"/><line x1="394" y1="116" x2="424" y2="116"/><line x1="526" y1="116" x2="556" y2="116"/><line x1="658" y1="116" x2="688" y2="116"/></g>
+  <g>
+    <rect x="48" y="176" width="62" height="36" rx="3" fill="var(--panel)" stroke="var(--accent)" stroke-width="1.5"/><text x="79" y="198" text-anchor="middle" class="svgmuted">collider</text>
+    <rect x="180" y="176" width="62" height="36" rx="3" fill="var(--panel)" stroke="var(--rule)" stroke-width="1.2"/><text x="211" y="198" text-anchor="middle" class="svgmuted">collider</text>
+    <rect x="312" y="176" width="62" height="36" rx="3" fill="var(--panel)" stroke="var(--rule)" stroke-width="1.2"/><text x="343" y="198" text-anchor="middle" class="svgmuted">collider</text>
+    <rect x="444" y="176" width="62" height="36" rx="3" fill="var(--panel)" stroke="var(--rule)" stroke-width="1.2"/><text x="475" y="198" text-anchor="middle" class="svgmuted">collider</text>
+    <rect x="576" y="176" width="62" height="36" rx="3" fill="var(--panel)" stroke="var(--rule)" stroke-width="1.2"/><text x="607" y="198" text-anchor="middle" class="svgmuted">collider</text>
+    <rect x="713" y="176" width="62" height="36" rx="3" fill="var(--panel)" stroke="var(--rule)" stroke-width="1.2"/><text x="744" y="198" text-anchor="middle" class="svgmuted">colliders</text>
+  </g>
+  <g class="edge"><line x1="79" y1="136" x2="79" y2="176"/><line x1="211" y1="136" x2="211" y2="176"/><line x1="343" y1="136" x2="343" y2="176"/><line x1="475" y1="136" x2="475" y2="176"/><line x1="607" y1="136" x2="607" y2="176"/><line x1="744" y1="136" x2="744" y2="176"/></g>
+  <text x="30" y="30" class="svgtext" font-weight="600">The chain below the elbow prim, as the G1 files store it</text>
+  <text x="30" y="48" class="svgmuted">each box to the right sits inside the box to its left in the prim tree</text>
+</svg>
+<figcaption>The elbow and everything the G1 files nest below it. The old rule took every collider in the upper band as part of the elbow. The new rule keeps the lower band, the one collider whose nearest body above it is the elbow itself.</figcaption>
+</figure>
+
+<p>How much of each cloud was phantom? The share of sampled collider area that belongs to descendant links, measured on the two robot files, is large for every arm link.</p>
+
+<div class="tablewrap">
+<table>
+  <thead><tr><th>Link</th><th>G1-D with Dex1</th><th>G1 with Dex3</th></tr></thead>
+  <tbody>
+    <tr><td>right_shoulder_yaw_link</td><td>71%</td><td>71%</td></tr>
+    <tr><td>right_elbow_link</td><td>84%</td><td>83%</td></tr>
+    <tr><td>right_wrist_roll_link</td><td>88%</td><td>88%</td></tr>
+    <tr><td>right_wrist_pitch_link</td><td>83%</td><td>82%</td></tr>
+    <tr><td>right_wrist_yaw_link</td><td>84%</td><td>83%</td></tr>
+    <tr><td>gripper base or palm</td><td>21%</td><td>45%</td></tr>
+    <tr><td>Dex3 thumb_1</td><td></td><td>100%</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>Five out of six points on the elbow's cloud were a frozen copy of the wrist and the hand. During a hold the real wrist is bent to put the hand on the peg, so these copies stick out of the elbow and the wrist links along the rest-pose direction, roughly where the hand would be if the arm were straight. They can land inside the hole block, inside the peg or under the table, and the analyzer reports a collision that no one can see in the viewport.</p>
+
+<figure>
+<svg viewBox="0 0 820 300" role="img" aria-label="Left, the arm at its rest pose. Right, the wrist bent during a hold, with the real hand on the peg and the phantom hand continuing straight from the forearm into the hole block">
+  <text x="30" y="28" class="svgtext" font-weight="600">Rest pose, when the points were sampled</text>
+  <line x1="40" y1="60" x2="150" y2="150" stroke="var(--fg)" stroke-width="10" stroke-linecap="round"/>
+  <line x1="150" y1="150" x2="330" y2="150" stroke="var(--fg)" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="150" cy="150" r="9" fill="var(--panel)" stroke="var(--fg)" stroke-width="2"/>
+  <text x="150" y="178" class="svgmuted" text-anchor="middle">elbow</text>
+  <rect x="330" y="138" width="34" height="24" rx="3" fill="var(--panel)" stroke="var(--fg)" stroke-width="2"/>
+  <line x1="364" y1="142" x2="392" y2="142" stroke="var(--fg)" stroke-width="4" stroke-linecap="round"/>
+  <line x1="364" y1="158" x2="392" y2="158" stroke="var(--fg)" stroke-width="4" stroke-linecap="round"/>
+  <text x="362" y="182" class="svgmuted" text-anchor="middle">hand</text>
+  <line x1="20" y1="260" x2="400" y2="260" stroke="var(--rule)" stroke-width="2"/>
+  <text x="30" y="280" class="svgmuted">table</text>
+  <text x="440" y="28" class="svgtext" font-weight="600">During a hold</text>
+  <line x1="450" y1="60" x2="560" y2="150" stroke="var(--fg)" stroke-width="10" stroke-linecap="round"/>
+  <line x1="560" y1="150" x2="700" y2="150" stroke="var(--fg)" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="560" cy="150" r="9" fill="var(--panel)" stroke="var(--fg)" stroke-width="2"/>
+  <circle cx="700" cy="150" r="7" fill="var(--panel)" stroke="var(--fg)" stroke-width="2"/>
+  <text x="700" y="134" class="svgmuted" text-anchor="middle">wrist bent</text>
+  <g transform="translate(700 150) rotate(70)">
+    <line x1="0" y1="0" x2="40" y2="0" stroke="var(--fg)" stroke-width="7" stroke-linecap="round"/>
+    <rect x="40" y="-12" width="34" height="24" rx="3" fill="var(--panel)" stroke="var(--fg)" stroke-width="2"/>
+    <line x1="74" y1="-8" x2="100" y2="-8" stroke="var(--fg)" stroke-width="4" stroke-linecap="round"/>
+    <line x1="74" y1="8" x2="100" y2="8" stroke="var(--fg)" stroke-width="4" stroke-linecap="round"/>
+    <rect x="80" y="-5" width="36" height="10" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"/>
+  </g>
+  <text x="640" y="270" class="svgmuted">real hand, holding the peg</text>
+  <g opacity="0.9">
+    <rect x="740" y="138" width="34" height="24" rx="3" fill="none" stroke="var(--warn)" stroke-width="2" stroke-dasharray="4 3"/>
+    <line x1="774" y1="142" x2="802" y2="142" stroke="var(--warn)" stroke-width="3" stroke-linecap="round" stroke-dasharray="4 3"/>
+    <line x1="774" y1="158" x2="802" y2="158" stroke="var(--warn)" stroke-width="3" stroke-linecap="round" stroke-dasharray="4 3"/>
+    <line x1="700" y1="150" x2="740" y2="150" stroke="var(--warn)" stroke-width="5" stroke-linecap="round" stroke-dasharray="4 3"/>
+  </g>
+  <text x="760" y="120" class="svgmuted" text-anchor="middle">phantom hand</text>
+  <text x="760" y="105" class="svgmuted" text-anchor="middle">carried by the elbow</text>
+  <rect x="748" y="190" width="56" height="34" fill="var(--warn-soft)" stroke="var(--warn)" stroke-width="1.5"/>
+  <rect x="768" y="190" width="16" height="22" fill="var(--bg)" stroke="var(--warn)" stroke-width="1"/>
+  <text x="776" y="240" class="svgmuted" text-anchor="middle">hole block</text>
+  <line x1="430" y1="260" x2="810" y2="260" stroke="var(--rule)" stroke-width="2"/>
+  <line x1="776" y1="224" x2="776" y2="260" stroke="var(--rule)" stroke-width="2"/>
+</svg>
+<figcaption>Left, the arm as the robot file stores it, which is when the point clouds are sampled. Right, the arm during a hold with the wrist bent down onto the peg. The real hand is where physics has it. The elbow's point cloud still carries a copy of the hand on the straight line through the forearm, drawn dashed, and that copy can sit inside the hole block or below the table while the real hand is nowhere near.</figcaption>
+</figure>
+
+<p>The debug block that exposed this contained a contradiction. The pair robot against the hole block reported \(-1\), a point inside, while the pair peg against the hole block reported \(+0.5\), nothing within half a metre. The peg was in the hand, eleven centimetres from the gripper frame, so the real hand was more than a third of a metre from the hole. Only a point that was not on the real hand could have been inside. Checking the hole mesh itself first ruled out the other suspects, since the mesh is watertight with consistent winding, and Warp's sign gave no false insides on 28 000 test points around it.</p>
+
+<h2 id="ch6"><span class="num">Chapter 6</span>The fix, and what it changes</h2>
+
+<p>The rule physics uses is the rule the sampler should use. A collider belongs to the nearest body above it in the tree. The hasher that collects colliders, <code>RigidObjectHasher</code> in <code>mdp/rigid_object_hasher.py</code>, now applies that rule whenever the prim it was asked about is itself a body.</p>
+
+<pre><code>@staticmethod
+def _own_colliders(root_prim, coll_prims):
+    if not root_prim.HasAPI(UsdPhysics.RigidBodyAPI):
+        return coll_prims                      # an object wrapper keeps everything below it
+    own = []
+    for prim in coll_prims:
+        parent = prim.GetParent()
+        while parent.IsValid() and parent != root_prim and not parent.HasAPI(UsdPhysics.RigidBodyAPI):
+            parent = parent.GetParent()        # climb until a body is met
+        if parent == root_prim:                # the first body met is the root itself
+            own.append(prim)
+    return own</code></pre>
+
+<p>For the elbow, the climb from the wrist's collider meets the wrist body first, so that collider is dropped. The climb from the elbow's own collider meets the elbow, so it is kept. Objects are untouched, because their prim path points at a wrapper without the body label, and the UR5e is untouched because its tree was flat all along.</p>
+
+<p>Three things follow from the change.</p>
+
+<ul>
+  <li>The robot analyzers on both G1 robots now measure the real arm. A collision reported by the success test is a collision you can find in the viewport.</li>
+  <li>The grasp sampler's own collision filter used the same hasher on the Dex3 and Dex1 hand files, which nest the same way, so it was also judging phantom finger copies. Its yield and the depth of the recorded grasps are worth a second look.</li>
+  <li>The success rates measured for the G1 reset-state families before the fix included rejections for phantom collisions. The funnel counts should be taken again.</li>
+</ul>
+
+<div class="box note">
+<span class="label">A tell for the future</span>
+<p>A link that reports many more colliders than it visibly has is the signature of this layout. The inspection script that produced the table above counts, for every body prim, the colliders whose nearest body is a different one. On a flat file every count is zero.</p>
+</div>
+
+<h2 id="ch7"><span class="num">Chapter 7</span>Reading a debug block</h2>
+
+<p>With <code>debug=True</code> on the success term, every hold that reaches its final step prints one block. Here is the block that started this investigation, from the in-air grasped family on the G1-D, read line by line.</p>
+
+<pre><code>[check_reset_state_success] env 0: success=False
+  abnormal_gripper_state=False (any joint &gt; 2x vel limit)
+  gripper_orientation_within_range=False approach_z=-0.3401 (&lt; -0.5)
+  stability_reached=True counter=30/5
+  excessive_pose_deviation=False
+    InsertiveObject pos_deviation=0.0082 (&lt;= 0.05)
+    ReceptiveObject pos_deviation=0.0000 (&lt;= 0.05)
+    Robot pos_deviation=0.0020 (&lt;= 0.1)
+  pos_below_threshold=False min_pos_z=0.8702 (&gt;= 0.835)
+  collision_free=False
+    robot-insertive_object min_signed_dist=-0.00027 (&gt;= -0.0005)
+    robot-receptive_object min_signed_dist=-1.00000 (&gt;= 0.0)
+    insertive_object-receptive_object min_signed_dist=0.50000 (&gt;= -0.001)
+  fingers_blocked=True open_fraction=[0.237, 0.292] mean=0.265 (0.08 &lt; mean &lt; 0.9)
+  object_near_ee=True object_ee_dist=0.1075 (&lt; 0.2)
+  at_grasp_pose=True pos_err=0.0011 (&lt; 0.015) ang_err=0.0021 (&lt; 0.26)</code></pre>
+
+<dl>
+  <dt>abnormal_gripper_state</dt>
+  <dd>No joint of the robot moved faster than twice its velocity limit at the final step. A violent step would show here.</dd>
+  <dt>gripper_orientation_within_range</dt>
+  <dd>The Dex1's approach axis has a world \(z\) component of \(-0.34\), which is seventy degrees from pointing straight down. The rule asks for sixty degrees or less, so this clause failed. The hold itself was fine, and this rejection is a policy of the family, not a flaw in the grasp.</dd>
+  <dt>stability_reached</dt>
+  <dd>Everything was quiet for all thirty steps, well past the five required.</dd>
+  <dt>excessive_pose_deviation and pos_below_threshold</dt>
+  <dd>The peg moved 8 mm since the reset, the hand 2 mm, the hole block not at all, and nothing dropped below two centimetres under the table top. All well inside their limits.</dd>
+  <dt>collision_free</dt>
+  <dd>The hand sits 0.27 mm inside the peg, which is ordinary contact and under the half-millimetre allowance. The hole block reports a point inside in the sign-only mode, and the peg reports nothing within half a metre of the block. That contradiction is chapter 5.</dd>
+  <dt>fingers_blocked, object_near_ee, at_grasp_pose</dt>
+  <dd>The fingers stopped at a quarter of their travel, so something is between them. The peg is 11 cm from the gripper frame. The hand is 1 mm and 0.1 degrees from the dataset's grasp pose. These three together say the peg is held exactly as sampled.</dd>
+</dl>
+
+<p>So this block describes a real grasp that failed for one legitimate reason, its approach angle, and one phantom reason, a collider copy inside the hole block. After the fix only the first remains, and whether a seventy-degree approach should count as a valid in-air state is a question about the family, not about the analyzer.</p>
+
+<h2 id="ch8"><span class="num">Chapter 8</span>Check your understanding</h2>
+
+<details>
+<summary>The peg analyzer reports \(+0.5\) and the robot analyzer reports \(-1\). Why can both not be true at once for a hand that holds the peg?</summary>
+<p>\(+0.5\) means no point of the peg has any hole-block mesh within half a metre. The hand is within about eleven centimetres of the peg, so no point on the real hand can be inside the block. A \(-1\) must then come from a point that is not on the real hand.</p>
+</details>
+
+<details>
+<summary>Why does the fix not change anything for the peg or the hole block?</summary>
+<p>Their prim paths point at a wrapper prim without the <code>RigidBodyAPI</code>. The new rule only applies when the queried prim is itself a body, so for objects every collider below the wrapper is kept, as before.</p>
+</details>
+
+<details>
+<summary>Why did the UR5e never show the problem?</summary>
+<p>Its file lists the links side by side under the robot prim. No link prim contains another link, so collecting every collider below a link already gives only that link's own colliders.</p>
+</details>
+
+<details>
+<summary>A hold shows <code>robot-insertive_object min_signed_dist=-0.0009</code>. Is that a crash?</summary>
+<p>It is a 0.9 mm penetration, which fails the 0.5 mm allowance, but it is the kind of depth a soft fingertip pressed on a peg reaches when the solver settles. It says the grasp is squeezing hard rather than that the hand is passing through the peg. Whether to loosen the allowance is a judgement about how the fingers are driven.</p>
+</details>
+
+<footer>
+Written 30 October 2026 for the OmniReset branch. Files involved: <code>mdp/collision_analyzer.py</code>, <code>mdp/rigid_object_hasher.py</code>, <code>mdp/utils.py</code> (<code>sample_object_point_cloud</code>, <code>get_signed_distance</code>) and <code>mdp/terminations.py</code>. The measurements come from the robot USD files under <code>source/uwlab_assets/data/Robots/Unitree</code>.
+</footer>
+</main>
+</div>
+
+</body>
+</html>

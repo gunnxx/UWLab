@@ -31,6 +31,8 @@ you have not opened the container yet, start with the first page.
 - A scene looks wrong, a recorder reports no successes, or you want to see what a reset draws. Page 5.
 - You want to understand how the grasp sampler chooses where the hand goes before you touch it. That is
   not a command page but a note, [How the grasp sampler works](../omnireset_grasp_sampling.html).
+- A success test rejects a hold for a collision you cannot see, or you want to know what the collision
+  analyzer measures. Also a note, [How the collision check sees the robot](../omnireset_collision_analyzer.html).
 
 ## Two conventions used everywhere
 

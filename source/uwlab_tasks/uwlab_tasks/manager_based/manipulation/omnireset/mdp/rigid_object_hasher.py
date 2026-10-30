@@ -64,6 +64,8 @@ class RigidObjectHasher:
                 and p.HasAPI(UsdPhysics.CollisionAPI),
                 traverse_instance_prims=True,
             )
+            root_prim = stage.GetPrimAtPath(prim_paths[i])
+            coll_prims = self._own_colliders(root_prim, coll_prims)
             if len(coll_prims) == 0:
                 return
             collider_prims.extend(coll_prims)
@@ -130,6 +132,34 @@ class RigidObjectHasher:
         stor["collider_prim_relative_transforms"] = torch.cat(collider_prim_relative_transforms).view(-1, 10).to("cpu")
         stor["root_prim_hashes"] = torch.tensor(root_prim_hashes, dtype=torch.int64, device="cpu")
         stor["root_prim_scales"] = torch.stack(root_prim_scales).to("cpu")
+
+    @staticmethod
+    def _own_colliders(root_prim: Usd.Prim, coll_prims: list[Usd.Prim]) -> list[Usd.Prim]:
+        """Drop the colliders that belong to another rigid body nested under ``root_prim``.
+
+        A robot converted by the Kit URDF importer nests each link prim inside its parent link, so every
+        collider of the forearm, the wrist and the hand also lies under the elbow prim. Sampled as part of the
+        elbow they would be frozen at the rest pose and carried around with it. When the root is itself a rigid
+        body, only the colliders whose nearest rigid-body ancestor is that root are kept. A root without the
+        rigid-body API (an object wrapper prim) keeps every collider under it, as before.
+
+        Args:
+            root_prim: The prim the colliders were collected under.
+            coll_prims: The colliders found under ``root_prim``.
+
+        Returns:
+            The colliders owned by ``root_prim`` itself.
+        """
+        if not root_prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            return coll_prims
+        own = []
+        for prim in coll_prims:
+            parent = prim.GetParent()
+            while parent.IsValid() and parent != root_prim and not parent.HasAPI(UsdPhysics.RigidBodyAPI):
+                parent = parent.GetParent()
+            if parent == root_prim:
+                own.append(prim)
+        return own
 
     @staticmethod
     def resolve_prim_paths(num_envs: int, prim_path_pattern: str, stage: Usd.Stage | None = None) -> list[str]:
