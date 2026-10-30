@@ -217,7 +217,7 @@ variants = {
         "big-peg": make_object(
             f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Peg/peg.usd",
             scale=(2.0, 2.0, 2.0),
-            mass=0.15,
+            mass=0.2,
             friction=0.6,
         ),
         "cupcake": make_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/CupCake/cupcake.usd"),

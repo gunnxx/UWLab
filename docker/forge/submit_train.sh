@@ -95,11 +95,13 @@ DISK="${DISK:-}"
 MOUNT_PATH="${MOUNT_PATH:-/mnt/uwlab-code}"
 CODE_DIR="${CODE_DIR:-}"
 
+# the big peg draws its training mass from its own range (see the variants of rl_state_cfg.py)
+MASS=""; [[ "${INSERTIVE}" == big-peg ]] && MASS="env.events.randomize_insertive_object_mass=big-peg"
 TRAIN="python scripts/reinforcement_learning/rsl_rl/train.py \
   --task ${TASK} --num_envs ${NUM_ENVS} --max_iterations ${ITERS_ARG} \
   --logger ${LOGGER} --log_project_name ${LOG_PROJECT} --run_name ${RUN_NAME} --visualizer none \
   ${RESUME_PATH:+--resume_path ${RESUME_PATH}} \
-  agent.seed=${SEED} env.scene.insertive_object=${INSERTIVE} env.scene.receptive_object=${RECEPTIVE} ${EXTRA}"
+  agent.seed=${SEED} env.scene.insertive_object=${INSERTIVE} env.scene.receptive_object=${RECEPTIVE} ${MASS} ${EXTRA}"
 if (( GPUS > 1 )); then
     TRAIN="python -m torch.distributed.run --standalone --nnodes 1 --nproc_per_node ${GPUS} \
   ${TRAIN#python } --distributed"

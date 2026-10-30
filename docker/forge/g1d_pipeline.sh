@@ -116,10 +116,12 @@ fi
 
 # ---------------------------------------------------------------------------------------------------- datasets
 if has_stage datasets; then
-    # dataset folder name = sorted USD parent-directory names of the two objects (see mdp/utils.compute_pair_dir)
+    # dataset folder name = USD parent-directory names of the two objects, sorted by the plain name and carrying a
+    # scale suffix for a scaled variant (see mdp/utils.pair_dataset_name)
     PAIR="$(python - "${INSERTIVE}" "${RECEPTIVE}" <<'PY'
 import sys
-names = {"peg": "Peg", "peghole": "PegHole", "fbleg": "SquareLeg", "fbtabletop": "SquareTableTop",
+names = {"peg": "Peg", "peghole": "PegHole", "big-peg": "Peg_x2", "big-peghole": "PegHole_x2",
+         "fbleg": "SquareLeg", "fbtabletop": "SquareTableTop",
          "fbdrawerbottom": "DrawerBottom", "fbdrawerbox": "DrawerBox", "cupcake": "CupCake", "plate": "Plate",
          "rectangle": "Rectangle", "wall": "Wall"}
 ins, rec = sys.argv[1], sys.argv[2]
@@ -127,7 +129,7 @@ a = names.get(ins, "InsertiveCube" if ins == "cube" else None)
 b = names.get(rec, "ReceptiveCube" if rec == "cube" else None)
 if a is None or b is None:
     raise SystemExit(f"unknown object variant: {ins} / {rec}")
-print("__".join(sorted([a, b])))
+print("__".join(sorted([a, b], key=lambda n: n.split("_x")[0])))
 PY
 )"
     DONE_MARK="Resets/${PAIR}/resets_${RESET_TYPES##* }.pt"
@@ -220,9 +222,12 @@ if has_stage train; then
     CKPT_DEST="${CKPT_DEST-/mnt/robotics/twguntara/omni-reset/${EXPERIMENT}}"
     SYNC_MINUTES="${SYNC_MINUTES:-10}"
 
+    # the big peg draws its training mass from its own range (see the variants of rl_state_cfg.py)
+    MASS=(); [[ "${INSERTIVE}" == big-peg ]] && MASS=(env.events.randomize_insertive_object_mass=big-peg)
     TRAIN=(python scripts/reinforcement_learning/rsl_rl/train.py --task "${TASK}" --num_envs "${NUM_ENVS}"
            --max_iterations "${MAX_ITER}" --logger "${LOGGER}" --log_project_name "${LOG_PROJECT}" --run_name "${RUN_NAME}"
-           "${VIS[@]}" agent.seed="${SEED}" env.scene.insertive_object="${INSERTIVE}" env.scene.receptive_object="${RECEPTIVE}" ${EXTRA:-})
+           "${VIS[@]}" agent.seed="${SEED}" env.scene.insertive_object="${INSERTIVE}" env.scene.receptive_object="${RECEPTIVE}"
+           "${MASS[@]}" ${EXTRA:-})
     if (( GPUS > 1 )); then
         TRAIN=(python -m torch.distributed.run --standalone --nnodes 1 --nproc_per_node "${GPUS}" "${TRAIN[@]:1}" --distributed)
     fi

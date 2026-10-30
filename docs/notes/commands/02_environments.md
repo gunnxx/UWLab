@@ -74,8 +74,10 @@ the file they need depends on the family and the situation.
 | `ObjectPartiallyAssembled*` | `Resets/<pair>/partial_assemblies.pt`, plus `grasps.pt` for the grasped one |
 
 Here `<pair>` is the sorted pair of USD folder names, for example `Peg__PegHole`, and `<object>` is the
-insertive object's folder name, for example `Peg`. A scaled object variant gets its own grasp folder, so the
-big peg records to `Grasps/Peg_x2`.
+insertive object's folder name, for example `Peg`. A scaled object variant gets its own folders, so the big
+peg records to `Grasps/Peg_x2`, and the big peg in the big hole to `Resets/Peg_x2__PegHole_x2`. The pair is
+chosen with `env.scene.insertive_object=big-peg env.scene.receptive_object=big-peghole` in every task that
+takes the pair, and the hole has to be scaled with the peg for the two to fit.
 
 The files live under one dataset root per robot.
 

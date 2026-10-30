@@ -33,6 +33,11 @@ Swap the task id for `OmniReset-G1Dex3-RelCartesianOSC-State-v0` or
 `OmniReset-Ur5eRobotiq2f85-RelCartesianOSC-State-v0` for the other robots. The run is headless, and a
 checkpoint is written every few hundred iterations into the run folder named above.
 
+Training randomises the insertive object's mass at start-up, by default anywhere between 20 and 200 g. For
+the big peg add `env.events.randomize_insertive_object_mass=big-peg` next to the two object choices, which
+draws between 150 and 250 g around its 200 g. The pipeline and the Forge submit script add it by themselves
+when `INSERTIVE=big-peg`.
+
 For a run on the cluster, `docker/forge/README.md` section 4 has the submission flow. Forge checkpoints land
 under `/mnt/robotics/<user>/omni-reset/<experiment>/<run>/`, and the download of one is described there too.
 

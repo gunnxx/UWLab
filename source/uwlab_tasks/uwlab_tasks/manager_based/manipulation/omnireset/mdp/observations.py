@@ -75,8 +75,7 @@ class target_asset_pose_in_root_asset_frame_with_metadata(ManagerTermBase):
 
         # Read root asset offset from metadata
         if root_asset_offset_metadata_key is not None:
-            root_usd_path = self.root_asset.cfg.spawn.usd_path
-            root_metadata = utils.read_metadata_from_usd_directory(root_usd_path)
+            root_metadata = utils.read_asset_metadata(self.root_asset)
             root_offset_data = root_metadata.get(root_asset_offset_metadata_key)
             self.root_asset_offset = Offset(pos=root_offset_data.get("pos"), quat=root_offset_data.get("quat"))
         else:
@@ -84,8 +83,7 @@ class target_asset_pose_in_root_asset_frame_with_metadata(ManagerTermBase):
 
         # Read target asset offset from metadata
         if target_asset_offset_metadata_key is not None:
-            target_usd_path = self.target_asset.cfg.spawn.usd_path
-            target_metadata = utils.read_metadata_from_usd_directory(target_usd_path)
+            target_metadata = utils.read_asset_metadata(self.target_asset)
             target_offset_data = target_metadata.get(target_asset_offset_metadata_key)
             self.target_asset_offset = Offset(pos=target_offset_data.get("pos"), quat=target_offset_data.get("quat"))
         else:

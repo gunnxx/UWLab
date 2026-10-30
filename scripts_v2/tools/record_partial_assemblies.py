@@ -51,7 +51,7 @@ import isaaclab_tasks  # noqa: F401
 from isaaclab.envs import ManagerBasedRLEnv
 
 import uwlab_tasks  # noqa: F401
-from uwlab_tasks.manager_based.manipulation.omnireset.mdp.utils import compute_pair_dir
+from uwlab_tasks.manager_based.manipulation.omnireset.mdp.utils import pair_dataset_name
 from uwlab_tasks.utils.hydra import hydra_task_compose
 
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -80,7 +80,7 @@ def main(env_cfg, agent_cfg) -> None:
     # Derive pair directory for output path
     insertive_usd_path = env_cfg.scene.insertive_object.spawn.usd_path
     receptive_usd_path = env_cfg.scene.receptive_object.spawn.usd_path
-    pair = compute_pair_dir(insertive_usd_path, receptive_usd_path)
+    pair = pair_dataset_name(env_cfg.scene.insertive_object.spawn, env_cfg.scene.receptive_object.spawn)
 
     print(f"Recording partial assemblies for: {pair}")
     print(f"Insertive: {insertive_usd_path}")

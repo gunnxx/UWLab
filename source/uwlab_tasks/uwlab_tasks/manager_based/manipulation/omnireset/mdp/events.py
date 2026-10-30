@@ -1102,9 +1102,7 @@ class reset_insertive_object_from_partial_assembly_dataset(ManagerTermBase):
         self._load_and_precompute_partial_assemblies(env)
 
     def _compute_partial_assembly_dataset_path(self) -> str:
-        insertive_usd_path = self.insertive_object.cfg.spawn.usd_path
-        receptive_usd_path = self.receptive_object.cfg.spawn.usd_path
-        pair = utils.compute_pair_dir(insertive_usd_path, receptive_usd_path)
+        pair = utils.pair_dataset_name(self.insertive_object.cfg.spawn, self.receptive_object.cfg.spawn)
         return f"{self.dataset_dir}/Resets/{pair}/partial_assemblies.pt"
 
     def _load_and_precompute_partial_assemblies(self, env):
@@ -1238,8 +1236,8 @@ class assembly_sampling_event(ManagerTermBase):
         self.insertive_object_cfg = cfg.params.get("insertive_object_cfg")
         self.insertive_object = env.scene[self.insertive_object_cfg.name]
 
-        insertive_metadata = utils.read_metadata_from_usd_directory(self.insertive_object.cfg.spawn.usd_path)
-        receptive_metadata = utils.read_metadata_from_usd_directory(self.receptive_object.cfg.spawn.usd_path)
+        insertive_metadata = utils.read_asset_metadata(self.insertive_object)
+        receptive_metadata = utils.read_asset_metadata(self.receptive_object)
 
         self.insertive_assembled_offset = Offset(
             pos=insertive_metadata.get("assembled_offset").get("pos"),
@@ -1320,9 +1318,7 @@ class MultiResetManager(ManagerTermBase):
             raise ValueError("Number of reset_types must match number of probabilities")
 
         # Derive pair directory from scene objects
-        insertive_usd_path = env.scene["insertive_object"].cfg.spawn.usd_path
-        receptive_usd_path = env.scene["receptive_object"].cfg.spawn.usd_path
-        pair = utils.compute_pair_dir(insertive_usd_path, receptive_usd_path)
+        pair = utils.pair_dataset_name(env.scene["insertive_object"].cfg.spawn, env.scene["receptive_object"].cfg.spawn)
 
         # Generate dataset paths from pair directory and reset types
         dataset_files = []
@@ -1553,8 +1549,7 @@ class reset_root_states_uniform(ManagerTermBase):
             self.bottom_offset_positions = dict()
             for asset_cfg in self.asset_cfgs:
                 asset: RigidObject | Articulation = env.scene[asset_cfg.name]
-                usd_path = asset.cfg.spawn.usd_path
-                metadata = utils.read_metadata_from_usd_directory(usd_path)
+                metadata = utils.read_asset_metadata(asset)
                 bottom_offset = metadata.get("bottom_offset")
                 self.bottom_offset_positions[asset_cfg.name] = (
                     torch.tensor(bottom_offset.get("pos"), device=env.device).unsqueeze(0).repeat(env.num_envs, 1)

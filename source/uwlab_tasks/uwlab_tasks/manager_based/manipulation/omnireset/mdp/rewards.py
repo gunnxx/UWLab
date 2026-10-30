@@ -35,15 +35,13 @@ class ee_asset_distance_tanh(ManagerTermBase):
         target_asset_offset_metadata_key: str = cfg.params.get("target_asset_offset_metadata_key")
 
         self.root_asset = env.scene[self.root_asset_cfg.name]
-        root_usd_path = self.root_asset.cfg.spawn.usd_path
-        root_metadata = utils.read_metadata_from_usd_directory(root_usd_path)
+        root_metadata = utils.read_asset_metadata(self.root_asset)
         root_offset_data = root_metadata.get(root_asset_offset_metadata_key)
         self.root_asset_offset = Offset(pos=root_offset_data.get("pos"), quat=root_offset_data.get("quat"))
 
         self.target_asset = env.scene[self.target_asset_cfg.name]
         if target_asset_offset_metadata_key is not None:
-            target_usd_path = self.target_asset.cfg.spawn.usd_path
-            target_metadata = utils.read_metadata_from_usd_directory(target_usd_path)
+            target_metadata = utils.read_asset_metadata(self.target_asset)
             target_offset_data = target_metadata.get(target_asset_offset_metadata_key)
             self.target_asset_offset = Offset(pos=target_offset_data.get("pos"), quat=target_offset_data.get("quat"))
         else:
@@ -89,8 +87,8 @@ class ProgressContext(ManagerTermBase):
         self.insertive_asset: Articulation | RigidObject = env.scene[cfg.params.get("insertive_asset_cfg").name]  # type: ignore
         self.receptive_asset: Articulation | RigidObject = env.scene[cfg.params.get("receptive_asset_cfg").name]  # type: ignore
 
-        insertive_meta = utils.read_metadata_from_usd_directory(self.insertive_asset.cfg.spawn.usd_path)
-        receptive_meta = utils.read_metadata_from_usd_directory(self.receptive_asset.cfg.spawn.usd_path)
+        insertive_meta = utils.read_asset_metadata(self.insertive_asset)
+        receptive_meta = utils.read_asset_metadata(self.receptive_asset)
         self.insertive_asset_offset = Offset(
             pos=tuple(insertive_meta.get("assembled_offset").get("pos")),
             quat=tuple(insertive_meta.get("assembled_offset").get("quat")),

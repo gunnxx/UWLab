@@ -190,12 +190,22 @@ class PartialAssembliesActionsCfg:
     pass
 
 
-def make_insertive_object(usd_path: str):
+def make_insertive_object(usd_path: str, scale: tuple[float, float, float] = (1.0, 1.0, 1.0)) -> RigidObjectCfg:
+    """Insertive object variant of the partial-assemblies scene.
+
+    Args:
+        usd_path: USD file of the object.
+        scale: Spawn scale. A scaled variant records to its own dataset folder, see
+            :func:`~mdp.utils.pair_dataset_name`, and its metadata offsets are scaled with it.
+
+    Returns:
+        The object configuration.
+    """
     return RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/InsertiveObject",
         spawn=sim_utils.UsdFileCfg(
             usd_path=usd_path,
-            scale=(1, 1, 1),
+            scale=scale,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 solver_position_iteration_count=4,
                 solver_velocity_iteration_count=0,
@@ -208,12 +218,21 @@ def make_insertive_object(usd_path: str):
     )
 
 
-def make_receptive_object(usd_path: str):
+def make_receptive_object(usd_path: str, scale: tuple[float, float, float] = (1.0, 1.0, 1.0)) -> RigidObjectCfg:
+    """Receptive object variant of the scene. The object is kinematic, so its mass does not matter.
+
+    Args:
+        usd_path: USD file of the object.
+        scale: Spawn scale, which must match the insertive object's for the two to fit.
+
+    Returns:
+        The object configuration.
+    """
     return RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/ReceptiveObject",
         spawn=sim_utils.UsdFileCfg(
             usd_path=usd_path,
-            scale=(1, 1, 1),
+            scale=scale,
             rigid_props=sim_utils.RigidBodyPropertiesCfg(
                 solver_position_iteration_count=4,
                 solver_velocity_iteration_count=0,
@@ -233,6 +252,7 @@ variants = {
             f"{UWLAB_CLOUD_ASSETS_DIR}/Props/FurnitureBench/DrawerBottom/drawer_bottom.usd"
         ),
         "peg": make_insertive_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Peg/peg.usd"),
+        "big-peg": make_insertive_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Peg/peg.usd", scale=(2.0, 2.0, 2.0)),
         "cupcake": make_insertive_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/CupCake/cupcake.usd"),
         "cube": make_insertive_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/InsertiveCube/insertive_cube.usd"),
         "rectangle": make_insertive_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Rectangle/rectangle.usd"),
@@ -243,6 +263,9 @@ variants = {
         ),
         "fbdrawerbox": make_receptive_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/FurnitureBench/DrawerBox/drawer_box.usd"),
         "peghole": make_receptive_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/PegHole/peg_hole.usd"),
+        "big-peghole": make_receptive_object(
+            f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/PegHole/peg_hole.usd", scale=(2.0, 2.0, 2.0)
+        ),
         "plate": make_receptive_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Plate/plate.usd"),
         "cube": make_receptive_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/ReceptiveCube/receptive_cube.usd"),
         "wall": make_receptive_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Wall/wall.usd"),

@@ -86,7 +86,7 @@ def main(env_cfg, agent_cfg) -> None:
     # Derive pair directory and reset type for output path
     insertive_usd_path = env_cfg.scene.insertive_object.spawn.usd_path
     receptive_usd_path = env_cfg.scene.receptive_object.spawn.usd_path
-    pair = task_mdp.utils.compute_pair_dir(insertive_usd_path, receptive_usd_path)
+    pair = task_mdp.utils.pair_dataset_name(env_cfg.scene.insertive_object.spawn, env_cfg.scene.receptive_object.spawn)
 
     # Auto-infer reset_type from task name if not provided
     reset_type = args_cli.reset_type

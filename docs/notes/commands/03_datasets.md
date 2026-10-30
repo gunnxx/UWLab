@@ -57,6 +57,12 @@ And for both, the object pair:
 OBJ="env.scene.insertive_object=peg env.scene.receptive_object=peghole"
 ```
 
+For the big peg, the peg at twice the size made for the Dex3, the pair is `big-peg` and `big-peghole`, and the
+grasp step below takes `env.scene.object=big-peg`. Every file then lands under `Peg_x2__PegHole_x2` and
+`Peg_x2` instead of `Peg__PegHole` and `Peg`, so the two sizes never overwrite each other. The big peg is
+authored at 200 g, the weight of the printed one, and training draws its mass from a range around that, see
+[page 4](04_training.md).
+
 The sizes in the commands are the ones the recorded sets were made with. Smaller numbers are fine for a first
 pass, and the pipeline's smoke sizes at the end of this page finish in minutes.
 
@@ -172,6 +178,7 @@ The knobs are environment variables. These are the ones you will reach for:
 | Knob | Meaning |
 |---|---|
 | `STAGES=assets,datasets,train` | which stages to run, any subset in this order |
+| `INSERTIVE=big-peg RECEPTIVE=big-peghole` | the object pair, `peg` and `peghole` by default |
 | `FORCE=1` | rebuild or re-record a stage even if the cache already has its files |
 | `RESET_ENVS`, `NUM_RESETS` | environments and states per reset-state family, 2048 and 10000 by default |
 | `GRASP_ENVS`, `NUM_GRASPS` | environments and grasps for step 2, 8192 and 1000 by default |

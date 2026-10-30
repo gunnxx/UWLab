@@ -306,10 +306,55 @@ def test_grasp_sampling_preserves_asset_masses():
         "uwlab_tasks.manager_based.manipulation.omnireset.config.ur5e_robotiq_2f85.grasp_sampling_cfg"
     )
     assert module.GraspSamplingSceneCfg().object.spawn.mass_props is None
-    assert set(module.variants["scene.object"]) == {"peg", "cube", "cupcake", "rectangle", "fbleg", "fbdrawerbottom"}
-    for object_cfg in module.variants["scene.object"].values():
-        assert object_cfg.spawn.mass_props is None
+    variants = module.variants["scene.object"]
+    assert set(variants) == {"peg", "big-peg", "cube", "cupcake", "rectangle", "fbleg", "fbdrawerbottom"}
+    for name, object_cfg in variants.items():
+        if name == "big-peg":
+            # the one variant with an authored mass, that of the 3D-printed peg
+            assert object_cfg.spawn.mass_props.mass == pytest.approx(0.2)
+        else:
+            assert object_cfg.spawn.mass_props is None
         assert object_cfg.spawn.rigid_props.disable_gravity is False
+
+
+@pytest.mark.isaacsim_ci
+def test_big_peg_pair_variants():
+    """The big peg and its hole exist in the three pair tasks, name their own dataset folder and scale the metadata."""
+    utils = importlib.import_module("uwlab_tasks.manager_based.manipulation.omnireset.mdp.utils")
+    package = "uwlab_tasks.manager_based.manipulation.omnireset.config.ur5e_robotiq_2f85"
+    for name in ("partial_assemblies_cfg", "reset_states_cfg", "rl_state_cfg"):
+        module = importlib.import_module(f"{package}.{name}")
+        peg = module.variants["scene.insertive_object"]["big-peg"]
+        hole = module.variants["scene.receptive_object"]["big-peghole"]
+        assert peg.spawn.scale == (2.0, 2.0, 2.0)
+        assert hole.spawn.scale == (2.0, 2.0, 2.0)
+        assert utils.pair_dataset_name(peg.spawn, hole.spawn) == "Peg_x2__PegHole_x2"
+        unit_peg = module.variants["scene.insertive_object"]["peg"]
+        unit_hole = module.variants["scene.receptive_object"]["peghole"]
+        assert utils.pair_dataset_name(unit_peg.spawn, unit_hole.spawn) == "Peg__PegHole"
+        if name != "partial_assemblies_cfg":
+            # the 3D-printed peg's mass and the friction of the grasp-sampling variant
+            assert peg.spawn.mass_props.mass == pytest.approx(0.2)
+            assert peg.spawn.physics_material.static_friction == pytest.approx(0.6)
+        if name == "rl_state_cfg":
+            # training draws an absolute mass, so the big peg selects its own range
+            mass_term = module.variants["events.randomize_insertive_object_mass"]["big-peg"]
+            assert mass_term.params["mass_distribution_params"] == (0.15, 0.25)
+            assert mass_term.params["operation"] == "abs"
+
+    metadata = {
+        "assembled_offset": {"pos": [0.0, 0.0, 0.014837], "quat": [0.0, 0.0, 0.0, 1.0]},
+        "bottom_offset": {"pos": [0.0, 0.0, -0.015163], "quat": [0.0, 0.0, 0.0, 1.0]},
+        "success_thresholds": {"position": 0.0025, "orientation": 0.025},
+    }
+    scaled = utils.scale_metadata(metadata, (2.0, 2.0, 2.0))
+    assert scaled["assembled_offset"]["pos"] == pytest.approx([0.0, 0.0, 0.029674])
+    assert scaled["assembled_offset"]["quat"] == [0.0, 0.0, 0.0, 1.0]
+    assert scaled["bottom_offset"]["pos"] == pytest.approx([0.0, 0.0, -0.030326])
+    assert scaled["success_thresholds"] == pytest.approx({"position": 0.005, "orientation": 0.025})
+    assert metadata["assembled_offset"]["pos"][2] == 0.014837  # the input is left alone
+    assert utils.scale_metadata(metadata, None) == metadata
+    assert utils.scale_metadata(metadata, (1.0, 1.0, 1.0)) == metadata
 
 
 @pytest.mark.parametrize("contract", ["asset", "armature"])

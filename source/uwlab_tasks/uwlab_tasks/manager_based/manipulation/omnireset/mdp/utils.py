@@ -4,6 +4,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 
 
+import copy
 import functools
 import io
 import logging
@@ -25,7 +26,9 @@ from urllib.parse import urlparse
 import isaaclab.utils.math as math_utils
 import omni
 import warp as wp
+from isaaclab.assets import Articulation, RigidObject
 from isaaclab.scene import InteractiveScene
+from isaaclab.sim import UsdFileCfg
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, NVIDIA_NUCLEUS_DIR, retrieve_file_path
 from isaaclab.utils.seed import configure_seed
 from isaaclab.utils.warp import convert_to_warp_mesh
@@ -401,6 +404,51 @@ def read_metadata_from_usd_directory(usd_path: str) -> dict:
     return metadata_file
 
 
+def scale_metadata(metadata: dict, scale: tuple[float, float, float] | None) -> dict:
+    """Metadata of an object spawned at ``scale``, with every length multiplied accordingly.
+
+    The metadata files describe an asset at unit scale. A variant spawned at another scale has every offset,
+    that is every entry with a ``pos`` such as ``assembled_offset`` and ``bottom_offset``, scaled component-wise
+    in the object frame, and its ``success_thresholds.position`` scaled by the mean factor. Quaternions, angular
+    thresholds and everything else are unchanged.
+
+    Args:
+        metadata: Metadata as read by :func:`read_metadata_from_usd_directory`. It is not modified.
+        scale: Spawn scale of the object, as in ``RigidObjectCfg.spawn.scale``. ``None`` or unit scale returns
+            a copy of the metadata unchanged.
+
+    Returns:
+        The scaled metadata.
+    """
+    scaled = copy.deepcopy(metadata)
+    if scale is None or all(abs(float(v) - 1.0) < 1e-9 for v in scale):
+        return scaled
+    factors = [float(v) for v in scale]
+    for value in scaled.values():
+        if isinstance(value, dict) and "pos" in value:
+            value["pos"] = [float(p) * f for p, f in zip(value["pos"], factors)]
+    thresholds = scaled.get("success_thresholds")
+    if isinstance(thresholds, dict) and "position" in thresholds:
+        thresholds["position"] = float(thresholds["position"]) * sum(factors) / len(factors)
+    return scaled
+
+
+def read_asset_metadata(asset: RigidObject | Articulation) -> dict:
+    """Metadata of a scene asset at the scale it is spawned with.
+
+    Reads the ``metadata.yaml`` next to the asset's USD file and applies :func:`scale_metadata` with the spawn
+    scale, so that a scaled variant such as the big peg gets the assembled and bottom offsets of its own size.
+
+    Args:
+        asset: The scene asset. Its ``cfg.spawn`` holds the USD path and the scale.
+
+    Returns:
+        The scaled metadata.
+    """
+    spawn = asset.cfg.spawn
+    return scale_metadata(read_metadata_from_usd_directory(spawn.usd_path), getattr(spawn, "scale", None))
+
+
 def object_name_from_usd(usd_path: str) -> str:
     """Extract the canonical object name from a USD asset path.
 
@@ -435,16 +483,20 @@ def object_dataset_name(usd_path: str, scale: tuple[float, float, float] | None 
     return f"{name}_x{'x'.join(fmt(v) for v in scale)}"
 
 
-def compute_pair_dir(*usd_paths: str) -> str:
-    """Derive a human-readable directory name from one or more USD asset paths.
+def pair_dataset_name(*spawn_cfgs: UsdFileCfg) -> str:
+    """Name of the dataset folder of an object pair: the :func:`object_dataset_name` of each, sorted and joined.
 
-    Names are sorted alphabetically and joined with ``'__'``.
+    Args:
+        spawn_cfgs: Spawn configurations of the objects, as in ``RigidObjectCfg.spawn``. Each carries the
+            ``usd_path`` and, for a scaled variant, the ``scale``.
 
-    Examples:
-        Single object:  ``('...Peg/peg.usd',)`` -> ``'Peg'``
-        Object pair:    ``('...Peg/peg.usd', '...PegHole/peg_hole.usd')`` -> ``'Peg__PegHole'``
+    Returns:
+        The folder name, ``'Peg__PegHole'`` for the peg in its hole and ``'Peg_x2__PegHole_x2'`` for both at
+        twice the size. The objects are ordered by their unscaled names, so every size of a pair lists them the
+        same way.
     """
-    return "__".join(sorted(object_name_from_usd(p) for p in usd_paths))
+    ordered = sorted(spawn_cfgs, key=lambda s: object_name_from_usd(s.usd_path))
+    return "__".join(object_dataset_name(s.usd_path, getattr(s, "scale", None)) for s in ordered)
 
 
 def load_asset_paths_from_config(

@@ -322,8 +322,8 @@ class check_reset_state_success(ManagerTermBase):
             self.insertive_asset = env.scene[insertive_asset_cfg.name]
             self.receptive_asset = env.scene[receptive_asset_cfg.name]
 
-            insertive_meta = utils.read_metadata_from_usd_directory(self.insertive_asset.cfg.spawn.usd_path)
-            receptive_meta = utils.read_metadata_from_usd_directory(self.receptive_asset.cfg.spawn.usd_path)
+            insertive_meta = utils.read_asset_metadata(self.insertive_asset)
+            receptive_meta = utils.read_asset_metadata(self.receptive_asset)
             self.insertive_asset_offset = Offset(
                 pos=tuple(insertive_meta.get("assembled_offset").get("pos")),
                 quat=tuple(insertive_meta.get("assembled_offset").get("quat")),
