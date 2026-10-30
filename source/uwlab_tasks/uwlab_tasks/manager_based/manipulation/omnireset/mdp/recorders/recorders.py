@@ -11,7 +11,7 @@ import torch
 import isaaclab.utils.math as math_utils
 from isaaclab.managers.recorder_manager import RecorderTerm
 
-from ..utils import kinematic_rigid_object_names
+from ..utils import layout_rigid_object_names
 
 
 class StableStateRecorder(RecorderTerm):
@@ -23,8 +23,8 @@ class StableStateRecorder(RecorderTerm):
             return value[env_ids]
 
         state = self._env.scene.get_state(is_relative=True)
-        # kinematic rigid objects (the table) are layout, not state: see utils.kinematic_rigid_object_names
-        for name in kinematic_rigid_object_names(self._env.scene):
+        # layout rigid objects (the table) are not state: see utils.layout_rigid_object_names
+        for name in layout_rigid_object_names(self._env.scene):
             state.get("rigid_object", {}).pop(name, None)
         return "initial_state", extract_env_ids_values(state)
 

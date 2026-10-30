@@ -729,21 +729,31 @@ def settle_robot(
     robot.update(sim_dt)
 
 
-def kinematic_rigid_object_names(scene: InteractiveScene) -> set[str]:
-    """Names of the scene's rigid objects spawned with ``kinematic_enabled`` (tables, fixtures).
+TASK_OBJECT_NAMES = ("insertive_object", "receptive_object")
+"""Scene names of the two task objects. They are placed by the reset events, so their poses are part of a reset
+state even when one of them is spawned kinematic, as the receptive object is."""
 
-    Their pose is part of the scene layout, not of a reset state: the G1-D table is such an object, and a reset-state
-    file recorded with one table size would otherwise move a differently sized table to the old centre when its
-    states are restored (the objects then rest on nothing). Recorders leave them out and resets do not restore them.
+
+def layout_rigid_object_names(scene: InteractiveScene) -> set[str]:
+    """Names of the scene's rigid objects that belong to the fixed layout (tables, mounts).
+
+    A layout object is spawned with ``kinematic_enabled`` and is not one of :data:`TASK_OBJECT_NAMES`. Its pose is
+    part of the scene layout, not of a reset state: a reset-state file recorded with one table size would otherwise
+    move a differently sized table to the old centre when its states are restored. Recorders leave these objects
+    out and resets do not restore them. The receptive object is kinematic too, but the reset events place it anew
+    in every episode and the stored peg and hand poses are relative to that placement, so it is recorded and
+    restored like the insertive object.
 
     Args:
         scene: The interactive scene whose rigid objects are inspected.
 
     Returns:
-        The names of the rigid objects whose spawn config has ``kinematic_enabled`` set.
+        The names of the kinematic rigid objects that are not task objects.
     """
     names: set[str] = set()
     for name, obj in getattr(scene, "_rigid_objects", {}).items():
+        if name in TASK_OBJECT_NAMES:
+            continue
         rigid_props = getattr(getattr(obj.cfg, "spawn", None), "rigid_props", None)
         if rigid_props is not None and getattr(rigid_props, "kinematic_enabled", False):
             names.add(name)

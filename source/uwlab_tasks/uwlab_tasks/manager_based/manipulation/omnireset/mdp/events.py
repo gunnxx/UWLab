@@ -324,7 +324,6 @@ class grasp_sampling_event(ManagerTermBase):
         grasp_align_axis = torch.tensor(self.grasp_align_axis, dtype=torch.float32)
         grasp_align_axis = grasp_align_axis / torch.norm(grasp_align_axis)
 
-
         # Simple mesh-adaptive standoff: use bounding box diagonal for size-aware clearance
         mesh_extents = mesh.extents
         mesh_diagonal = np.linalg.norm(mesh_extents)
@@ -1377,9 +1376,9 @@ class MultiResetManager(ManagerTermBase):
             nodal_velocity = asset_state["nodal_velocity"].clone()
             deformable_object.write_nodal_pos_to_sim(nodal_position, env_ids=env_ids)
             deformable_object.write_nodal_velocity_to_sim(nodal_velocity, env_ids=env_ids)
-        # rigid objects (kinematic ones such as the table belong to the layout, not to the state: see
-        # utils.kinematic_rigid_object_names)
-        skip = utils.kinematic_rigid_object_names(self._env.scene)
+        # rigid objects (layout ones such as the table are not part of the state: see
+        # utils.layout_rigid_object_names)
+        skip = utils.layout_rigid_object_names(self._env.scene)
         for asset_name, rigid_object in self._env.scene._rigid_objects.items():
             if asset_name not in state["rigid_object"] or asset_name in skip:
                 continue

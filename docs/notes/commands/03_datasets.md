@@ -215,7 +215,9 @@ AUX_FROM_CACHE=1 RESET_TYPES=ObjectRestingEEGrasped FORCE=1 STAGES=datasets dock
 
 A recorded state restores every rigid object in the scene that is not kinematic. So:
 
-- Moving the table does not invalidate anything. The table is kinematic and is skipped.
+- Moving the table does not invalidate anything. The table is kinematic and is skipped. The receptive object is
+  kinematic too but is stored, because the reset events place it anew in every episode. Sets recorded between
+  2026-10-28 and 2026-10-30 lack it and leave the hole under the robot when training resets from them.
 - Changing an object, its scale or its physics invalidates every set that contains it. Re-record steps 1 to 6.
 - Changing the robot or its hand invalidates the grasps and the three grasped families. Re-record steps 2,
   4, 5 and 6. The anywhere family and the partial assemblies survive.
