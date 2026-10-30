@@ -1,0 +1,50 @@
+\documentclass{article}
+
+\usepackage[preprint]{corl_2026}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,fit,backgrounds}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{microtype}
+\usepackage{float}
+\usepackage{url}
+\usepackage{enumitem}
+
+\input{shared_macros}
+\lstset{basicstyle=\ttfamily\scriptsize}
+
+% colours of the HTML note, so the two renderings match
+\definecolor{accent}{HTML}{1E6B86}
+\definecolor{accentsoft}{HTML}{E2EEF2}
+\definecolor{warnsoft}{HTML}{F6ECDC}
+\definecolor{warn}{HTML}{8A5A12}
+
+% figure and table wrappers: placed exactly where they are referenced (no floating)
+\newenvironment{myfigure}{\begin{figure}[H]\centering}{\end{figure}}
+\newenvironment{mytable}{\begin{table}[H]\centering}{\end{table}}
+\newcommand{\myfigcaption}[2]{\caption{#2}\label{#1}}
+\newcommand{\mytabcaption}[2]{\caption{#2}\label{#1}}
+
+\title{How the Collision Check Sees the Robot:\\ Colliders, Point Clouds and a Phantom Hand in OmniReset}
+
+\author{
+  Tri Wahyu Guntara\\
+  Tutorial notes on the UWLab OmniReset code base\\
+}
+
+\raggedbottom
+
+\begin{document}
+\maketitle
+
+\input{body}
+
+\bibliography{references}
+
+\end{document}

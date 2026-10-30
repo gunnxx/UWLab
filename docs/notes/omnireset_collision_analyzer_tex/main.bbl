@@ -1,0 +1,23 @@
+\begin{thebibliography}{2}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[{UW Lab}(2026)]{omnireset2026}
+{UW Lab}.
+\newblock Emergent dexterity via diverse resets and large-scale reinforcement
+  learning.
+\newblock In \emph{International Conference on Learning Representations
+  (ICLR)}, 2026.
+\newblock arXiv:2603.15789.
+
+\bibitem[Macklin(2022)]{macklin2022warp}
+M.~Macklin.
+\newblock Warp: A high-performance python framework for gpu simulation and
+  graphics.
+\newblock NVIDIA GPU Technology Conference (GTC), 2022.
+\newblock \url{https://github.com/NVIDIA/warp}.
+
+\end{thebibliography}

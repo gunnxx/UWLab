@@ -1,0 +1,14 @@
+\begin{snippetbox}[12]
+\snippethead{source/uwlab_tasks/uwlab_tasks/manager_based/manipulation/omnireset/mdp/rigid_object_hasher.py}{lines 61--69}
+\begin{lstlisting}[firstnumber=61]
+            coll_prims = get_all_matching_child_prims(
+                prim_paths[i],
+                predicate=lambda p: p.GetTypeName() in ("Mesh", "Cube", "Sphere", "Cylinder", "Capsule", "Cone")
+                and p.HasAPI(UsdPhysics.CollisionAPI),
+                traverse_instance_prims=True,
+            )
+            root_prim = stage.GetPrimAtPath(prim_paths[i])
+            coll_prims = self._own_colliders(root_prim, coll_prims)
+            if len(coll_prims) == 0:
+\end{lstlisting}
+\end{snippetbox}

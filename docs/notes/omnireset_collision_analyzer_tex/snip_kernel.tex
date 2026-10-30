@@ -1,0 +1,19 @@
+\begin{snippetbox}[12]
+\snippethead{source/uwlab_tasks/uwlab_tasks/manager_based/manipulation/omnireset/mdp/utils.py}{lines 293--306}
+\begin{lstlisting}[firstnumber=293]
+            mp = wp.mesh_query_point(mid, q3, max_dist)
+            if mp.result:
+                if check_dist:
+                    closest = wp.mesh_eval_position(mid, mp.face, mp.u, mp.v)
+                    local_dist = q3 - closest
+                    unscaled_local_dist = wp.vec3(local_dist.x * crs.x, local_dist.y * crs.y, local_dist.z * crs.z)
+                    delta_root = wp.quat_rotate(coll_rel_quat[index], unscaled_local_dist)
+                    dist = wp.length(delta_root)
+                    signed_dist = dist * mp.sign
+                else:
+                    signed_dist = mp.sign
+                if signed_dist < best_signed_dist:
+                    best_signed_dist = signed_dist
+    signs[tid] = best_signed_dist
+\end{lstlisting}
+\end{snippetbox}

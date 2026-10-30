@@ -1,0 +1,32 @@
+\begin{snippetbox}[14]
+\snippethead{source/uwlab_tasks/uwlab_tasks/manager_based/manipulation/omnireset/mdp/rigid_object_hasher.py}{lines 136--162}
+\begin{lstlisting}[firstnumber=136]
+    @staticmethod
+    def _own_colliders(root_prim: Usd.Prim, coll_prims: list[Usd.Prim]) -> list[Usd.Prim]:
+        """Drop the colliders that belong to another rigid body nested under ``root_prim``.
+
+        A robot converted by the Kit URDF importer nests each link prim inside its parent link, so every
+        collider of the forearm, the wrist and the hand also lies under the elbow prim. Sampled as part of the
+        elbow they would be frozen at the rest pose and carried around with it. When the root is itself a rigid
+        body, only the colliders whose nearest rigid-body ancestor is that root are kept. A root without the
+        rigid-body API (an object wrapper prim) keeps every collider under it, as before.
+
+        Args:
+            root_prim: The prim the colliders were collected under.
+            coll_prims: The colliders found under ``root_prim``.
+
+        Returns:
+            The colliders owned by ``root_prim`` itself.
+        """
+        if not root_prim.HasAPI(UsdPhysics.RigidBodyAPI):
+            return coll_prims
+        own = []
+        for prim in coll_prims:
+            parent = prim.GetParent()
+            while parent.IsValid() and parent != root_prim and not parent.HasAPI(UsdPhysics.RigidBodyAPI):
+                parent = parent.GetParent()
+            if parent == root_prim:
+                own.append(prim)
+        return own
+\end{lstlisting}
+\end{snippetbox}
