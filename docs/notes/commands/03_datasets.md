@@ -111,7 +111,7 @@ through. It uses the UR5e tooling task, since no robot is in the scene, and it i
 
 ```bash
 python scripts_v2/tools/record_partial_assemblies.py --task OmniReset-PartialAssemblies-v0 \
-    --num_envs 10 --num_trajectories 10 --dataset_dir $DATA --viz none $OBJ
+    --num_envs 32 --num_trajectories 32 --dataset_dir $DATA --viz none $OBJ
 ```
 
 What to expect: `Resets/Peg__PegHole/partial_assemblies.pt` under the dataset root.
@@ -125,8 +125,8 @@ positions, which is why the body name is a flag.
 
 ```bash
 python scripts_v2/tools/record_grasps.py --task $GRASP_TASK \
-    --num_envs 8192 --num_grasps 1000 --dataset_dir $DATA --gripper_body_name $GRIPPER_BODY \
-    --viz none env.scene.object=peg
+    --num_envs 1024 --num_grasps 1024 --dataset_dir $DATA --gripper_body_name $GRIPPER_BODY \
+    --viz none env.scene.object=peg env.events.grasp_sampling.params.standoffs_within_clearance=true
 ```
 
 Both hands sample their candidates from the object mesh with the antipodal sampler. The Dex1 lays its approach
@@ -134,7 +134,8 @@ along the sampled pinch line, as the Robotiq does. The Dex3 lays an axis 45 degr
 the line, so that the squeeze, from thumb to fingertips, crosses the line at 45 degrees and takes a square peg
 across its diagonal, and it sweeps the hand around the line, so the 45 degree palm tilt of the hand-tuned grasp
 is among the candidates. Its standoffs stay within the pocket's depth. These choices sit in
-`config/g1_dex3/grasp_sampling_cfg.py`. [How the grasp sampler works](../omnireset_grasp_sampling.html) explains the
+`config/g1_dex3/grasp_sampling_cfg.py`. The Dex1 gets the same standoff rule from the last override on the
+command line; the Dex3 already sets it in its config, so the override is harmless there. [How the grasp sampler works](../omnireset_grasp_sampling.html) explains the
 sampler's mechanics, and its section 7 the Dex3's convention and where the hand-tuned 45 degree tilt sits in it.
 
 The scene's object is a Hydra choice. Besides `peg` there are `fbleg`, `fbdrawerbottom` and `big-peg`, which
@@ -185,6 +186,8 @@ The knobs are environment variables. These are the ones you will reach for:
 | `FORCE=1` | rebuild or re-record a stage even if the cache already has its files |
 | `RESET_ENVS`, `NUM_RESETS` | environments and states per reset-state family, 2048 and 10000 by default |
 | `GRASP_ENVS`, `NUM_GRASPS` | environments and grasps for step 2, 8192 and 1000 by default |
+| `GRASP_ARGS="a=b c=d"` | extra Hydra overrides for step 2, such as the standoff rule above |
+| `PA_ENVS`, `PA_TRAJ` | environments and trajectories for step 1, 32 and 32 by default |
 | `RESET_TYPES="A B"` | record only these families |
 | `AUX_FROM_CACHE=1` | take the partial assemblies, the grasps and earlier families from the cache, for one family per job |
 | `RESET_SYNC_S=300` | while recording, mirror the files to the cache this often, so a killed run keeps what it had |
@@ -193,7 +196,8 @@ Two runs you will want:
 
 ```bash
 # the real sizes, only the dataset stages, re-recording whatever the cache already has
-FORCE=1 STAGES=assets,datasets RESET_ENVS=16384 NUM_RESETS=10000 GRASP_ENVS=8192 NUM_GRASPS=1000 docker/forge/run_local.sh smoke
+FORCE=1 STAGES=assets,datasets RESET_ENVS=16384 NUM_RESETS=10000 GRASP_ENVS=1024 NUM_GRASPS=1024 \
+    GRASP_ARGS=env.events.grasp_sampling.params.standoffs_within_clearance=true docker/forge/run_local.sh smoke
 
 # one family on its own, everything it needs taken from the cache
 AUX_FROM_CACHE=1 RESET_TYPES=ObjectRestingEEGrasped FORCE=1 STAGES=datasets docker/forge/run_local.sh smoke

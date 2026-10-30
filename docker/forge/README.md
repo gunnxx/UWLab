@@ -221,22 +221,25 @@ the prompt):
 
 ```bash
 # everything in one job: assets, partial assemblies, grasps, then the four reset-state families in order
-STAGES=assets,datasets RESET_ENVS=16384 NUM_RESETS=10000 GRASP_ENVS=8192 NUM_GRASPS=1000 HOURS=48 \
-    docker/forge/submit_g1d.sh
+STAGES=assets,datasets RESET_ENVS=16384 NUM_RESETS=10000 GRASP_ENVS=1024 NUM_GRASPS=1024 \
+    GRASP_ARGS=env.events.grasp_sampling.params.standoffs_within_clearance=true HOURS=48 docker/forge/submit_g1d.sh
 
-# one job per family (what produced the current sets, 2026-10-27/28). The first job records the partial
-# assemblies, the grasps and the ungrasped family; the others take those from the cache and record only
-# their own family, so the four run on four GPUs at once.
-STAGES=assets,datasets RESET_TYPES=ObjectAnywhereEEAnywhere RESET_ENVS=16384 NUM_RESETS=10000 \
-    JOB_NAME=g1d-ds-base HOURS=6 docker/forge/submit_g1d.sh
+# one job per family (what produced the current sets, 2026-10-30; CODE_SOURCE=git clones the pushed branch).
+# The first job records the partial assemblies, the grasps and the ungrasped family, which the resting
+# family reads; once it has finished, the others take those from the cache and record only their own
+# family, so the three grasped families run on three GPUs at once.
+STAGES=assets,datasets FORCE=1 RESET_TYPES=ObjectAnywhereEEAnywhere RESET_ENVS=16384 NUM_RESETS=10000 \
+    GRASP_ENVS=1024 NUM_GRASPS=1024 GRASP_ARGS=env.events.grasp_sampling.params.standoffs_within_clearance=true \
+    JOB_NAME=g1d-ds-base HOURS=6 CODE_SOURCE=git docker/forge/submit_g1d.sh
 for RT in ObjectAnywhereEEGrasped ObjectPartiallyAssembledEEGrasped ObjectRestingEEGrasped; do
     STAGES=assets,datasets AUX_FROM_CACHE=1 FORCE=1 RESET_TYPES=${RT} RESET_ENVS=16384 NUM_RESETS=10000 \
-        JOB_NAME=g1d-ds-${RT,,} HOURS=30 YES=1 docker/forge/submit_g1d.sh
+        JOB_NAME=g1d-ds-${RT,,} HOURS=30 YES=1 CODE_SOURCE=git docker/forge/submit_g1d.sh
 done
 ```
 
 `FORCE=1` is needed on the per-family jobs because the stage is otherwise skipped as soon as the cache holds
-the last family's file. Recording time at 16384 envs on one A100: minutes for the ungrasped family, 4 to 6
+the last family's file. To re-record everything, rename the cache's `datasets` folder first (the old sets of
+2026-10-27/29 are kept as `datasets_backup_20261030`). Recording time at 16384 envs on one A100: minutes for the ungrasped family, 4 to 6
 hours for the air and partial grasped families, about a day for the resting one (yields 0.85%, 1.05% and
 0.1% of grasp attempts). The files are mirrored to the cache every 5 minutes (`RESET_SYNC_S`), so a job that
 hits `HOURS` still leaves its states behind; resubmitting with the same `RESET_TYPES` starts that family's

@@ -15,6 +15,8 @@
 #   STAGES=assets,bench BENCH_ENVS="4096 16384"   step-rate / memory benchmark of a reset-state env
 #   GPUS NUM_ENVS SEED MAX_ITER LOGGER LOG_PROJECT RUN_NAME    training knobs (see submit_train.sh)
 #   RESET_ENVS=2048 NUM_RESETS=10000 GRASP_ENVS=8192 NUM_GRASPS=1000
+#   PA_ENVS=32 PA_TRAJ=32          partial-assembly recorder: environments and trajectories
+#   GRASP_ARGS="env.events.grasp_sampling.params.standoffs_within_clearance=true"   extra Hydra overrides for record_grasps.py
 #   RESET_SYNC_S=300               while recording reset states, mirror the files to the cache this often (seconds)
 #   BUILD_ARGS="--waist-pitch 0.1"  extra flags for build_urdf.py
 set -euo pipefail
@@ -49,6 +51,8 @@ RESET_ENVS="${RESET_ENVS:-2048}"
 NUM_RESETS="${NUM_RESETS:-10000}"
 GRASP_ENVS="${GRASP_ENVS:-8192}"
 NUM_GRASPS="${NUM_GRASPS:-1000}"
+PA_ENVS="${PA_ENVS:-32}"
+PA_TRAJ="${PA_TRAJ:-32}"
 # reset-state families to record (space separated); split them across jobs to use several GPUs in parallel
 RESET_TYPES="${RESET_TYPES:-ObjectAnywhereEEAnywhere ObjectRestingEEGrasped ObjectAnywhereEEGrasped ObjectPartiallyAssembledEEGrasped}"
 VIS=(--visualizer none)
@@ -148,11 +152,11 @@ PY
         else
             log "datasets: partial assemblies (${PAIR})"
             python scripts_v2/tools/record_partial_assemblies.py --task OmniReset-PartialAssemblies-v0 \
-                --num_envs 10 --num_trajectories 10 --dataset_dir "${DATA_DIR}" "${VIS[@]}" "${OBJ[@]}"
+                --num_envs "${PA_ENVS}" --num_trajectories "${PA_TRAJ}" --dataset_dir "${DATA_DIR}" "${VIS[@]}" "${OBJ[@]}"
             log "datasets: ${ROBOT} grasps on ${INSERTIVE}"
             python scripts_v2/tools/record_grasps.py --task "${GRASP_TASK}" \
                 --num_envs "${GRASP_ENVS}" --num_grasps "${NUM_GRASPS}" --dataset_dir "${DATA_DIR}" \
-                --gripper_body_name "${GRIPPER_BODY}" "${VIS[@]}" env.scene.object="${INSERTIVE}"
+                --gripper_body_name "${GRIPPER_BODY}" "${VIS[@]}" env.scene.object="${INSERTIVE}" ${GRASP_ARGS:-}
         fi
         # The recorder writes into the job's own file system, which disappears with the job: a max-duration kill
         # or a cancel used to lose every state recorded so far. Mirror the reset-state files to the cache every
