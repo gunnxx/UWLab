@@ -441,6 +441,10 @@ class ResetStatesTerminationCfg:
             "max_object_pos_deviation": MISSING,
             "pos_z_threshold": -0.02,
             "consecutive_stability_steps": 5,
+            # the hand's approach direction must point down within this cosine of the vertical: -0.5 is the 60 degree
+            # cone the parallel grippers pick with. A hand that also picks sideways, like the Dex3, can widen it: 0.0
+            # admits a horizontal palm and 1.0 removes the test, ``env.terminations.success.params.approach_z_max=0.0``
+            "approach_z_max": -0.5,
         },
         time_out=True,
     )

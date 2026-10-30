@@ -260,6 +260,7 @@ class check_reset_state_success(ManagerTermBase):
         self.max_object_pos_deviation = cfg.params.get("max_object_pos_deviation")
         self.pos_z_threshold = cfg.params.get("pos_z_threshold")
         self.consecutive_stability_steps = cfg.params.get("consecutive_stability_steps", 5)
+        self.approach_z_max = cfg.params.get("approach_z_max", -0.5)
 
         # Load gripper_approach_direction from metadata
         robot_asset = env.scene[self.robot_cfg.name]
@@ -386,6 +387,7 @@ class check_reset_state_success(ManagerTermBase):
         max_object_pos_deviation: float = 0.1,
         pos_z_threshold: float = -0.01,
         consecutive_stability_steps: int = 5,
+        approach_z_max: float = -0.5,
         insertive_asset_cfg: SceneEntityCfg | None = None,
         receptive_asset_cfg: SceneEntityCfg | None = None,
         assembly_success_prob: float | None = None,
@@ -409,15 +411,14 @@ class check_reset_state_success(ManagerTermBase):
             self.robot_asset.data.joint_vel.torch.abs() > (self.robot_asset.data.joint_vel_limits.torch * 2)
         ).any(dim=1)
 
-        # Check if gripper orientation is pointing downward within 60 degrees of vertical
+        # Check the hand's approach direction against a cone around straight down. ``approach_z_max`` is the cosine
+        # of the widest angle allowed: -0.5 is the 60 degree cone, 0.0 admits a horizontal palm, 1.0 removes the test
         ee_quat = self.robot_asset.data.body_link_quat_w.torch[:, self.ee_body_idx]
         gripper_approach_local = torch.tensor(
             self.gripper_approach_direction, device=env.device, dtype=torch.float32
         ).expand(env.num_envs, -1)
         gripper_approach_world = math_utils.quat_apply(ee_quat, gripper_approach_local)
-        gripper_orientation_within_range = (
-            gripper_approach_world[:, 2] < -0.5
-        )  # cos(60°) = 0.5, so z < -0.5 for 60° cone
+        gripper_orientation_within_range = gripper_approach_world[:, 2] < self.approach_z_max
 
         # Check if asset velocities are small
         current_step_stable = torch.ones(env.num_envs, device=env.device, dtype=torch.bool)

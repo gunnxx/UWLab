@@ -100,6 +100,16 @@ and `--no_table` remove two sources of contact, `--no_ik` skips the end-effector
 compares the analytical kinematics with PhysX, `--mass_check` prints the link masses, and `--arm_damping`,
 `--armature`, `--damping_ratio` and `--stiffness_scale` try other drive settings without editing the asset.
 
+The orientation clause asks the hand's approach direction to point down within a cone, 60 degrees by default. A
+hand that picks sideways, like the Dex3, trips it even when the hold is sound. The cone is a parameter of the
+success term, given as the cosine of the widest angle allowed, and it works on every reset-state task:
+
+```bash
+env.terminations.success.params.approach_z_max=0.0    # admits a horizontal palm
+env.terminations.success.params.approach_z_max=0.2    # a little past horizontal
+env.terminations.success.params.approach_z_max=1.0    # removes the clause
+```
+
 What to expect: a table of pass counts per clause at the end. If the orientation or the collision clause
 removes almost everything, the table layout or the grasp set is the usual culprit, and
 `docker/forge/README.md` has a worked example under "Checking why a reset set yields nothing".
