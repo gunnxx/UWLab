@@ -31,7 +31,7 @@ from uwlab_assets.robots.unitree_g1_dex3 import (
 
 from ... import mdp as task_mdp
 from ..ur5e_robotiq_2f85 import reset_states_cfg as ur5e
-from .actions import G1Dex3RelativeOSCAction
+from .actions import G1_DEX3_RELATIVE_OSC, G1Dex3RelativeOSCAction
 from .layout import (
     EE_X,
     EE_Y,
@@ -289,7 +289,10 @@ class G1Dex3ResetStatesCfg(ur5e.UR5eRobotiq2f85ResetStatesCfg):
 
     scene: G1Dex3ResetStatesSceneCfg = G1Dex3ResetStatesSceneCfg(num_envs=1, env_spacing=1.5)
     terminations: G1Dex3ResetStatesTerminationCfg = G1Dex3ResetStatesTerminationCfg()
-    actions: G1Dex3RelativeOSCAction = G1Dex3RelativeOSCAction()
+    actions: G1Dex3RelativeOSCAction = G1Dex3RelativeOSCAction(arm=G1_DEX3_RELATIVE_OSC.replace(latch_target=True))
+    """The training action with the OSC target latched: the hand holds the pose the reset placed it in instead of
+    re-anchoring to its measured pose every step, so the hold judges the grasp and not a target that follows the
+    hand. Set here on the field because the family configs below skip this class's post-init."""
 
 
 # ``configclass`` binds each class's ``__post_init__`` to whatever ``cls.__post_init__`` resolves to at decoration

@@ -598,3 +598,15 @@ def test_obb_visualization_submits_whole_environment_batches():
     term._visualize_bounding_boxes(env)
     assert term._draw_obb_wireframe.call_count == 2
     assert all(call.args[0].shape == (5, 8, 3) for call in term._draw_obb_wireframe.call_args_list)
+
+
+@pytest.mark.isaacsim_ci
+def test_reset_state_latch_is_dex3_only():
+    """The latched OSC target is off by default and on in every G1 + Dex3 reset-state family, not in training."""
+    package = "uwlab_tasks.manager_based.manipulation.omnireset.config"
+    dex3_resets = importlib.import_module(f"{package}.g1_dex3.reset_states_cfg")
+    for name in dir(dex3_resets):
+        if name.startswith("G1Dex3") and name.endswith("ResetStatesCfg"):
+            assert getattr(dex3_resets, name)().actions.arm.latch_target is True, name
+    assert importlib.import_module(f"{package}.g1_dex3.actions").G1_DEX3_RELATIVE_OSC.latch_target is False
+    assert importlib.import_module(f"{package}.g1d_dex1.actions").G1D_DEX1_RELATIVE_OSC.latch_target is False

@@ -49,6 +49,11 @@ class RelCartesianOSCActionCfg(ActionTermCfg):
     input_clip: tuple[float, float] | None = None
     """Optional symmetric clip range for scaled actions."""
 
+    latch_target: bool = False
+    """Add the deltas to the previous desired pose instead of the current pose. The desired pose set at reset is then
+    kept while the action is zero, so a load on the end effector cannot walk the arm step by step. ``False`` (the
+    default) re-anchors the desired pose to the measured pose every control step."""
+
     motion_stiffness: tuple[float, float, float, float, float, float] = (200.0, 200.0, 200.0, 3.0, 3.0, 3.0)
     """Task-space stiffness Kp for [x, y, z, rx, ry, rz]."""
 

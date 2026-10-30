@@ -136,10 +136,14 @@ class RelCartesianOSCAction(ActionTerm):
             scaled = torch.clamp(scaled, min=self._input_clip[0], max=self._input_clip[1])
         self._processed_actions[:] = scaled
 
-        # Current EE pose in root (base_link) frame
-        ee_pos_b, ee_quat_b = self._get_ee_pose_root_frame()
+        # Anchor of the delta: the previous desired pose when latched, otherwise the current EE pose in the root
+        # (base_link) frame
+        if self.cfg.latch_target:
+            ee_pos_b, ee_quat_b = self._ee_pos_des.clone(), self._ee_quat_des.clone()
+        else:
+            ee_pos_b, ee_quat_b = self._get_ee_pose_root_frame()
 
-        # Desired position = current + delta
+        # Desired position = anchor + delta
         self._ee_pos_des[:] = ee_pos_b + scaled[:, :3]
 
         # Desired orientation: axis-angle delta -> quaternion -> compose
