@@ -99,6 +99,8 @@ PALM_LINK = "right_hand_palm_link"
 # front of the palm's thumb edge; the pocket centre is at (0.100, 0.072) for a 50 mm object and (0.099, 0.072) for
 # a 30 mm one, (0.083, 0.041) with the hand shut on nothing. The hand therefore approaches along +y (palm down
 # for a table-top grasp) and the pinch point is offset from the palm origin both along the approach and along x.
+# The grasp sampler lays x, the squeeze axis, along the antipodal ray through the object, so a ray's length is
+# the width between thumb and fingertips, and spins the hand about x to choose where the palm comes from.
 # ==========================================================================================================
 
 DEX3_PINCH_X = 0.098
@@ -112,8 +114,8 @@ DEX3_POCKET_DEPTH = 0.03
 y = 0.05 to 0.085 m)."""
 
 DEX3_MAX_APERTURE = 0.09
-"""Largest object extent [m] the sampler accepts along the approach ray (the ``maximum_aperture`` of the
-UR5e/Robotiq metadata; the pocket itself takes objects up to about 8 cm along x)."""
+"""Largest object width [m] the sampler accepts between thumb and fingertips, along the palm's x (the
+``maximum_aperture`` of the metadata; the pocket itself takes objects up to about 8 cm along x)."""
 
 DEX3_TCP_QUAT_XYZW = (-0.70710678, 0.0, 0.0, 0.70710678)
 """Orientation (x, y, z, w) of the pinch frame in the palm frame: z along the approach (+y of the palm), x along
@@ -228,8 +230,9 @@ def write_metadata(path: str, root: ET.Element, frozen: dict[str, float]):
         "finger_clearance": DEX3_POCKET_DEPTH,
         "maximum_aperture": DEX3_MAX_APERTURE,
         "gripper_approach_direction": [0, 1, 0],
-        "grasp_align_axis": [0, 1, 0],
-        "orientation_sample_axis": [0, 1, 0],
+        # the squeeze axis is laid along the antipodal ray and spun about; the Robotiq and Dex1 use their approach
+        "grasp_align_axis": [1, 0, 0],
+        "orientation_sample_axis": [1, 0, 0],
         "gripper_open_joint_config": dict(DEX3_OPEN_RIGHT),
         "gripper_closed_joint_config": dict(DEX3_SHUT_RIGHT),
         "arm_joint_names": RIGHT_ARM_JOINTS,
