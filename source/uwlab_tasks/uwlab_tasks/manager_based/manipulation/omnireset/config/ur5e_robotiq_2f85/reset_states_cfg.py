@@ -552,12 +552,14 @@ variants = {
         "big-peg": make_insertive_object(
             f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Peg/peg.usd", scale=(2.0, 2.0, 2.0), mass=0.2, friction=0.6
         ),
-        # the peg at twice the length, 3 x 3 x 12 cm, in the hole of unit size. Its bottom is 6 cm below its centre
-        # instead of 3 cm, so the assembly frame, which the unit peg carries at its centre, moves 3 cm below the
-        # long peg's centre for the two bottoms to meet
+        # the peg at twice the length, 3 x 3 x 12 cm, in the hole of unit size, authored at the unit peg's 54 g rather
+        # than the 108 g its density would give. Its bottom is 6 cm below its centre instead of 3 cm, so the assembly
+        # frame, which the unit peg carries at its centre, moves 3 cm below the long peg's centre for the two bottoms
+        # to meet
         "peg-long": make_insertive_object(
             f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/Peg/peg.usd",
             scale=(1.0, 1.0, 2.0),
+            mass=0.054,
             metadata_overrides={"assembled_offset": {"pos": (0.0, 0.0, -0.03)}},
         ),
         "cupcake": make_insertive_object(f"{UWLAB_CLOUD_ASSETS_DIR}/Props/Custom/CupCake/cupcake.usd"),

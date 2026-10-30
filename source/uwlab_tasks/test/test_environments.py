@@ -350,8 +350,11 @@ def test_grasp_sampling_preserves_asset_masses():
     assert set(variants) == {"peg", "big-peg", "peg-long", "cube", "cupcake", "rectangle", "fbleg", "fbdrawerbottom"}
     for name, object_cfg in variants.items():
         if name == "big-peg":
-            # the one variant with an authored mass, that of the 3D-printed peg
+            # the 3D-printed peg's mass
             assert object_cfg.spawn.mass_props.mass == pytest.approx(0.2)
+        elif name == "peg-long":
+            # the unit peg's density mass, kept although the peg is twice as long
+            assert object_cfg.spawn.mass_props.mass == pytest.approx(0.054)
         else:
             assert object_cfg.spawn.mass_props is None
         assert object_cfg.spawn.rigid_props.disable_gravity is False
@@ -377,11 +380,10 @@ def test_big_peg_pair_variants():
             assert peg.spawn.mass_props.mass == pytest.approx(0.2)
             assert peg.spawn.physics_material.static_friction == pytest.approx(0.6)
         if name == "reset_states_cfg":
-            # written with MassCfg, which applies the mass API, so it takes effect on the peg; the unscaled and the
-            # long peg keep the asset's density mass like the grasp-sampling scene
+            # written with MassCfg, which applies the mass API, so it takes effect on the peg; the unscaled peg
+            # keeps the asset's density mass like the grasp-sampling scene
             assert type(peg.spawn.mass_props).__name__ == "MassCfg"
             assert unit_peg.spawn.mass_props is None
-            assert module.variants["scene.insertive_object"]["peg-long"].spawn.mass_props is None
             assert module.ResetStatesSceneCfg().insertive_object.spawn.mass_props is None
         if name == "rl_state_cfg":
             # training draws an absolute mass, so the big peg selects its own range
@@ -417,6 +419,9 @@ def test_long_peg_variants():
         assert peg.spawn.scale == (1.0, 1.0, 2.0)
         assert peg.spawn.metadata_overrides == overrides
         assert module.variants["scene.insertive_object"]["peg"].spawn.metadata_overrides is None
+        if name != "partial_assemblies_cfg":
+            # authored at the unit peg's 54 g, not the 108 g of its density
+            assert peg.spawn.mass_props.mass == pytest.approx(0.054)
         # the hole is not scaled with it, so the pair folder carries the suffix on the peg only
         assert utils.pair_dataset_name(peg.spawn, hole.spawn) == "Peg_x1x1x2__PegHole"
     grasp = importlib.import_module(f"{package}.grasp_sampling_cfg").variants["scene.object"]["peg-long"]

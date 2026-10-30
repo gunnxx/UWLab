@@ -65,8 +65,8 @@ authored at 200 g, the weight of the printed one, and training draws its mass fr
 
 There is also `peg-long`, the peg stretched to twice its length, 3 x 3 x 12 cm, which goes in the unit `peghole`.
 Only the peg is scaled, so its folders are `Peg_x1x1x2__PegHole` and `Peg_x1x1x2`, and its variant moves the
-assembly frame 3 cm down the peg so the longer peg still bottoms out in the hole. It keeps the asset's density, so
-it weighs twice what the unit peg does, and the default training mass range covers it.
+assembly frame 3 cm down the peg so the longer peg still bottoms out in the hole. It is authored at 54 g, the unit
+peg's own mass, rather than the 108 g its density would give, and the default training mass range covers it.
 
 The sizes in the commands are the ones the recorded sets were made with. Smaller numbers are fine for a first
 pass, and the pipeline's smoke sizes at the end of this page finish in minutes.
