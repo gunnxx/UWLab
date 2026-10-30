@@ -199,18 +199,10 @@ a { color: var(--accent); }
 </nav>
 
 <h2 id="where">1. Where the antipodal sampler sits</h2>
-<p>The grasp-sampling task is one floating hand and one object, with no arm and no table. Its reset event, <code>grasp_sampling_event</code> in <code>mdp/events.py</code>, builds a list of candidate hand poses the first time it runs and draws from that list at every reset afterwards. Each candidate is the pose of the gripper body in the object frame, \({}^{O}\mathbf{T}_{G}\), so it does not depend on where the object happens to be. The list comes from one of three sources, tried in a fixed order in <code>_generate_grasp_candidates</code>:</p>
-<table>
-<thead><tr><th>Source</th><th>Runs when</th><th>What it produces</th></tr></thead>
-<tbody>
-<tr><td>Fixed grasp</td><td><code>fixed_grasp.enabled</code> is true</td><td>One pose from a hand-written spec: a <code>center</code> in the object frame, an <code>approach</code> direction the hand's approach axis is aligned with, extra <code>rpy_deg</code> about the object's axes, and an optional <code>standoff</code>. For the inspector.</td></tr>
-<tr><td>Nominal grasps</td><td><code>nominal_grasps</code> is non-empty</td><td>\(N_c\) random perturbations of such specs, bounded by an angle, a centre spread and a standoff range.</td></tr>
-<tr><td>Antipodal sampler</td><td>otherwise</td><td>\(N_c\) poses from the object mesh. The rest of this page describes it.</td></tr>
-</tbody>
-</table>
-<p>The two hand-written sources are described in sections 7 and 8 of the <a href="omnireset_grasp_sampling.html">earlier page</a> and have not changed. The Robotiq and the Dex1 have always used the antipodal sampler.</p>
+<p>The grasp-sampling task is one floating hand and one object, with no arm and no table. Its reset event, <code>grasp_sampling_event</code> in <code>mdp/events.py</code>, builds a list of candidate hand poses the first time it runs and draws from that list at every reset afterwards. Each candidate is the pose of the gripper body in the object frame, \({}^{O}\mathbf{T}_{G}\), so it does not depend on where the object happens to be.</p>
+<p>There is one source of candidates. <code>_generate_grasp_candidates</code> extracts the object mesh and hands it to the antipodal sampler, which is the rest of this page.</p>
 <div class="callout change">
-<p><span class="tag change">changed</span> The Dex3 now uses the antipodal sampler too. Its configuration used to list two hand-written grasps, one from above and one from the side, and the nominal sampler scattered candidates around them. That list is empty now, so the Dex3 falls through to the antipodal branch like the other hands. The two grasps remain in the file as constants, one of them as the inspector's default fixed grasp, and can be put back into the list to return to the scatter.</p>
+<p><span class="tag change">changed</span> There used to be three sources, tried in order: a <em>fixed grasp</em>, one hand-written pose for the inspector, then <em>nominal grasps</em>, random perturbations of hand-written poses, and only then the antipodal sampler. The Dex3 used the nominal grasps, two of them, one from above and one from the side. Both hand-written sources and their parameters have been removed, together with the inspector keys that turned the fixed grasp, so every hand runs the antipodal sampler and nothing else.</p>
 </div>
 
 <h3>What the sampler reads</h3>
@@ -228,7 +220,7 @@ a { color: var(--accent); }
 <table>
 <thead><tr><th></th><th>What</th><th>Before</th><th>Now</th><th>Where</th></tr></thead>
 <tbody>
-<tr><td><span class="tag change">changed</span></td><td>Dex3 candidate source</td><td>Scatter around two hand-written grasps</td><td>The antipodal sampler, with the list of hand-written grasps left empty</td><td>Section 1</td></tr>
+<tr><td><span class="tag change">changed</span></td><td>Dex3 candidate source</td><td>Scatter around two hand-written grasps</td><td>The antipodal sampler. The hand-written sources are gone</td><td>Section 1</td></tr>
 <tr><td><span class="tag change">changed</span></td><td>Where the alignment axis \(\hat{\mathbf{g}}\) and the spin axis \(\hat{\mathbf{o}}\) come from</td><td>The metadata only</td><td>The metadata, unless the task configuration or the command line overrides them</td><td>Section 4, steps 5 and 6</td></tr>
 <tr><td><span class="tag change">changed</span></td><td>The Dex3's two axes in its metadata</td><td>Both the approach, \(+y\)</td><td>Both the squeeze axis, \(+x\). The configuration then overrides both with the yawed vector \((0.71, -0.71, 0)\)</td><td>Section 4</td></tr>
 <tr><td><span class="tag change">changed</span></td><td>The Dex3's top bias</td><td>1, inherited from the Robotiq, though unused while the scatter ran</td><td>0. The spin and standoff counts stay the Robotiq's 16 and 32</td><td>Step 2</td></tr>
@@ -587,7 +579,7 @@ Read from the right: the hand is moved so that its point \(s_j\hat{\mathbf{a}} +
 <p>If \(\hat{\mathbf{o}}\) were a different axis, say the squeeze axis itself, the spin would keep that axis fixed in the world and swing \(\hat{\mathbf{g}}\) off the pinch line. That is a legitimate family too, a roll of the hand about its squeeze, but a different one, and it is not what the Dex3 configuration does. The event logs the angle between the two axes whenever they differ, so the choice is never silent.</p>
 
 <div class="callout">
-<p>The hand-tuned grasp was written as <code>rpy_deg = (45, 0, 0)</code>, a roll about the object's \(x\) after the palm normal had been aligned with \(-z\). In that pose the hand's \(x\) coincided with the object's \(x\), so the roll was about the hand's own squeeze axis. Section 8 relates that roll to the spin here.</p>
+<p>The hand-tuned grasp was found by aligning the palm normal with \(-z\) and rolling the hand 45 degrees about the object's \(x\). In that pose the hand's \(x\) coincided with the object's \(x\), so the roll was about the hand's own squeeze axis. Section 8 relates that roll to the spin here.</p>
 </div>
 
 <h2 id="clock">7. Worked example: a side point of the big peg</h2>
@@ -684,7 +676,7 @@ Read from the right: the hand is moved so that its point \(s_j\hat{\mathbf{a}} +
 <li><strong>The yaw</strong> is the angle between the squeeze axis and the pinch line, in the palm plane. It is fixed by \(\hat{\mathbf{g}}\): 45 degrees in the configuration, which on the square peg takes the diagonal, 8.5 cm, instead of the 6 cm face to face. This is what makes the hold firm, since the peg's corners sit in the pocket between the thumb and the two fingertips instead of its flat faces. It was found by inspection and is the one number worth tuning.</li>
 <li><strong>The roll</strong> is the spin \(\theta\), the position of the palm around the pinch line. Negative angles bring the palm in from above, \(\theta = -45^\circ\) being the tilt that the standing arm can reach. The grid of sixteen angles brackets it with \(-48^\circ\) and \(-24^\circ\).</li>
 </ul>
-<p>The nominal top grasp of <code>config/g1_dex3/grasp_sampling_cfg.py</code> has roll \(-45^\circ\) and yaw zero: its squeeze was across the peg's faces. The sampler's candidates near \(\theta = -45^\circ\) are therefore the same tilt with the squeeze turned onto the diagonal, not the identical pose. If you ever want yaw zero back, set both axes to \((1, 0, 0)\) in the configuration and the squeeze lies on the line again.</p>
+<p>The hand-tuned grasp had roll \(-45^\circ\) and yaw zero: its squeeze was across the peg's faces. The sampler's candidates near \(\theta = -45^\circ\) are therefore the same tilt with the squeeze turned onto the diagonal, not the identical pose. If you ever want yaw zero back, set both axes to \((1, 0, 0)\) in the configuration and the squeeze lies on the line again.</p>
 
 <h2 id="width">9. What the width test means now</h2>
 <p>Step 3 compares the pinch line's length with the aperture. For the Robotiq and the Dex1, whose approach is on the line, \(\ell\) is the depth of the object in front of the palm, and the test is kept as it was on purpose. For the Dex3 the line is the face-to-face width of the object, while the fingers actually span the width at 45 degrees to it, \(\sqrt{2}\) longer on a square section. The test is therefore optimistic by that factor: 6 cm passes, the real 8.5 cm would pass too, but an 8 cm square would pass the test and not fit. The physics test after the hand closes catches such cases, so the width test is a cheap filter rather than the last word.</p>
@@ -725,7 +717,6 @@ Read from the right: the hand is moved so that its point \(s_j\hat{\mathbf{a}} +
 <ul>
 <li><strong>The spin range.</strong> Half of the spins put the palm below the object, where the table is. Restricting \(\theta\) to a range, or filtering spins by the direction of the palm normal in the object frame, would drop them before the physics test does. It would be a range on the existing grid, not a change of axis.</li>
 <li><strong>The width test</strong> of section 9 stays optimistic by \(\sqrt{2}\) for the Dex3.</li>
-<li><strong>The nominal sampler</strong> and the fixed grasp are still there, with the same precedence as in section 1: fixed grasp, then nominal grasps when the list is non-empty, then antipodal. The Dex3 configuration now leaves the list empty, and the two hand-written grasps remain as constants for the inspector and as an alternative source.</li>
 <li><strong>The recording flow</strong> of section 1, from the drawn candidate to the physics test and the stored pose, is untouched.</li>
 <li><strong>The Robotiq and Dex1</strong> keep the approach on the pinch line and the legacy standoff sweep. Giving them a convention of their own would be the same handful of parameters in their configurations, and would change their candidate sets, so it is not done.</li>
 </ul>
@@ -750,7 +741,6 @@ Read from the right: the hand is moved so that its point \(s_j\hat{\mathbf{a}} +
 <tr><td>\(s_j\), \(-s_j\hat{\mathbf{a}} - \mathbf{p}_\perp\)</td><td><code>standoff_distances</code>, <code>pullbacks</code></td><td><code>_sample_antipodal_grasps</code></td><td>Standoffs and the hand-frame translations, shape \((N_s, 3)\).</td></tr>
 <tr><td>\({}^{O}\mathbf{T}_{G}\)</td><td><code>transforms</code></td><td><code>_sample_antipodal_grasps</code></td><td>All candidates, shape \((N, 4, 4)\), ordered point, spin, standoff.</td></tr>
 <tr><td>\(\sigma_\ell\)</td><td><code>self.lateral_sigma</code></td><td>params</td><td>Spread of the centre along the pinch line, zero for the midpoint. Unchanged.</td></tr>
-<tr><td></td><td><code>self.fixed_grasp</code>, <code>self.nominal_grasps</code></td><td>params</td><td>The two hand-written sources of section 1, which take precedence over the antipodal sampler. Unchanged.</td></tr>
 </tbody>
 </table>
 

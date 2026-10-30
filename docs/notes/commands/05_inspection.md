@@ -1,10 +1,9 @@
 # 5. Looking at a scene and finding out why it fails
 
-Four tools cover the questions that come up while working on these environments. The inspector shows you a
+Three tools cover the questions that come up while working on these environments. The inspector shows you a
 scene and lets you reset it by hand. The replay tool cycles through a recorded dataset. The probe tells you
-which clause of a success test a reset-state family keeps failing. And the inspector again, in a special
-mode, lets you tune a grasp with the keyboard. This page takes them in that order, from the question you
-would ask first to the one you ask last.
+which clause of a success test a reset-state family keeps failing. This page takes them in that order, from
+the question you would ask first to the one you ask last.
 
 ## Step 1. Look at a scene and reset it by hand
 
@@ -104,34 +103,3 @@ compares the analytical kinematics with PhysX, `--mass_check` prints the link ma
 What to expect: a table of pass counts per clause at the end. If the orientation or the collision clause
 removes almost everything, the table layout or the grasp set is the usual culprit, and
 `docker/forge/README.md` has a worked example under "Checking why a reset set yields nothing".
-
-## Step 4. Tune a grasp by hand
-
-The grasp sampler of the Dex3 starts from grasps written down in its configuration, and those were found
-with the inspector. The grasp-sampling task takes a `fixed_grasp` parameter. When it is enabled, the sampler
-produces that one pose instead of its usual candidates, and the inspector lets you turn it with the keyboard.
-
-```bash
-python scripts_v2/tools/inspect_env.py --task OmniReset-Dex3-GraspSampling-v0 --num_envs 1 --viz kit \
-    --gripper open --no_timeout --no_gravity env.scene.object=peg \
-    env.events.grasp_sampling.params.visualize_grasps=true \
-    env.events.grasp_sampling.params.fixed_grasp.enabled=true \
-    env.events.grasp_sampling.params.fixed_grasp.center=[0,0,0.015] \
-    env.events.grasp_sampling.params.fixed_grasp.approach=[0,0,-1] \
-    env.events.grasp_sampling.params.fixed_grasp.rpy_deg=[0,0,0]
-```
-
-This opens one environment with the hand open, no gravity, a frame marker at the palm, and the palm
-approaching the standing peg from above with the pinch point 1.5 cm below the top. Then:
-
-1. Turn the grasp with `J` and `L` for roll, `I` and `K` for pitch, and `U` and `O` for yaw. Each press turns
-   by `--angle_step` degrees, five by default, about the object's own axes, and resets the scene at once.
-   Hold SHIFT for a fifth of the step. `0` restores the starting values.
-2. Press `C` to close the hand and watch where the fingers land.
-3. Press `G` to switch gravity on and see whether the hold survives.
-4. Press `T` to print the hand pose in the object frame. That printed pose, together with the roll, pitch
-   and yaw you ended on, is what goes into the configuration as a nominal grasp.
-
-Once a nominal grasp is written into the task configuration, the recorder of [page 3](03_datasets.md) scatters
-its candidates around it. [How the grasp sampler works](../omnireset_grasp_sampling.html) explains the spec,
-the scatter and the reasons behind them.

@@ -38,32 +38,6 @@ class Dex3GraspSamplingSceneCfg(robotiq.GraspSamplingSceneCfg):
 # configclass stores mutable defaults as factories, so defaults are read from an instance, not the class
 _ROBOTIQ_EVENTS = robotiq.GraspSamplingEventCfg()
 
-# =================================================================================================================
-# Nominal Dex3 grasps of the standing peg, in the object frame (z up along the peg axis, origin at its centre).
-# Tuned by hand in inspect_env.py (2026-10-28): the palm comes in at 45 degrees from above, which is the closest
-# the standing G1's right arm gets to a top grasp; pitching that by 90 degrees gives the sideways grasp. The
-# antipodal sampler reaches the same holds (squeeze axis across the peg, palm tilted by the spin), so these serve
-# the inspector's fixed grasp and remain available as ``nominal_grasps`` for the scatter sampler.
-# =================================================================================================================
-
-DEX3_PINCH_HEIGHT = 0.025
-"""z (object frame, m) of the pinch point of both nominal grasps."""
-
-DEX3_NOMINAL_TOP_GRASP = {
-    "center": (0.0, 0.0, DEX3_PINCH_HEIGHT),
-    "approach": (0.0, 0.0, -1.0),
-    "rpy_deg": (45.0, 0.0, 0.0),
-}
-"""Grasp from above, palm tilted 45 degrees about the object's x axis."""
-
-DEX3_NOMINAL_SIDE_GRASP = {
-    "center": (0.0, 0.0, DEX3_PINCH_HEIGHT),
-    "approach": (0.0, 0.0, -1.0),
-    "rpy_deg": (45.0, 90.0, 0.0),
-}
-"""Sideways grasp: the top grasp pitched by 90 degrees about the object's y axis."""
-
-
 @configclass
 class Dex3GraspSamplingEventCfg(robotiq.GraspSamplingEventCfg):
     """Grasp-sampling events of the Robotiq procedure with the Dex3 palm as the gripper frame."""
@@ -84,15 +58,10 @@ class Dex3GraspSamplingEventCfg(robotiq.GraspSamplingEventCfg):
             # standoffs over the pocket's depth about the pinch point, instead of the sweep out by an object
             # diagonal that suits hands which approach along the pinch line; the counts are the Robotiq's
             "standoffs_within_clearance": True,
-            # antipodal sampling; set this to [DEX3_NOMINAL_TOP_GRASP, DEX3_NOMINAL_SIDE_GRASP] to scatter around
-            # the hand-written grasps instead. The fixed grasp defaults to the top one for inspect_env.py.
-            "nominal_grasps": [],
-            "fixed_grasp": {**_ROBOTIQ_EVENTS.grasp_sampling.params["fixed_grasp"], **DEX3_NOMINAL_TOP_GRASP},
         }
     )
     """The grasp-sampling event with the Dex3 palm frame: antipodal candidates with the squeeze axis across the pinch
-    line at 45 degrees and the hand swept around the line, and :data:`DEX3_NOMINAL_TOP_GRASP` as the fixed grasp
-    for the inspector."""
+    line at 45 degrees and the hand swept around the line."""
 
 
 @configclass

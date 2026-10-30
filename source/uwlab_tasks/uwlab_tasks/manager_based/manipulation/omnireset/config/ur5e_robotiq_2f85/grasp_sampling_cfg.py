@@ -103,23 +103,6 @@ class GraspSamplingEventCfg:
             # another convention in the inspector; they should stay parallel, a non-parallel pair only warns
             "grasp_align_axis": None,
             "orientation_sample_axis": None,
-            # one hand-authored grasp instead of the sampled set, for inspecting a nominal pose: enable it and give
-            # the pinch point and approach in the object frame, e.g. a top grasp 1.5 cm below the top of the
-            # standing peg is center=[0,0,0.015] approach=[0,0,-1]; rpy_deg tilts and turns the hand about the
-            # object's x, y and z axes from there (inspect_env.py adjusts it from the keyboard)
-            "fixed_grasp": {
-                "enabled": False,
-                "center": (0.0, 0.0, 0.0),
-                "approach": (0.0, 0.0, -1.0),
-                "rpy_deg": (0.0, 0.0, 0.0),
-                "standoff": None,
-            },
-            # non-empty: candidates are random perturbations of these hand-authored grasps (same spec as above,
-            # ``enabled`` ignored) instead of antipodal samples of the mesh; the three numbers bound the jitter
-            "nominal_grasps": [],
-            "nominal_angle_max_deg": 20.0,
-            "nominal_center_sigma": 0.005,
-            "nominal_standoff_range": (0.0, 0.02),
         },
     )
 

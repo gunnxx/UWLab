@@ -17,11 +17,6 @@ Keys (need the Kit window, i.e. ``--viz kit``):
     C  close / open the hand         G  gravity on / off (only sticks with --no_gravity, see below)
     T  print the hand pose in the object frame (what record_grasps.py would record)
 
-    Grasp-sampling tasks with ``fixed_grasp`` enabled: the keys below turn the nominal grasp about the object's
-    axes by ``--angle_step`` degrees (SHIFT: a fifth of that) and reset at once; ``0`` restores the start values.
-
-    J / L  roll  (about x)  -/+       I / K  pitch (about y)  +/-       U / O  yaw (about z)  -/+
-
 Examples::
 
     # UR5e + Robotiq, 4 envs, reset distribution of the RL task
@@ -32,16 +27,11 @@ Examples::
     python scripts_v2/tools/inspect_env.py --task OmniReset-G1dDex1-ObjectAnywhereEEAnywhere-v0 \
         --num_envs 4 --viz kit --no_timeout
 
-    # Dex3 grasp sampling pinned to one nominal grasp: palm approaching the standing peg from above, pinch point
-    # 1.5 cm below the top, hand open, no gravity, frame marker at the palm. Tune the orientation with the
-    # J/L I/K U/O keys, close the hand with C, switch gravity on with G to test the hold, print the pose with T.
+    # Dex3 grasp sampling: hand open, no gravity, a frame marker on a subset of the sampled candidates. R draws a
+    # new candidate, C closes the hand, G switches gravity on to test the hold, T prints the pose.
     python scripts_v2/tools/inspect_env.py --task OmniReset-Dex3-GraspSampling-v0 --num_envs 1 --viz kit \
         --gripper open --no_timeout --no_gravity env.scene.object=peg \
-        env.events.grasp_sampling.params.visualize_grasps=true \
-        env.events.grasp_sampling.params.fixed_grasp.enabled=true \
-        env.events.grasp_sampling.params.fixed_grasp.center=[0,0,0.015] \
-        env.events.grasp_sampling.params.fixed_grasp.approach=[0,0,-1] \
-        env.events.grasp_sampling.params.fixed_grasp.rpy_deg=[0,0,0]
+        env.events.grasp_sampling.params.visualize_grasps=true
 
     # headless smoke check: 100 steps, auto-reset every 2 s, then exit
     python scripts_v2/tools/inspect_env.py --task OmniReset-G1dDex1-RelCartesianOSC-State-Play-v0 \
@@ -77,7 +67,6 @@ parser.add_argument(
         " never switches either on and sim gravity is zero; G toggles gravity."
     ),
 )
-parser.add_argument("--angle_step", type=float, default=5.0, help="Degrees per key press when turning a fixed grasp.")
 parser.add_argument("--episode_length_s", type=float, default=None, help="Override the episode length (seconds).")
 parser.add_argument(
     "--auto_reset_s", type=float, default=0.0, help="Also reset every N seconds of wall clock (0 = off)."
@@ -115,14 +104,9 @@ logger = logging.getLogger(__name__)
 
 HELP = (
     "keys: [R] reset  [P] pause/resume  [N] single step  [C] close/open hand  [G] gravity on/off"
-    "  [T] print hand pose in object frame  [H] help | fixed grasp: [J]/[L] roll -/+  [I]/[K] pitch +/-"
-    "  [U]/[O] yaw -/+  (SHIFT: fine)  [0] restore"
+    "  [T] print hand pose in object frame  [H] help"
 )
 """Key bindings, logged when the keyboard is attached and on ``H``."""
-
-RPY_KEYS = {"J": (0, -1.0), "L": (0, 1.0), "I": (1, 1.0), "K": (1, -1.0), "U": (2, -1.0), "O": (2, 1.0)}
-"""Fixed-grasp orientation keys: key name to (Euler index, sign) of the angle step it applies."""
-
 
 class KeyboardControl:
     """Flags toggled from the Kit window's keyboard.
@@ -141,10 +125,6 @@ class KeyboardControl:
         self.gripper_toggle_requested = False
         self.gravity_toggle_requested = False
         self.print_pose_requested = False
-        self.restore_grasp_requested = False
-        self.rpy_delta: list[float] = [0.0, 0.0, 0.0]
-        """Pending change (degrees) of the fixed grasp's roll, pitch and yaw, consumed by the main loop."""
-        self.angle_step = 5.0
         self._sub = None
         try:
             import carb
@@ -195,12 +175,6 @@ class KeyboardControl:
             self.gravity_toggle_requested = True
         elif key == "T":
             self.print_pose_requested = True
-        elif key in ("KEY_0", "NUMPAD_0"):
-            self.restore_grasp_requested = True
-        elif key in RPY_KEYS:
-            index, sign = RPY_KEYS[key]
-            shift = bool(getattr(event, "modifiers", 0) & self._carb.input.KEYBOARD_MODIFIER_FLAG_SHIFT)
-            self.rpy_delta[index] += sign * (self.angle_step / 5.0 if shift else self.angle_step)
         elif key == "H":
             logger.info(f"[inspect] {HELP}")
         return True
@@ -321,27 +295,10 @@ def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: object):
             action[:, -1] = -1.0 if gripper_closed else 1.0
         return action
 
-    # Fixed grasp of a grasp-sampling task, turned from the keyboard: the event instance holds the spec and the
-    # cached candidate; clearing the cache makes the next reset rebuild the pose from the edited spec.
+    # The grasp-sampling event term, whose gripper body the T key reports in the object frame
     grasp_term = None
     if "grasp_sampling" in getattr(env.event_manager, "active_terms", {}).get("reset", []):
         grasp_term = env.event_manager.get_term_cfg("grasp_sampling").func
-        if not (getattr(grasp_term, "fixed_grasp", None) or {}).get("enabled", False):
-            grasp_term = None
-    grasp_spec_start = dict(grasp_term.fixed_grasp) if grasp_term is not None else None
-    if grasp_term is not None:
-        logger.info(f"[inspect] fixed grasp {grasp_spec_start}; J/L I/K U/O turn it, 0 restores it")
-
-    def set_fixed_grasp_rpy(rpy_deg: list[float]):
-        """Store new roll, pitch and yaw in the fixed grasp, drop the cached pose and reset.
-
-        Args:
-            rpy_deg: Roll, pitch and yaw in degrees about the object's x, y and z axes.
-        """
-        grasp_term.fixed_grasp = {**grasp_term.fixed_grasp, "rpy_deg": tuple(round(a, 3) for a in rpy_deg)}
-        grasp_term.grasp_candidates = None
-        env.reset()
-        logger.info(f"[inspect] fixed grasp rpy_deg={grasp_term.fixed_grasp['rpy_deg']} (reset)")
 
     def log_hand_pose():
         """Log the gripper body's pose in the object frame, the quantity record_grasps.py records."""
@@ -366,7 +323,6 @@ def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: object):
             )
 
     keys = KeyboardControl()
-    keys.angle_step = args_cli.angle_step
     gravity_on = not args_cli.no_gravity
     step = 0
     last_auto_reset = time.monotonic()
@@ -392,17 +348,6 @@ def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: object):
             if keys.print_pose_requested:
                 keys.print_pose_requested = False
                 log_hand_pose()
-            if any(abs(d) > 0 for d in keys.rpy_delta):
-                delta, keys.rpy_delta = keys.rpy_delta, [0.0, 0.0, 0.0]
-                if grasp_term is None:
-                    logger.warning("[inspect] orientation keys need a grasp-sampling task with fixed_grasp enabled")
-                else:
-                    current = list(grasp_term.fixed_grasp.get("rpy_deg", (0.0, 0.0, 0.0)))
-                    set_fixed_grasp_rpy([c + d for c, d in zip(current, delta)])
-            if keys.restore_grasp_requested:
-                keys.restore_grasp_requested = False
-                if grasp_term is not None:
-                    set_fixed_grasp_rpy(list(grasp_spec_start.get("rpy_deg", (0.0, 0.0, 0.0))))
             if args_cli.auto_reset_s > 0 and time.monotonic() - last_auto_reset >= args_cli.auto_reset_s:
                 last_auto_reset = time.monotonic()
                 env.reset()

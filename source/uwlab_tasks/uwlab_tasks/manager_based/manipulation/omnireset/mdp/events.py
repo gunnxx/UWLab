@@ -82,25 +82,9 @@ class grasp_sampling_event(ManagerTermBase):
         self.visualize_grasps = cfg.params.get("visualize_grasps", False)
         self.visualization_scale = cfg.params.get("visualization_scale", 0.03)
 
-        # ==========================================================================================================
-        # Candidate sources, in order of precedence (see ``_generate_grasp_candidates``): the fixed grasp when it is
-        # enabled, else perturbations of the nominal grasps when that list is non-empty, else antipodal samples of
-        # the object mesh. All poses are gripper-body transforms in the object frame.
-        # ==========================================================================================================
-
-        # 1. Fixed grasp: one hand-authored pose in place of any sampling.
-        #    For looking at a nominal pose with ``inspect_env.py``.
-        self.fixed_grasp = cfg.params.get("fixed_grasp")
-
-        # 2. Nominal grasps: random perturbations of hand-authored poses (same spec as the fixed grasp), bounded by
-        #    the three knobs below, see ``_sample_nominal_grasps``. An empty list falls through.
-        self.nominal_grasps = list(cfg.params.get("nominal_grasps") or [])
-        self.nominal_angle_max_deg = float(cfg.params.get("nominal_angle_max_deg", 20.0))
-        self.nominal_center_sigma = float(cfg.params.get("nominal_center_sigma", 0.005))
-        self.nominal_standoff_range = tuple(cfg.params.get("nominal_standoff_range", (0.0, 0.02)))
-
-        # 3. Antipodal sampling of the object mesh, see ``_sample_antipodal_grasps``: each surface point is expanded
-        #    into ``num_orientations`` spins about the grasp axis times ``num_standoff_samples`` standoffs.
+        # Antipodal sampling of the object mesh, see ``_sample_antipodal_grasps``: each surface point is expanded into
+        # ``num_orientations`` spins about the grasp axis times ``num_standoff_samples`` standoffs. All poses are
+        # gripper-body transforms in the object frame.
         self.num_standoff_samples = cfg.params.get("num_standoff_samples")
         self.num_orientations = cfg.params.get("num_orientations")
         self.lateral_sigma = cfg.params.get("lateral_sigma")
@@ -201,11 +185,6 @@ class grasp_sampling_event(ManagerTermBase):
         standoffs_within_clearance: bool = False,
         grasp_align_axis: list[float] | None = None,
         orientation_sample_axis: list[float] | None = None,
-        fixed_grasp: dict | None = None,
-        nominal_grasps: list[dict] | None = None,
-        nominal_angle_max_deg: float = 20.0,
-        nominal_center_sigma: float = 0.005,
-        nominal_standoff_range: tuple[float, float] = (0.0, 0.02),
     ) -> None:
         """Execute grasp sampling event - sample from pre-computed candidates."""
         # Generate grasp candidates if not already done
@@ -241,127 +220,15 @@ class grasp_sampling_event(ManagerTermBase):
             env.current_grasp_idx = 0
             env.grasp_results = []
 
-    def _generate_grasp_candidates(self):
-        """Generate the candidate gripper poses (object frame).
-
-        In order of precedence: the single ``fixed_grasp`` when it is enabled, perturbations of the
-        ``nominal_grasps`` when that list is non-empty, else antipodal samples of the object mesh.
+    def _generate_grasp_candidates(self) -> np.ndarray:
+        """Generate the candidate gripper poses (object frame): antipodal samples of the object mesh.
 
         Returns:
-            The candidate transforms, as a list of 4x4 arrays or one (N, 4, 4) array.
+            The candidate transforms, shape (N, 4, 4).
         """
-        if self.fixed_grasp and self.fixed_grasp.get("enabled", False):
-            transform = self._grasp_transform(self.fixed_grasp)
-            logger.info(
-                "grasp_sampling_event: using the fixed grasp %s instead of sampled candidates", dict(self.fixed_grasp)
-            )
-            return [transform]
-        if self.nominal_grasps:
-            return self._sample_nominal_grasps()
         object_asset = self._env.scene[self.object_cfg.name]
         mesh = self._extract_mesh_from_asset(object_asset)
-        grasp_transforms = self._sample_antipodal_grasps(mesh)
-        return grasp_transforms
-
-    def _grasp_frame(self, spec: dict) -> tuple[np.ndarray, np.ndarray, float]:
-        """Resolve a hand-authored grasp spec into the gripper rotation, pinch point and standoff.
-
-        ``center`` is the pinch point in the object frame, ``approach`` the direction (object frame) the gripper's
-        approach axis is aligned with by the smallest rotation, ``rpy_deg`` extra roll, pitch and yaw (degrees,
-        about the object's fixed x, y and z axes, applied in that order after the alignment and about the pinch
-        point), and ``standoff`` the distance (m) from the gripper body origin to the pinch point along the
-        approach, the asset's ``finger_offset`` when ``None``.
-
-        Args:
-            spec: The grasp spec (``fixed_grasp`` or one entry of ``nominal_grasps``).
-
-        Returns:
-            Rotation (3x3) of the gripper body in the object frame, the pinch point (3,) and the standoff (m).
-        """
-        center = np.asarray(spec.get("center", (0.0, 0.0, 0.0)), dtype=np.float64)
-        approach_obj = np.asarray(spec.get("approach", (0.0, 0.0, -1.0)), dtype=np.float64)
-        approach_obj = approach_obj / np.linalg.norm(approach_obj)
-        approach_local = np.asarray(self.gripper_approach_direction, dtype=np.float64)
-        approach_local = approach_local / np.linalg.norm(approach_local)
-        standoff = spec.get("standoff")
-        standoff = float(self.finger_offset if standoff is None else standoff)
-        rpy = [math.radians(float(a)) for a in spec.get("rpy_deg", (0.0, 0.0, 0.0))]
-        align = trimesh.geometry.align_vectors(approach_local, approach_obj)  # smallest rotation
-        rpy_tf = tra.euler_matrix(rpy[0], rpy[1], rpy[2], axes="sxyz")  # fixed object axes, x then y then z
-        return (rpy_tf @ align)[:3, :3], center, standoff
-
-    def _body_transforms(
-        self, rotations: np.ndarray, centers: np.ndarray, standoffs: np.ndarray
-    ) -> np.ndarray:
-        """Place gripper bodies so that their pinch points land on the given centers.
-
-        Args:
-            rotations: Gripper rotations in the object frame, shape (N, 3, 3).
-            centers: Pinch points in the object frame, shape (N, 3).
-            standoffs: Distance (m) from the body origin to the pinch point along the approach, shape (N,).
-
-        Returns:
-            Homogeneous transforms of the gripper bodies in the object frame, shape (N, 4, 4), float32.
-        """
-        approach_local = np.asarray(self.gripper_approach_direction, dtype=np.float64)
-        approach_local = approach_local / np.linalg.norm(approach_local)
-        pinch_local = standoffs[:, None] * approach_local[None, :] + self.pinch_lateral_offset[None, :]  # (N, 3)
-        transforms = np.tile(np.eye(4, dtype=np.float64), (len(rotations), 1, 1))
-        transforms[:, :3, :3] = rotations
-        transforms[:, :3, 3] = centers - np.einsum("nij,nj->ni", rotations, pinch_local)
-        return transforms.astype(np.float32)
-
-    def _grasp_transform(self, spec: dict) -> np.ndarray:
-        """Build the gripper-body pose of one hand-authored grasp, in the object frame.
-
-        Args:
-            spec: The grasp spec, see :meth:`_grasp_frame`.
-
-        Returns:
-            The 4x4 homogeneous transform of the gripper body in the object frame.
-        """
-        rotation, center, standoff = self._grasp_frame(spec)
-        return self._body_transforms(rotation[None], center[None], np.array([standoff]))[0]
-
-    def _sample_nominal_grasps(self) -> list[np.ndarray]:
-        """Draw candidates around the nominal grasps.
-
-        ``num_candidates`` draws are split evenly over ``nominal_grasps``. Each draw perturbs its nominal pose by
-        a rotation about a uniformly random axis through the pinch point with an angle uniform in
-        ``[0, nominal_angle_max_deg]``, moves the pinch point by Gaussian noise of ``nominal_center_sigma`` (m) per
-        axis, and adds a standoff uniform in ``nominal_standoff_range`` (m), which pulls the hand back along its
-        approach so that shallower holds are tried too. The exact nominal pose is the first draw of each group.
-
-        Returns:
-            The candidate gripper-body transforms in the object frame, 4x4 each.
-        """
-        total = max(len(self.nominal_grasps), int(self.num_candidates))
-        per_nominal = max(1, total // len(self.nominal_grasps))
-        rotations, centers, standoffs = [], [], []
-        for spec in self.nominal_grasps:
-            rot_nom, center_nom, standoff_nom = self._grasp_frame(spec)
-            n = per_nominal
-            axes = np.random.normal(size=(n, 3))
-            axes /= np.linalg.norm(axes, axis=1, keepdims=True)
-            angles = np.random.uniform(0.0, math.radians(self.nominal_angle_max_deg), size=n)
-            angles[0] = 0.0  # keep the nominal pose itself
-            rot_pert = R.from_rotvec(axes * angles[:, None]).as_matrix()  # (n, 3, 3), object frame
-            rotations.append(rot_pert @ rot_nom[None])
-            jitter = np.random.normal(scale=self.nominal_center_sigma, size=(n, 3))
-            jitter[0] = 0.0
-            centers.append(center_nom[None] + jitter)
-            extra = np.random.uniform(self.nominal_standoff_range[0], self.nominal_standoff_range[1], size=n)
-            extra[0] = 0.0
-            standoffs.append(standoff_nom + extra)
-        transforms = self._body_transforms(
-            np.concatenate(rotations), np.concatenate(centers), np.concatenate(standoffs)
-        )
-        logger.info(
-            f"grasp_sampling_event: {len(transforms)} candidates around {len(self.nominal_grasps)} nominal grasp(s),"
-            f" angle <= {self.nominal_angle_max_deg} deg, center sigma {self.nominal_center_sigma} m,"
-            f" extra standoff {self.nominal_standoff_range} m"
-        )
-        return list(transforms)
+        return self._sample_antipodal_grasps(mesh)
 
     def _extract_mesh_from_asset(self, asset):
         """Extract trimesh from IsaacLab asset."""

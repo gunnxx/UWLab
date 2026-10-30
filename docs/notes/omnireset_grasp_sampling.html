@@ -168,11 +168,11 @@ a { color: var(--accent); }
 
 <header class="title">
   <h1>How the OmniReset grasp sampler places a hand on an object</h1>
-  <p class="sub">A step by step walk through the antipodal sampler as it was, the reasons it fell short for the Dex3 hand and the big peg, and the fixed and nominal grasps that were added. Every symbol in the formulas is tied to the variable that holds it in <code>mdp/events.py</code>.</p>
+  <p class="sub">A step by step walk through the antipodal sampler as it was, the reasons it fell short for the Dex3 hand and the big peg, and the two changes that followed, the mesh at its spawn scale and a pinch point beside the approach line. Every symbol in the formulas is tied to the variable that holds it in <code>mdp/events.py</code>.</p>
 </header>
 
 <div class="callout after">
-<p><span class="tag after">since then</span> The Dex3 no longer uses the nominal grasps of section 7 by default. It runs the antipodal sampler of section 3 with its squeeze axis laid along the pinch line, which <a href="omnireset_antipodal_sampler.html">the companion page</a> explains, together with where the 45 degree tilt of section 7 lives in that mechanism. Sections 3 to 6 here still describe the sampler's mechanics, and the warning of step 3 applies only to hands whose approach is on the pinch line.</p>
+<p><span class="tag after">since then</span> The Dex3 runs the antipodal sampler of section 3 with a convention of its own, an axis 45 degrees from its squeeze axis laid along the pinch line, which <a href="omnireset_antipodal_sampler.html">the companion page</a> explains. The hand-written nominal grasps and the fixed grasp that this page once described as its third change have been removed from the code and from this page. Sections 3 to 6 still describe the sampler's mechanics, and the warning of step 3 applies only to hands whose approach is on the pinch line.</p>
 </div>
 
 <nav class="toc">
@@ -184,8 +184,6 @@ a { color: var(--accent); }
     <li><a href="#limits">Three things the original sampler could not do</a></li>
     <li><a href="#scale">Change one: the mesh takes the spawn scale</a></li>
     <li><a href="#lateral">Change two: a pinch point beside the approach line</a></li>
-    <li><a href="#nominal">Change three: a sampler that starts from grasps written by hand</a></li>
-    <li><a href="#precedence">How the three sources fit together</a></li>
     <li><a href="#after">From a candidate to a recorded grasp</a></li>
     <li><a href="#glossary">Glossary of symbols and variables</a></li>
   </ol>
@@ -235,10 +233,10 @@ a { color: var(--accent); }
     <line x1="458" y1="65" x2="486" y2="65" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arr)"/>
     <line x1="608" y1="65" x2="636" y2="65" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arr)"/>
     <text x="83" y="130" class="svg-small">this page</text>
-    <text x="548" y="130" class="svg-small">section 9</text>
+    <text x="548" y="130" class="svg-small">section 7</text>
   </g>
 </svg>
-<figcaption>The grasp-sampling episode. Candidate generation runs once and is the subject of sections 3 to 8. The judging step is summarised in section 9.</figcaption>
+<figcaption>The grasp-sampling episode. Candidate generation runs once and is the subject of sections 3 to 6. The judging step is summarised in section 7.</figcaption>
 </figure>
 
 <!-- ============================================================================================== -->
@@ -418,7 +416,7 @@ the local <code>opposing_point</code>. If no hit is within \(w\) the point is dr
   <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 L22 20 L2 20 Z" fill="none" stroke="var(--before)" stroke-width="1.8" stroke-linejoin="round"/><line x1="12" y1="9" x2="12" y2="14.5" stroke="var(--before)" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="17.3" r="1.1" fill="var(--before)"/></svg>
   <div>
     <p><strong>This test checks the wrong length.</strong> It compares the aperture with how far the ray travels through the object. For the hands in this repository the hand later approaches along that same ray, so the length being checked is how deep the object is in front of the palm, not how wide it is between the fingers. On the standing big peg a ray from the top travels 12 cm, more than the 9 cm aperture, and the top approach is thrown away even though the 6 cm wide peg fits between the fingers.</p>
-    <p>The nominal grasp sampler of section 7 does not use the ray at all, so it is not affected. Section 4 shows the consequence in a diagram.</p>
+    <p>Section 4 shows the consequence in a diagram.</p>
   </div>
 </div> The grasp axis and its length are
 \[ \ell_i = \lVert \mathbf{y}_i - \mathbf{x}_i \rVert, \qquad \hat{\mathbf{u}}_i = \frac{\mathbf{y}_i - \mathbf{x}_i}{\ell_i}, \]
@@ -465,7 +463,7 @@ Read it from the right. The hand frame is first pulled back by \(s_j\) along its
       <tr><td>\(s &gt; f + 6\,\text{cm}\)</td><td>above the top face</td><td>none</td><td>the fingers close on air</td></tr>
     </tbody>
   </table>
-  <p>Pulling the hand back by \(s - f\) therefore moves the fingertips up the peg, and the window of useful standoffs is the top 6 cm. In the antipodal sampler this top point never reaches step 7 on the big peg, since step 3 rejects it, but the fixed and nominal samplers build exactly this kind of pose.</p>
+  <p>Pulling the hand back by \(s - f\) therefore moves the fingertips up the peg, and the window of useful standoffs is the top 6 cm. In the antipodal sampler this top point never reaches step 7 on the big peg, since step 3 rejects it, so the big peg can only be grasped from the side.</p>
 </div>
 </li>
 </ol>
@@ -527,7 +525,7 @@ Read it from the right. The hand frame is first pulled back by \(s_j\) along its
 <!-- ============================================================================================== -->
 <h2 id="limits">4. Three things the original sampler could not do</h2>
 
-<p>Each of these is dealt with by one of the changes that follow. The mesh size is fixed in section 5 and the fingertip offset in section 6. The top approach is handled by the nominal sampler of section 7, which does not use the faulty test at all. That test itself is still in the antipodal branch, so the first problem would come back if that branch were run on a tall object.</p>
+<p>Each of these is dealt with by one of the changes that follow. The mesh size is fixed in section 5 and the fingertip offset in section 6. The top approach is not handled: the faulty test is still in the sampler, and the Dex3 avoids it by grasping the big peg from the side with its squeeze turned across the pinch line, which the companion page explains.</p>
 
 <h3>It could not approach a tall object from above</h3>
 
@@ -597,7 +595,7 @@ Read it from the right. The hand frame is first pulled back by \(s_j\) along its
 
 \[ \mathbf{t} = \mathbf{c} - \mathbf{R}\,\mathbf{p}(s), \]
 
-<p>which says exactly what one wants: rotate the pinch point into the object frame and step back from the centre by that much. For the Dex1 and the Robotiq \(\mathbf{p}_\perp = \mathbf{0}\) and the formula is the old one, so their candidates do not move. The same formula is reused by the new samplers below through <code class="var">_body_transforms</code>, which takes a batch of rotations, centres and standoffs and returns the batch of transforms.</p>
+<p>which says exactly what one wants: rotate the pinch point into the object frame and step back from the centre by that much. For the Dex1 and the Robotiq \(\mathbf{p}_\perp = \mathbf{0}\) and the formula is the old one, so their candidates do not move.</p>
 
 <figure>
 <svg viewBox="0 0 820 340" role="img" aria-label="Dex3 placement before and after the lateral offset, seen from above">
@@ -674,238 +672,7 @@ Read it from the right. The hand frame is first pulled back by \(s_j\) along its
 </figure>
 
 <!-- ============================================================================================== -->
-<h2 id="nominal">7. Change three: a sampler that starts from grasps written by hand</h2>
-
-<p><span class="tag after">after</span> The first problem of section 4 could have been attacked by repairing the antipodal sampler. Instead a second sampler was put next to it. It does not read the mesh to decide where to grasp. It starts from one or more grasps that a person has written down, the <em>nominal grasps</em>, and scatters candidates around them. For the Dex3 that is how the 45 degree approach from above, which no ray through the mesh can produce, became a candidate at all.</p>
-
-<p>How it relates to what came before is simple to state. It is an addition, a new branch in <code class="var">_generate_grasp_candidates</code> with four new helper methods, and the antipodal code is untouched. It also replaces only the candidate stage. The random pick per reset, the move into the world frame and everything in section 9 run on its list exactly as they ran on the antipodal list.</p>
-
-<p>Seen against the seven steps of section 3, the antipodal sampler has two halves. Steps 1 to 4 decide <em>where</em> to grasp by reading the mesh, and steps 5 to 7 decide <em>how the hand sits</em> there. The new sampler drops the first half and takes the answer from the written grasp. For the second half it keeps the same operations, but where the antipodal sampler enumerates a grid of spins and standoffs it draws random perturbations instead.</p>
-
-<table class="compact">
-<thead><tr><th>Antipodal sampler</th><th>Nominal sampler</th><th>Relation</th></tr></thead>
-<tbody>
-<tr><td>Centre from the midpoint of a ray through the mesh (steps 3 and 4)</td><td><code>center</code> of the written grasp, plus a small random jitter</td><td>replaced by an input</td></tr>
-<tr><td>Align the hand's alignment axis with the ray (step 5)</td><td>Align the hand's approach axis with the written <code>approach</code></td><td>same operation, the direction is given instead of computed</td></tr>
-<tr><td>Spin about the hand's spin axis, sixteen values of \(\theta\) (step 5)</td><td>Written roll, pitch and yaw, plus a random rotation inside a cone</td><td>generalised, a tilt is possible and not only a spin</td></tr>
-<tr><td>Standoff sweep of thirty two values from \(f\) upward (step 6)</td><td>Written <code>standoff</code>, \(f\) by default, plus a random extra pull back</td><td>a short random range instead of a long sweep</td></tr>
-<tr><td>Body pulled back by the pinch point (step 7)</td><td>The same pull back, through <code>_body_transforms</code></td><td>identical formula</td></tr>
-</tbody>
-</table>
-
-<p>The rest of this section follows that order. First how a grasp is written down and turned into one pose, then how candidates are scattered around it, and last a small switch that pins the sampler to the written pose alone, which is how the Dex3 grasps were tuned.</p>
-
-<h3>7.1 Writing a grasp down</h3>
-
-<p>A written grasp, which the code calls a <em>spec</em>, is a dictionary with four entries. All of them are in the object frame, so a grasp written for the standing peg keeps its meaning wherever the peg later lies.</p>
-
-<table>
-<thead><tr><th>Key</th><th>Symbol</th><th>Meaning</th><th>Default</th></tr></thead>
-<tbody>
-<tr><td><code>center</code></td><td>\(\mathbf{c}\)</td><td>The pinch point, in the object frame, in metres.</td><td>\((0,0,0)\)</td></tr>
-<tr><td><code>approach</code></td><td>\(\hat{\mathbf{a}}_O\)</td><td>The direction, in the object frame, that the hand's approach axis is turned onto.</td><td>\((0,0,-1)\), straight down onto a standing object</td></tr>
-<tr><td><code>rpy_deg</code></td><td>\((\phi, \vartheta, \psi)\)</td><td>Extra roll, pitch and yaw in degrees about the object's fixed \(x\), \(y\) and \(z\) axes, applied in that order after the alignment and about the pinch point.</td><td>\((0,0,0)\)</td></tr>
-<tr><td><code>standoff</code></td><td>\(s\)</td><td>Distance from the body origin to the pinch point along the approach, in metres.</td><td><code>None</code>, which means \(f\)</td></tr>
-</tbody>
-</table>
-
-<p>The method <code class="var">_grasp_frame</code> turns a spec into a rotation, a centre and a standoff. The rotation is built in two stages, first the smallest rotation that brings the hand's approach axis onto the requested one and then the three fixed-axis turns,</p>
-
-\[ \mathbf{R}_{\text{nom}} = \mathbf{R}_z(\psi)\,\mathbf{R}_y(\vartheta)\,\mathbf{R}_x(\phi)\;\operatorname{Align}(\hat{\mathbf{a}} \to \hat{\mathbf{a}}_O). \]
-
-<p>In the code the alignment is again <code>trimesh.geometry.align_vectors</code> and the roll, pitch and yaw product is <code>tra.euler_matrix(roll, pitch, yaw, axes="sxyz")</code>. The leading <code>s</code> in <code>sxyz</code> means static axes, so the roll is applied first about the object's \(x\), then the pitch about the object's \(y\), then the yaw about the object's \(z\), which is why the matrices appear in reverse order when written as a product. Since the alignment is left-multiplied by these turns, they rotate the already aligned hand about axes that stay fixed in the object frame, which is the behaviour one wants from keyboard nudges in <code>inspect_env.py</code>. The transform is then the same body placement as in section 6,</p>
-
-\[ {}^{O}\mathbf{T}_{G} = \begin{bmatrix} \mathbf{R}_{\text{nom}} &amp; \mathbf{c} - \mathbf{R}_{\text{nom}}\,\mathbf{p}(s) \\ \mathbf{0}^\top &amp; 1 \end{bmatrix}, \]
-
-<p>computed by <code class="var">_grasp_transform</code>, which calls <code>_grasp_frame</code> and then <code>_body_transforms</code> with a batch of one.</p>
-
-<p>Since the spin axis and the approach axis coincide for these hands, a yaw about the approach does what the antipodal spin \(\theta\) does. Roll and pitch are what the antipodal sampler cannot express, because they tilt the approach itself.</p>
-
-<p>Here is how to read the Dex3's top grasp as it is written in <code>config/g1_dex3/grasp_sampling_cfg.py</code>. The centre is \((0, 0, 0.025)\), so the fingertips meet on the peg's axis 2.5 cm above its centre, which on the 12 cm big peg is 3.5 cm below the top face. The approach is \((0,0,-1)\), so the palm normal first points straight down. The roll of 45 degrees then tilts the hand about the object's \(x\) axis, and the result is the oblique approach from section 4. The side grasp is the same spec with a pitch of 90 degrees added, which lays the tilted hand over on its side.</p>
-
-<pre><code>DEX3_NOMINAL_TOP_GRASP = {
-    "center": (0.0, 0.0, DEX3_PINCH_HEIGHT),   # c, DEX3_PINCH_HEIGHT = 0.025
-    "approach": (0.0, 0.0, -1.0),              # a_O
-    "rpy_deg": (45.0, 0.0, 0.0),               # (phi, theta, psi)
-}
-DEX3_NOMINAL_SIDE_GRASP = {
-    "center": (0.0, 0.0, DEX3_PINCH_HEIGHT),
-    "approach": (0.0, 0.0, -1.0),
-    "rpy_deg": (45.0, 90.0, 0.0),
-}</code></pre>
-
-<figure>
-<svg viewBox="0 0 820 300" role="img" aria-label="Building the nominal top grasp in three stages">
-  <g class="svg-text">
-    <!-- stage 1 -->
-    <text x="40" y="28" font-weight="600">1. align â onto â<tspan dy="4" font-size="75%">O</tspan><tspan dy="-4"></tspan></text>
-    <rect x="90" y="120" width="50" height="160" fill="var(--object)" stroke="var(--object-edge)" stroke-width="1.5"/>
-    <circle cx="115" cy="175" r="5" fill="var(--mark)"/>
-    <text x="122" y="170" class="svg-math">c</text>
-    <rect x="95" y="50" width="40" height="40" rx="6" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1.5"/>
-    <line x1="115" y1="90" x2="115" y2="165" stroke="var(--hand-edge)" stroke-width="2" marker-end="url(#arr-hand)"/>
-    <text x="125" y="120" class="svg-math">â<tspan dy="4" font-size="75%">O</tspan><tspan dy="-4"></tspan> = (0,0,−1)</text>
-    <!-- stage 2 -->
-    <text x="320" y="28" font-weight="600">2. roll 45° about object x</text>
-    <rect x="380" y="120" width="50" height="160" fill="var(--object)" stroke="var(--object-edge)" stroke-width="1.5"/>
-    <circle cx="405" cy="175" r="5" fill="var(--mark)"/>
-    <g transform="rotate(-45 405 175)">
-      <rect x="385" y="50" width="40" height="40" rx="6" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1.5"/>
-      <line x1="405" y1="90" x2="405" y2="165" stroke="var(--hand-edge)" stroke-width="2" marker-end="url(#arr-hand)"/>
-    </g>
-    <path d="M 405 110 a 65 65 0 0 1 46 19" fill="none" stroke="var(--muted)" stroke-width="1" marker-end="url(#arr)"/>
-    <text x="440" y="105" class="svg-math">φ</text>
-    <text x="320" y="296" class="svg-small">the turn is about c, so the pinch point stays put</text>
-    <!-- stage 3 -->
-    <text x="590" y="28" font-weight="600">3. step back by p(s)</text>
-    <rect x="650" y="120" width="50" height="160" fill="var(--object)" stroke="var(--object-edge)" stroke-width="1.5"/>
-    <circle cx="675" cy="175" r="5" fill="var(--mark)"/>
-    <g transform="rotate(-45 675 175)">
-      <rect x="655" y="40" width="40" height="40" rx="6" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1.5"/>
-      <circle cx="675" cy="60" r="3.5" fill="var(--ink)"/>
-      <line x1="675" y1="80" x2="675" y2="168" stroke="var(--hand-edge)" stroke-width="1.5" stroke-dasharray="4 3"/>
-      <text x="683" y="120" class="svg-math">s â</text>
-      <line x1="600" y1="60" x2="668" y2="60" stroke="var(--mark)" stroke-width="1.5" stroke-dasharray="4 3"/>
-    </g>
-    <text x="590" y="296" class="svg-small">t = c − R p(s), p⊥ included</text>
-  </g>
-</svg>
-<figcaption>The three stages of <code>_grasp_frame</code> and <code>_body_transforms</code> for the Dex3 top grasp. The alignment points the palm normal down, the roll tilts it by 45 degrees about the object's \(x\) axis through the pinch point, and the body is placed so that the pinch point lands on \(\mathbf{c}\).</figcaption>
-</figure>
-
-<h3>7.2 Scattering candidates around the nominal grasps</h3>
-
-<p>One written pose is not a dataset. The recorded grasps must survive the closing and the pokes, and a single hand-authored pose may or may not, so what is wanted is a neighbourhood of it that is dense enough for the judge to sort the part that holds from the part that does not. The method <code class="var">_sample_nominal_grasps</code> takes the list of specs in <code class="var">nominal_grasps</code> and scatters candidates around each of them. Three knobs bound the scatter.</p>
-
-<table>
-<thead><tr><th>Parameter</th><th>Symbol</th><th>Meaning</th><th>Default</th></tr></thead>
-<tbody>
-<tr><td><code class="var">nominal_angle_max_deg</code></td><td>\(\alpha_{\max}\)</td><td>Largest rotation away from the nominal orientation, in degrees.</td><td>20</td></tr>
-<tr><td><code class="var">nominal_center_sigma</code></td><td>\(\sigma_c\)</td><td>Standard deviation of the pinch point jitter per axis, in metres.</td><td>0.005</td></tr>
-<tr><td><code class="var">nominal_standoff_range</code></td><td>\([s_{\text{lo}}, s_{\text{hi}}]\)</td><td>Extra standoff added to the nominal one, uniform, in metres. It pulls the hand back so that shallower holds are tried too.</td><td>\([0, 0.02]\)</td></tr>
-</tbody>
-</table>
-
-<p>The budget is split evenly. With \(K\) nominal grasps, which is the length of <code>self.nominal_grasps</code>, each one gets</p>
-
-\[ n = \left\lfloor \frac{\max(K, N_c)}{K} \right\rfloor \]
-
-<p>draws, the local <code>per_nominal</code>. For each nominal grasp the spec is first resolved by <code>_grasp_frame</code> into \(\mathbf{R}_{\text{nom}}\), \(\mathbf{c}_{\text{nom}}\) and \(s_{\text{nom}}\). Then for \(i = 0, \dots, n-1\) three independent perturbations are drawn.</p>
-
-<ol class="steps">
-<li>
-<strong>A rotation about a random axis through the pinch point.</strong>
-The axis \(\hat{\mathbf{k}}_i\) is uniform on the sphere, obtained by normalising a standard normal vector, and the angle is uniform up to the bound,
-\[ \hat{\mathbf{k}}_i = \frac{\mathbf{z}_i}{\lVert \mathbf{z}_i \rVert},\quad \mathbf{z}_i \sim \mathcal{N}(\mathbf{0}, \mathbf{I}_3), \qquad \alpha_i \sim \mathcal{U}[0, \alpha_{\max}], \qquad \mathbf{R}_i = \operatorname{Rot}(\hat{\mathbf{k}}_i, \alpha_i)\,\mathbf{R}_{\text{nom}}. \]
-The arrays are <code>axes</code>, <code>angles</code> and <code>rot_pert</code>, the last one built from a rotation vector \(\alpha_i \hat{\mathbf{k}}_i\) by <code>scipy.spatial.transform.Rotation.from_rotvec</code>. The perturbation is left-multiplied, so it is a rotation in the object frame, and since the placement formula turns about the pinch point it does not move the pinch point.
-</li>
-<li>
-<strong>A jitter of the pinch point.</strong>
-\[ \mathbf{c}_i = \mathbf{c}_{\text{nom}} + \boldsymbol{\varepsilon}_i, \qquad \boldsymbol{\varepsilon}_i \sim \mathcal{N}(\mathbf{0}, \sigma_c^2\,\mathbf{I}_3), \]
-the array <code>jitter</code>. With the default half a centimetre the fingertips land within about a centimetre of the nominal point almost always.
-</li>
-<li>
-<strong>An extra standoff.</strong>
-\[ s_i = s_{\text{nom}} + u_i, \qquad u_i \sim \mathcal{U}[s_{\text{lo}}, s_{\text{hi}}], \]
-the array <code>extra</code>. This is the only one of the three that slides the fingertips off the nominal point on purpose, back along the approach, where the object is held less deep in the hand.
-</li>
-</ol>
-
-<p>The first draw of each group has all three perturbations set to zero, so the exact nominal pose is always among the candidates. Finally all rotations, centres and standoffs are concatenated and handed to <code>_body_transforms</code>, which applies the placement formula of section 6 to the whole batch at once,</p>
-
-\[ {}^{O}\mathbf{T}_{G,i} = \begin{bmatrix} \mathbf{R}_i &amp; \mathbf{c}_i - \mathbf{R}_i\,\mathbf{p}(s_i) \\ \mathbf{0}^\top &amp; 1 \end{bmatrix}. \]
-
-<figure>
-<svg viewBox="0 0 820 300" role="img" aria-label="Perturbations around a nominal grasp">
-  <g class="svg-text">
-    <rect x="360" y="110" width="50" height="170" fill="var(--object)" stroke="var(--object-edge)" stroke-width="1.5"/>
-    <circle cx="385" cy="165" r="5" fill="var(--mark)"/>
-    <text x="392" y="160" class="svg-math">c<tspan dy="4" font-size="75%">nom</tspan><tspan dy="-4"></tspan></text>
-    <!-- nominal approach line at 45 degrees -->
-    <line x1="470" y1="80" x2="391" y2="159" stroke="var(--hand-edge)" stroke-width="2.5" marker-end="url(#arr-hand)"/>
-    <!-- cone of angles -->
-    <path d="M385 165 L500 95 A 130 130 0 0 1 505 150 Z" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1" opacity="0.8"/>
-    <text x="512" y="120" class="svg-math">α ≤ α<tspan dy="4" font-size="75%">max</tspan><tspan dy="-4"></tspan></text>
-    <text x="512" y="138" class="svg-small">about a random axis k̂</text>
-    <!-- jitter cloud -->
-    <circle cx="385" cy="165" r="16" fill="none" stroke="var(--mark)" stroke-width="1" stroke-dasharray="3 3"/>
-    <g fill="var(--mark)" opacity="0.8">
-      <circle cx="380" cy="160" r="2"/><circle cx="391" cy="170" r="2"/><circle cx="388" cy="158" r="2"/>
-      <circle cx="379" cy="171" r="2"/><circle cx="394" cy="163" r="2"/><circle cx="383" cy="176" r="2"/>
-    </g>
-    <text x="230" y="205" class="svg-math">ε ~ N(0, σ<tspan dy="4" font-size="75%">c</tspan><tspan dy="-4"></tspan>² I)</text>
-    <line x1="340" y1="200" x2="372" y2="178" stroke="var(--muted)" stroke-width="1"/>
-    <!-- standoff range along the approach -->
-    <g transform="rotate(-45 385 165)">
-      <rect x="378" y="40" width="14" height="22" fill="var(--after-soft)" stroke="var(--after)" stroke-width="1"/>
-      <text x="398" y="56" class="svg-math">u ~ U[s<tspan dy="4" font-size="75%">lo</tspan><tspan dy="-4"></tspan>, s<tspan dy="4" font-size="75%">hi</tspan><tspan dy="-4"></tspan>]</text>
-    </g>
-    <text x="40" y="40" class="svg-small">Each draw changes the orientation inside a cone, moves the pinch point inside a small</text>
-    <text x="40" y="58" class="svg-small">cloud and pulls the hand back by a little. The first draw of each group is the nominal pose itself.</text>
-  </g>
-</svg>
-<figcaption>The three perturbations of a nominal grasp. The cone bounds the orientation change, the dotted circle the pinch point jitter, and the shaded segment on the approach line the extra standoff.</figcaption>
-</figure>
-
-<div class="callout after">
-<p>Why perturb rather than enumerate, as the antipodal sampler does with its sixteen spins and thirty two standoffs? Because the nominal pose is already close to a good grasp. What is wanted is a neighbourhood of it dense enough that the judge can tell which part of the neighbourhood holds and which does not. A random scatter in all six degrees of freedom does that with the same budget, where a grid would have to choose a few axes and leave the others fixed.</p>
-</div>
-
-<h3>7.3 Pinning the sampler to one written grasp</h3>
-
-<p>To tune the Dex3 grasps in the first place, it helps to write one down, put the hand there, and look at it. That is what the <code class="var">fixed_grasp</code> parameter does. It is one spec of the same shape with an extra <code>enabled</code> flag. When the flag is true the candidate list has exactly one entry, built by <code class="var">_grasp_transform</code>, which is <code>_grasp_frame</code> followed by <code>_body_transforms</code> with a batch of one, and no scattering happens. It is a tool for looking, not for recording. <code>inspect_env.py</code> switches it on, turns the pose with the keyboard by editing the roll, pitch and yaw of the spec, and prints the resulting pose, and that is how the 45 degree roll and the 2.5 cm pinch height of the Dex3 grasps were found. The Dex3 configuration fills the fixed grasp with the top grasp but leaves it disabled, so the recorder is never affected by it.</p>
-
-<!-- ============================================================================================== -->
-<h2 id="precedence">8. How the three sources fit together</h2>
-
-<p>The entry point <code class="var">_generate_grasp_candidates</code> now has three branches and tries them in a fixed order. The fixed grasp wins when it is enabled. Otherwise the nominal grasps win when the list is non-empty. Otherwise the antipodal sampler runs as before. The two new branches are off in the shared Robotiq configuration, so the UR5e and the Dex1 tasks behave exactly as they did. The Dex3 configuration fills in the nominal list and sets the fixed grasp's values to the top grasp while leaving it disabled, so that <code>inspect_env.py</code> only has to flip the flag.</p>
-
-<figure>
-<svg viewBox="0 0 820 230" role="img" aria-label="Decision flow of the candidate generator">
-  <g class="svg-text" text-anchor="middle">
-    <rect x="20" y="80" width="150" height="56" rx="10" fill="var(--surface)" stroke="var(--rule)"/>
-    <text x="95" y="104">fixed<tspan dy="4" font-size="75%">grasp</tspan><tspan dy="-4"></tspan></text>
-    <text x="95" y="122" class="svg-small">enabled?</text>
-    <rect x="250" y="80" width="150" height="56" rx="10" fill="var(--surface)" stroke="var(--rule)"/>
-    <text x="325" y="104">nominal<tspan dy="4" font-size="75%">grasps</tspan><tspan dy="-4"></tspan></text>
-    <text x="325" y="122" class="svg-small">non-empty?</text>
-    <rect x="480" y="80" width="170" height="56" rx="10" fill="var(--before-soft)" stroke="var(--before)"/>
-    <text x="565" y="104">antipodal sampler</text>
-    <text x="565" y="122" class="svg-small">_sample<tspan dy="4" font-size="75%">antipodal</tspan><tspan dy="-4"></tspan>_grasps</text>
-    <line x1="170" y1="108" x2="248" y2="108" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arr)"/>
-    <text x="209" y="100" class="svg-small">no</text>
-    <line x1="400" y1="108" x2="478" y2="108" stroke="var(--muted)" stroke-width="1.5" marker-end="url(#arr)"/>
-    <text x="439" y="100" class="svg-small">no</text>
-    <line x1="95" y1="136" x2="95" y2="178" stroke="var(--after)" stroke-width="1.5" marker-end="url(#arr)"/>
-    <text x="110" y="162" class="svg-small" text-anchor="start">yes</text>
-    <rect x="20" y="180" width="150" height="40" rx="8" fill="var(--after-soft)" stroke="var(--after)"/>
-    <text x="95" y="205" class="svg-small">one pose, _grasp<tspan dy="4" font-size="75%">transform</tspan><tspan dy="-4"></tspan></text>
-    <line x1="325" y1="136" x2="325" y2="178" stroke="var(--after)" stroke-width="1.5" marker-end="url(#arr)"/>
-    <text x="340" y="162" class="svg-small" text-anchor="start">yes</text>
-    <rect x="250" y="180" width="150" height="40" rx="8" fill="var(--after-soft)" stroke="var(--after)"/>
-    <text x="325" y="205" class="svg-small">N<tspan dy="4" font-size="75%">c</tspan><tspan dy="-4"></tspan> poses, _sample<tspan dy="4" font-size="75%">nominal</tspan><tspan dy="-4"></tspan>_grasps</text>
-    <text x="565" y="170" class="svg-small">N<tspan dy="4" font-size="75%">c</tspan><tspan dy="-4"></tspan> poses from the mesh,</text>
-    <text x="565" y="188" class="svg-small">scaled, with p⊥ (sections 5 and 6)</text>
-    <text x="410" y="40">_generate<tspan dy="4" font-size="75%">grasp</tspan><tspan dy="-4"></tspan>_candidates</text>
-  </g>
-</svg>
-<figcaption>Precedence of the three candidate sources. Only the first branch that applies runs.</figcaption>
-</figure>
-
-<p>All of the knobs can be set from the command line through Hydra. A few that are useful while tuning:</p>
-
-<pre><code># pin the Dex3 to its nominal top grasp and look at it
-python scripts_v2/tools/inspect_env.py --task OmniReset-Dex3-GraspSampling-v0 --num_envs 1 --viz kit \
-    --gripper open --no_timeout --no_gravity env.scene.object=big-peg \
-    env.events.grasp_sampling.params.fixed_grasp.enabled=true
-
-# widen the scatter around the nominal grasps while recording
-python scripts_v2/tools/record_grasps.py --task OmniReset-Dex3-GraspSampling-v0 --num_envs 8192 \
-    env.scene.object=big-peg env.events.grasp_sampling.params.nominal_angle_max_deg=30 \
-    env.events.grasp_sampling.params.nominal_standoff_range=[0.0,0.03]</code></pre>
-
-<!-- ============================================================================================== -->
-<h2 id="after">9. From a candidate to a recorded grasp</h2>
+<h2 id="after">7. From a candidate to a recorded grasp</h2>
 
 <p>For completeness, this is what happens to a candidate once it exists. On every reset the event draws an index per environment uniformly from the candidate list, <code>torch.randint(0, len(self.grasp_candidates), ...)</code>. It makes sure the hand is open and still, and then it composes the candidate with the object's current world pose,</p>
 
@@ -916,7 +683,7 @@ python scripts_v2/tools/record_grasps.py --task OmniReset-Dex3-GraspSampling-v0 
 <p>The binary gripper action then closes the hand. One second in, <code>global_physics_control_event</code> switches gravity on, and between one and two seconds it applies a small random force and torque to the object, which it now removes again once the window closes. At the last step of the four second episode <code>check_grasp_success</code> judges the result. The object must have stayed within 25 cm of where it started and above 25 cm height, it must have been still for five consecutive steps, no gripper joint may be moving abnormally, the hand's sampled surface points may not penetrate the object, and the closure joints must on average have travelled more than ten percent of the way from open to closed. When all of that holds, the recorder stores the pose of the gripper body in the object frame, recomputed from the final simulated poses rather than copied from the candidate, together with the hand's joint positions. Those are the grasps the reset-state tasks later read back.</p>
 
 <!-- ============================================================================================== -->
-<h2 id="glossary">10. Glossary of symbols and variables</h2>
+<h2 id="glossary">8. Glossary of symbols and variables</h2>
 
 <table>
 <thead><tr><th>Symbol</th><th>Variable or expression</th><th>Where</th><th>Meaning</th></tr></thead>
@@ -931,7 +698,7 @@ python scripts_v2/tools/record_grasps.py --task OmniReset-Dex3-GraspSampling-v0 
 <tr><td>\(w\)</td><td><code>self.gripper_maximum_aperture</code></td><td>metadata</td><td>Largest allowed \(\ell\), m.</td></tr>
 <tr><td>\(\mathbf{p}\)</td><td><code>pinch</code> from <code>gripper_offset.pos</code></td><td><code>__init__</code></td><td>Pinch point, in \(G\).</td></tr>
 <tr><td>\(\mathbf{p}_\perp\)</td><td><code>self.pinch_lateral_offset</code></td><td><code>__init__</code></td><td>Part of \(\mathbf{p}\) across the approach.</td></tr>
-<tr><td>\(\mathbf{p}(s)\)</td><td><code>pinch_local</code></td><td><code>_body_transforms</code></td><td>\(s\hat{\mathbf{a}} + \mathbf{p}_\perp\).</td></tr>
+<tr><td>\(\mathbf{p}(s)\)</td><td><code>pullbacks</code></td><td><code>_sample_antipodal_grasps</code></td><td>\(s\hat{\mathbf{a}} + \mathbf{p}_\perp\).</td></tr>
 <tr><td>\(N_c\)</td><td><code>self.num_candidates</code></td><td>params</td><td>Candidate budget.</td></tr>
 <tr><td>\(N_o\), \(N_s\)</td><td><code>self.num_orientations</code>, <code>self.num_standoff_samples</code></td><td>params</td><td>Spins and standoffs per surface point.</td></tr>
 <tr><td>\(N_{\text{surf}}\)</td><td><code>num_surface_samples</code></td><td><code>_sample_antipodal_grasps</code></td><td>\(\lfloor N_c / (N_o N_s) \rfloor\).</td></tr>
@@ -945,12 +712,6 @@ python scripts_v2/tools/record_grasps.py --task OmniReset-Dex3-GraspSampling-v0 
 <tr><td>\(\theta_k\), \(\mathbf{R}_{\text{spin}}\)</td><td><code>rotation_angles</code>, <code>orient_tf_rot</code></td><td><code>_sample_antipodal_grasps</code></td><td>Spin about \(\hat{\mathbf{o}}\).</td></tr>
 <tr><td>\(s_j\), \(d\)</td><td><code>standoff_distances</code>, <code>mesh_diagonal</code></td><td><code>_sample_antipodal_grasps</code></td><td>Standoff sweep and the mesh diagonal that bounds it.</td></tr>
 <tr><td>\(\mathbf{k}\)</td><td><code>asset.cfg.spawn.scale</code></td><td><code>_extract_mesh_from_asset</code></td><td>Spawn scale applied to the mesh.</td></tr>
-<tr><td>\(\hat{\mathbf{a}}_O\), \((\phi,\vartheta,\psi)\), \(s\)</td><td><code>spec["approach"]</code>, <code>spec["rpy_deg"]</code>, <code>spec["standoff"]</code></td><td><code>_grasp_frame</code></td><td>A hand-authored grasp.</td></tr>
-<tr><td>\(\mathbf{R}_{\text{nom}}\), \(\mathbf{c}_{\text{nom}}\), \(s_{\text{nom}}\)</td><td><code>rot_nom</code>, <code>center_nom</code>, <code>standoff_nom</code></td><td><code>_sample_nominal_grasps</code></td><td>The resolved nominal grasp.</td></tr>
-<tr><td>\(K\), \(n\)</td><td><code>len(self.nominal_grasps)</code>, <code>per_nominal</code></td><td><code>_sample_nominal_grasps</code></td><td>Number of nominal grasps and draws per grasp.</td></tr>
-<tr><td>\(\alpha_{\max}\), \(\hat{\mathbf{k}}_i\), \(\alpha_i\)</td><td><code>self.nominal_angle_max_deg</code>, <code>axes</code>, <code>angles</code></td><td><code>_sample_nominal_grasps</code></td><td>Orientation perturbation.</td></tr>
-<tr><td>\(\sigma_c\), \(\boldsymbol{\varepsilon}_i\)</td><td><code>self.nominal_center_sigma</code>, <code>jitter</code></td><td><code>_sample_nominal_grasps</code></td><td>Pinch point perturbation.</td></tr>
-<tr><td>\([s_{\text{lo}}, s_{\text{hi}}]\), \(u_i\)</td><td><code>self.nominal_standoff_range</code>, <code>extra</code></td><td><code>_sample_nominal_grasps</code></td><td>Standoff perturbation.</td></tr>
 </tbody>
 </table>
 
