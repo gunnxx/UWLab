@@ -168,12 +168,8 @@ a { color: var(--accent); }
 
 <header class="title">
   <h1>How the OmniReset grasp sampler places a hand on an object</h1>
-  <p class="sub">A step by step walk through the antipodal sampler as it was, the reasons it fell short for the Dex3 hand and the big peg, and the two changes that followed, the mesh at its spawn scale and a pinch point beside the approach line. Every symbol in the formulas is tied to the variable that holds it in <code>mdp/events.py</code>.</p>
+  <p class="sub">A step by step walk through the antipodal sampler as it was, the reasons it fell short for the Dex3 hand and the big peg, and the three changes that followed: the mesh at its spawn scale, a pinch point beside the approach line, and a convention of the Dex3's own that lays a yawed axis along the pinch line. Every symbol in the formulas is tied to the variable that holds it in <code>mdp/events.py</code>.</p>
 </header>
-
-<div class="callout after">
-<p><span class="tag after">since then</span> The Dex3 runs the antipodal sampler of section 3 with a convention of its own, an axis 45 degrees from its squeeze axis laid along the pinch line, which <a href="omnireset_antipodal_sampler.html">the companion page</a> explains. The hand-written nominal grasps and the fixed grasp that this page once described as its third change have been removed from the code and from this page. Sections 3 to 6 still describe the sampler's mechanics, and the warning of step 3 applies only to hands whose approach is on the pinch line.</p>
-</div>
 
 <nav class="toc">
   <strong>Contents</strong>
@@ -184,6 +180,7 @@ a { color: var(--accent); }
     <li><a href="#limits">Three things the original sampler could not do</a></li>
     <li><a href="#scale">Change one: the mesh takes the spawn scale</a></li>
     <li><a href="#lateral">Change two: a pinch point beside the approach line</a></li>
+    <li><a href="#yawed">Change three: the Dex3 lays a yawed axis along the pinch line</a></li>
     <li><a href="#after">From a candidate to a recorded grasp</a></li>
     <li><a href="#glossary">Glossary of symbols and variables</a></li>
   </ol>
@@ -236,7 +233,7 @@ a { color: var(--accent); }
     <text x="548" y="130" class="svg-small">section 7</text>
   </g>
 </svg>
-<figcaption>The grasp-sampling episode. Candidate generation runs once and is the subject of sections 3 to 6. The judging step is summarised in section 7.</figcaption>
+<figcaption>The grasp-sampling episode. Candidate generation runs once and is the subject of sections 3 to 7. The judging step is summarised in section 8.</figcaption>
 </figure>
 
 <!-- ============================================================================================== -->
@@ -254,8 +251,8 @@ a { color: var(--accent); }
 <thead><tr><th>Symbol</th><th>Meaning</th><th>Metadata key and attribute</th><th>Dex1</th><th>Dex3</th></tr></thead>
 <tbody>
 <tr><td>\(\hat{\mathbf{a}}\)</td><td>Approach direction, in \(G\). The hand moves along it to reach the object.</td><td><code>gripper_approach_direction</code>, <code class="var">self.gripper_approach_direction</code></td><td>\((1,0,0)\)</td><td>\((0,1,0)\), the palm normal</td></tr>
-<tr><td>\(\hat{\mathbf{g}}\)</td><td>Grasp alignment axis, in \(G\). The sampler lines this axis up with the line between the two contact points.</td><td><code>grasp_align_axis</code>, <code class="var">self.grasp_align_axis</code></td><td>\((1,0,0)\)</td><td>\((0,1,0)\)</td></tr>
-<tr><td>\(\hat{\mathbf{o}}\)</td><td>Orientation sampling axis, in \(G\). The hand is spun about it to enumerate orientations.</td><td><code>orientation_sample_axis</code>, <code class="var">self.orientation_sample_axis</code></td><td>\((1,0,0)\)</td><td>\((0,1,0)\)</td></tr>
+<tr><td>\(\hat{\mathbf{g}}\)</td><td>Grasp alignment axis, in \(G\). The sampler lines this axis up with the line between the two contact points.</td><td><code>grasp_align_axis</code>, <code class="var">self.grasp_align_axis</code></td><td>\((1,0,0)\)</td><td>\((1,0,0)\) in the metadata, \((0.71,-0.71,0)\) from the configuration, section 7</td></tr>
+<tr><td>\(\hat{\mathbf{o}}\)</td><td>Orientation sampling axis, in \(G\). The hand is spun about it to enumerate orientations.</td><td><code>orientation_sample_axis</code>, <code class="var">self.orientation_sample_axis</code></td><td>\((1,0,0)\)</td><td>\((1,0,0)\) in the metadata, \((0.71,-0.71,0)\) from the configuration, section 7</td></tr>
 <tr><td>\(f\)</td><td>Finger offset, in metres. The distance from the body origin to the pinch point measured along \(\hat{\mathbf{a}}\).</td><td><code>finger_offset</code>, <code class="var">self.finger_offset</code></td><td>0.12</td><td>0.072</td></tr>
 <tr><td>\(c_f\)</td><td>Finger clearance, in metres. The depth along the approach over which an object ends up held: on the Dex1 the pad length behind the fingertips, on the Dex3 the pocket in front of the palm, measured as 5.0 to 8.5 cm.</td><td><code>finger_clearance</code>, <code class="var">self.finger_clearance</code></td><td>0.066</td><td>0.03</td></tr>
 <tr><td>\(w\)</td><td>Maximum aperture, in metres. The widest span the fingers can take.</td><td><code>maximum_aperture</code>, <code class="var">self.gripper_maximum_aperture</code></td><td>0.0948</td><td>0.09</td></tr>
@@ -263,7 +260,7 @@ a { color: var(--accent); }
 </tbody>
 </table>
 
-<p>Notice that for every hand in the repository the three axes \(\hat{\mathbf{a}}\), \(\hat{\mathbf{g}}\) and \(\hat{\mathbf{o}}\) are the same vector. That coincidence shapes what the original sampler can and cannot do, and section 4 comes back to it. Notice also where the pinch point sits. For the Dex1 it lies on the approach line, \(\mathbf{p} = f\hat{\mathbf{a}}\). For the Dex3 it does not. The thumb and the two fingertips meet 7.2 cm in front of the palm along the palm normal, which is \(f\), but also 9.8 cm along the palm's \(x\) axis, out where the fingers are. The sampler splits the pinch point into the part along the approach and the part across it,</p>
+<p>Notice that for the Robotiq and the Dex1 the three axes \(\hat{\mathbf{a}}\), \(\hat{\mathbf{g}}\) and \(\hat{\mathbf{o}}\) are the same vector, and that the Dex3's were too until its configuration began to override \(\hat{\mathbf{g}}\) and \(\hat{\mathbf{o}}\), which section 7 explains. That coincidence shapes what the original sampler can and cannot do, and section 4 comes back to it. Notice also where the pinch point sits. For the Dex1 it lies on the approach line, \(\mathbf{p} = f\hat{\mathbf{a}}\). For the Dex3 it does not. The thumb and the two fingertips meet 7.2 cm in front of the palm along the palm normal, which is \(f\), but also 9.8 cm along the palm's \(x\) axis, out where the fingers are. The sampler splits the pinch point into the part along the approach and the part across it,</p>
 
 \[ \mathbf{p}_{\perp} \;=\; \mathbf{p} - (\mathbf{p}\cdot\hat{\mathbf{a}})\,\hat{\mathbf{a}}, \]
 
@@ -384,7 +381,7 @@ a { color: var(--accent); }
 <figcaption>Every quantity of the table drawn on the two hands, to scale at 15 pixels per centimetre, with the body origin \(G\) and its axes drawn where they really are. Both frames are right-handed, so the third axis points into the page, which the circled cross marks. The finger offset \(f\) is measured from \(G\) along the approach to the pinch point \(\mathbf{p}\). On the Dex1 that distance is the base plus the finger, and only the finger, the dark bars, can close on something, so the clearance \(c_f\) is the finger length. On the Dex3 the origin is the palm link's, and the dark segments mark the pocket in front of the palm's thumb edge, measured on the meshes to run from 5.0 to 8.5 cm along the approach, inside which the closing hand traps an object. The pinch point lies inside that pocket, 7.2 cm out, and the clearance \(c_f\) is the pocket's depth rounded to 3 cm. The aperture \(w\) is the open span between the pads, measured across the approach. The Dex3 pinch point also sits \(\mathbf{p}_\perp\) beside the approach line, along the palm's \(x\) axis, which the dashed teal line shows.</figcaption>
 </figure>
 
-<p>Besides the metadata, the event takes a few knobs from its configuration in <code>config/ur5e_robotiq_2f85/grasp_sampling_cfg.py</code>. The budget \(N_c\) is <code class="var">num_candidates</code> and is one million by default. The number of spins \(N_o\) is <code class="var">num_orientations</code>, sixteen by default. The number of standoff distances \(N_s\) is <code class="var">num_standoff_samples</code>, thirty two by default. The lateral jitter \(\sigma_\ell\) is <code class="var">lateral_sigma</code> and is zero by default, and the top-bias share \(\beta\) is <code class="var">top_bias_fraction</code>, one by default and one half for the Dex3.</p>
+<p>Besides the metadata, the event takes a few knobs from its configuration in <code>config/ur5e_robotiq_2f85/grasp_sampling_cfg.py</code>. The budget \(N_c\) is <code class="var">num_candidates</code> and is one million by default. The number of spins \(N_o\) is <code class="var">num_orientations</code>, sixteen by default. The number of standoff distances \(N_s\) is <code class="var">num_standoff_samples</code>, thirty two by default. The lateral jitter \(\sigma_\ell\) is <code class="var">lateral_sigma</code> and is zero by default, and the top-bias share \(\beta\) is <code class="var">top_bias_fraction</code>, one by default, one half for the Dex1 and zero for the Dex3. Three knobs more belong to section 7: <code class="var">standoffs_within_clearance</code>, off by default, and <code class="var">grasp_align_axis</code> and <code class="var">orientation_sample_axis</code>, which override the metadata's \(\hat{\mathbf{g}}\) and \(\hat{\mathbf{o}}\) when set and are <code>None</code> by default.</p>
 
 <!-- ============================================================================================== -->
 <h2 id="antipodal">3. The original sampler, one step at a time</h2>
@@ -427,30 +424,30 @@ the locals <code>axis_length</code> and <code>grasp_axis</code>.
 <strong>Place the grasp centre on that axis.</strong>
 With the default <code>lateral_sigma</code> of zero, \(\rho_i\) is one half, so the grasp centre is the midpoint between the surface point and the opposite hit. For a point on the top face of a standing peg that puts the centre halfway down the peg, inside the solid. When \(\sigma_\ell &gt; 0\) the centre slides along the axis by a truncated normal draw \(\rho_i\) that stays between the two surface points,
 \[ \mathbf{c}_i = \mathbf{x}_i + \rho_i\,\ell_i\,\hat{\mathbf{u}}_i, \qquad \rho_i \sim \mathcal{N}_{[0,1]}\!\left(\tfrac{1}{2},\, \tfrac{\sigma_\ell}{\ell_i}\right), \]
-and \(\rho_i = \tfrac{1}{2}\) when \(\sigma_\ell = 0\). This is <code>grasp_center</code>.
+and \(\rho_i = \tfrac{1}{2}\) when \(\sigma_\ell = 0\). These are the rows of <code>centers</code>.
 </li>
 
 <li>
 <strong>Orient the hand.</strong>
-The hand's alignment axis \(\hat{\mathbf{g}}\) is rotated onto the grasp axis \(\hat{\mathbf{u}}_i\) by the smallest rotation that does so, which <code>trimesh.geometry.align_vectors</code> computes and the code calls <code>align_matrix</code>,
+The hand's alignment axis \(\hat{\mathbf{g}}\) is rotated onto the grasp axis \(\hat{\mathbf{u}}_i\) by the smallest rotation that does so, which <code>trimesh.geometry.align_vectors</code> computes and the code calls <code>align</code>,
 \[ \mathbf{R}_{\text{align},i} = \operatorname{Align}(\hat{\mathbf{g}} \to \hat{\mathbf{u}}_i). \]
 That fixes one axis of the hand and leaves it free to spin about that axis. The spin is enumerated,
 \[ \theta_k = -\pi + \frac{2\pi k}{N_o - 1}, \quad k = 0,\dots,N_o - 1, \qquad \mathbf{R}_{\text{spin}}(\theta_k) = \operatorname{Rot}(\hat{\mathbf{o}},\,\theta_k), \]
-the local <code>orient_tf_rot</code>, built from <code>rotation_angles</code>.
+the array <code>spins</code>, built from <code>rotation_angles</code>. Both \(\hat{\mathbf{g}}\) and \(\hat{\mathbf{o}}\) come from the metadata unless the configuration overrides them, which only the Dex3's does, see section 7.
 </li>
 
 <li>
 <strong>Enumerate how far back the hand stands.</strong>
 The standoff \(s\) is the distance from the body origin to the pinch point along the approach. It starts at the finger offset, where the fingertips would close exactly on the centre, and grows until the hand is an object diagonal plus half the clearance further away,
 \[ s_j \in \operatorname{linspace}\!\left(f,\; f + d + \tfrac{c_f}{2},\; N_s\right), \qquad d = \lVert \text{mesh.extents} \rVert, \]
-the tensor <code>standoff_distances</code>. Here \(d\) is the diagonal of the object's bounding box, <code>mesh_diagonal</code>, about 14.7 cm for the big peg. The upper bound is only a generous limit that grows with the object. It has no derivation behind it, and the larger standoffs are mostly wasted, but they cost nothing to try.
+the tensor <code>standoff_distances</code>. Here \(d\) is the diagonal of the object's bounding box, <code>mesh_diagonal</code>, about 14.7 cm for the big peg. The upper bound is only a generous limit that grows with the object. It has no derivation behind it, and the larger standoffs are mostly wasted, but they cost nothing to try. A second sweep exists for a hand that holds the object in a pocket rather than along its approach: with <code class="var">standoffs_within_clearance</code> the standoffs run over \([f - c_f/2,\; f + c_f/2]\) instead. It is off by default, and section 7 says why the Dex3 turns it on.
 </li>
 
 <li>
 <strong>Compose the pose.</strong>
 For every combination of point, spin and standoff one transform is built,
 \[ {}^{O}\mathbf{T}_{G} = \operatorname{Trans}(\mathbf{c}_i)\;\mathbf{R}_{\text{align},i}\;\mathbf{R}_{\text{spin}}(\theta_k)\;\operatorname{Trans}(-\,s_j\,\hat{\mathbf{a}}). \]
-Read it from the right. The hand frame is first pulled back by \(s_j\) along its own approach axis, so that the point \(s_j\hat{\mathbf{a}}\) of the hand sits at the origin. It is then spun, aligned and finally carried to the grasp centre. The point of the hand that ends up at \(\mathbf{c}_i\) is therefore \(s_j\hat{\mathbf{a}}\), which for \(s_j = f\) is the pinch point of a hand whose pinch point is on the approach line. In the code this is the product <code>center_transform @ align_matrix @ orient_tf_rot @ standoff_transform</code>, and each result is appended to <code>grasp_transforms</code>.
+Read it from the right. The hand frame is first pulled back by \(s_j\) along its own approach axis, so that the point \(s_j\hat{\mathbf{a}}\) of the hand sits at the origin. It is then spun, aligned and finally carried to the grasp centre. The point of the hand that ends up at \(\mathbf{c}_i\) is therefore \(s_j\hat{\mathbf{a}}\), which for \(s_j = f\) is the pinch point of a hand whose pinch point is on the approach line. In the code the four factors are the arrays <code>centers</code>, <code>align</code>, <code>spins</code> and <code>pullbacks</code>, and two <code>einsum</code> calls combine them for every point, spin and standoff at once into <code>transforms</code>, shape \((N, 4, 4)\), ordered by point, then spin, then standoff.
 
 <div class="example">
   <p><strong>Example: the Dex1 on the big peg, from the top.</strong> Suppose the sampled point is on the top face, so the grasp centre is 6 cm below it, halfway down the peg. The standoff then decides how deep the peg sits between the fingers.</p>
@@ -519,13 +516,13 @@ Read it from the right. The hand frame is first pulled back by \(s_j\) along its
 </figure>
 
 <div class="callout before">
-<p>Keep one picture in mind. Since \(\hat{\mathbf{a}}\) and \(\hat{\mathbf{g}}\) are the same vector for these hands, aligning \(\hat{\mathbf{g}}\) with the grasp axis means the hand <em>approaches along the line through the two contact points</em>. The direction in which the fingers actually close is then whatever the spin \(\theta_k\) happens to turn it to. The aperture test of step 3 is therefore not a test of how wide the fingers must open. It is a test of how deep the object is along the approach.</p>
+<p>Keep one picture in mind. Since \(\hat{\mathbf{a}}\) and \(\hat{\mathbf{g}}\) are the same vector for the Robotiq and the Dex1, aligning \(\hat{\mathbf{g}}\) with the grasp axis means the hand <em>approaches along the line through the two contact points</em>. The direction in which the fingers actually close is then whatever the spin \(\theta_k\) happens to turn it to. The aperture test of step 3 is therefore not a test of how wide the fingers must open. It is a test of how deep the object is along the approach.</p>
 </div>
 
 <!-- ============================================================================================== -->
 <h2 id="limits">4. Three things the original sampler could not do</h2>
 
-<p>Each of these is dealt with by one of the changes that follow. The mesh size is fixed in section 5 and the fingertip offset in section 6. The top approach is not handled: the faulty test is still in the sampler, and the Dex3 avoids it by grasping the big peg from the side with its squeeze turned across the pinch line, which the companion page explains.</p>
+<p>Each of these is dealt with by one of the changes that follow. The mesh size is fixed in section 5 and the fingertip offset in section 6. The top approach is not handled: the faulty test is still in the sampler, and the Dex3 avoids it by grasping the big peg from the side with its squeeze turned across the pinch line, which section 7 explains.</p>
 
 <h3>It could not approach a tall object from above</h3>
 
@@ -591,7 +588,7 @@ Read it from the right. The hand frame is first pulled back by \(s_j\) along its
 
 \[ {}^{O}\mathbf{T}_{G} = \operatorname{Trans}(\mathbf{c}_i)\;\mathbf{R}_{\text{align},i}\;\mathbf{R}_{\text{spin}}(\theta_k)\;\operatorname{Trans}\!\big(-\,\mathbf{p}(s_j)\big). \]
 
-<p>In the code the local <code>standoff_translation</code> is now <code>-(gripper_approach_direction * standoff_dist + self.pinch_lateral_offset)</code>. Written out without the homogeneous matrices, with \(\mathbf{R} = \mathbf{R}_{\text{align}}\mathbf{R}_{\text{spin}}\), the position of the gripper body is</p>
+<p>In the code the array <code>pullbacks</code> holds <code>-(standoff * approach + self.pinch_lateral_offset)</code> for every standoff. Written out without the homogeneous matrices, with \(\mathbf{R} = \mathbf{R}_{\text{align}}\mathbf{R}_{\text{spin}}\), the position of the gripper body is</p>
 
 \[ \mathbf{t} = \mathbf{c} - \mathbf{R}\,\mathbf{p}(s), \]
 
@@ -672,7 +669,451 @@ Read it from the right. The hand frame is first pulled back by \(s_j\) along its
 </figure>
 
 <!-- ============================================================================================== -->
-<h2 id="after">7. From a candidate to a recorded grasp</h2>
+<h2 id="yawed">7. Change three: the Dex3 lays a yawed axis along the pinch line</h2>
+
+<p><span class="tag after">after</span> The first problem of section 4 is not fixed in the sampler. It is sidestepped by the Dex3, with the same code and a convention of its own. Every candidate the sampler makes comes from a pinch line through the object, and for the standing big peg the only lines that pass the test of step 3 run across the peg from side to side. A hand that approaches along such a line comes in horizontally, which the standing G1 reaches awkwardly. The Dex3 therefore does not approach along the line at all. Its configuration names an axis 45 degrees from the squeeze axis in the palm plane, \(\hat{\mathbf{g}} = \hat{\mathbf{o}} = (0.71, -0.71, 0)\), and the sampler lays that axis along the pinch line and spins the hand about it. The squeeze then crosses the line at 45 degrees, which on the square peg means across the diagonal of its cross-section, with the corners in the pocket between the thumb and the fingertips. The spin sweeps the whole hand around the line with that yaw kept, so the palm comes from above, from the side, or anywhere between, and the 45 degree tilt that the arm reaches is among the candidates. The convention was found in the inspector on the big peg.</p>
+<p>Four parameters of <code>config/g1_dex3/grasp_sampling_cfg.py</code> carry it, all of them read by the code of section 3 without a branch of their own. <code class="var">grasp_align_axis</code> and <code class="var">orientation_sample_axis</code> override the metadata's \(\hat{\mathbf{g}}\) and \(\hat{\mathbf{o}}\) with the yawed vector. <code class="var">standoffs_within_clearance</code> replaces the standoff sweep of step 6 with one over the pocket's depth. <code class="var">top_bias_fraction</code> is zero, since with the squeeze across the line every side face of a standing peg yields useful lines and a top point only yields a line down the whole height. The spin and standoff counts stay the Robotiq's. The Robotiq and Dex1 configurations set none of these, so their candidates are what they always were.</p>
+
+<h3>Where each hand sets its axes</h3>
+<p>The two axes come from the hand's metadata unless the configuration overrides them. The Dex3's metadata names its squeeze axis \(+x\) for both, so that even without the configuration a Dex3 candidate is a squeeze across the ray, and the configuration then turns that by 45 degrees. When the two axes are not parallel the event logs the angle between them at start-up, since such a spin turns \(\hat{\mathbf{g}}\) off the line, which the next subsection explains. For the three hands, with the lengths of section 2 repeated:</p>
+<table class="compact">
+<thead><tr><th>Hand</th><th style="text-transform:none">\(\hat{\mathbf{a}}\)</th><th style="text-transform:none">\(\hat{\mathbf{g}} = \hat{\mathbf{o}}\)</th><th>Set in</th><th>Convention</th><th style="text-transform:none">\(f\)</th><th style="text-transform:none">\(c_f\)</th><th style="text-transform:none">\(w\)</th><th style="text-transform:none">\(\mathbf{p}_\perp\)</th></tr></thead>
+<tbody>
+<tr><td>Robotiq 2F-85</td><td>approach</td><td>approach</td><td>metadata</td><td>approach along the line</td><td>13.45 cm</td><td>6 cm</td><td>9 cm</td><td>0</td></tr>
+<tr><td>Dex1</td><td>\(+x\), base normal</td><td>\(+x\)</td><td>metadata</td><td>approach along the line</td><td>12 cm</td><td>6.6 cm</td><td>9.48 cm</td><td>0</td></tr>
+<tr><td>Dex3</td><td>\(+y\), palm normal</td><td>\((0.71, -0.71, 0)\)</td><td><code>config/g1_dex3/grasp_sampling_cfg.py</code></td><td>squeeze across the line at 45°</td><td>7.2 cm</td><td>3 cm</td><td>9 cm</td><td>9.8 cm along \(x\)</td></tr>
+</tbody>
+</table>
+<p>Here \(f\) is <code>finger_offset</code>, \(c_f\) is <code>finger_clearance</code>, \(w\) is <code>maximum_aperture</code>, and \(\mathbf{p}_\perp\) is <code>self.pinch_lateral_offset</code> of section 6. The yawed vector is \(+x\) turned 45 degrees toward the back of the palm, \(-y\).</p>
+
+<figure>
+<svg viewBox="0 0 820 432" role="img" aria-label="The Dex3 frame with its approach, squeeze and yawed alignment axes, and the hand laid along a pinch line through the big peg">
+  <defs>
+    <marker id="arr2" markerUnits="userSpaceOnUse" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker>
+    <marker id="arr2-a" markerUnits="userSpaceOnUse" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3b82f6"/></marker>
+    <marker id="arr2-g" markerUnits="userSpaceOnUse" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e0453a"/></marker>
+    <marker id="arr2-o" markerUnits="userSpaceOnUse" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#e6b800"/></marker>
+    <marker id="arr2-mark" markerUnits="userSpaceOnUse" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--mark)"/></marker>
+    <marker id="arr2-ray" markerUnits="userSpaceOnUse" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--ray)"/></marker>
+  </defs>
+  <g class="svg-text">
+    <!-- ============================== left: the hand frame, G at (120, 244) ============================== -->
+    <text x="20" y="24" font-weight="600">The Dex3 frame G</text>
+    <text x="160" y="24" class="svg-small">to scale, 15 px per centimetre</text>
+  <g transform="translate(-360,0)">
+    <rect x="448" y="40" width="32" height="215" rx="8" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1.5"/>
+    <text x="464" y="150" text-anchor="middle" class="svg-small" fill="#fff" opacity="0.9" transform="rotate(-90 464 150)">palm</text>
+    <path d="M480 52 L555 30" fill="none" stroke="var(--hand)" stroke-width="10" stroke-linecap="round"/>
+    <path d="M555 30 L607 30" fill="none" stroke="var(--hand-edge)" stroke-width="10" stroke-linecap="round"/>
+    <path d="M480 70 L555 48" fill="none" stroke="var(--hand)" stroke-width="10" stroke-linecap="round" opacity="0.6"/>
+    <path d="M555 48 L607 48" fill="none" stroke="var(--hand-edge)" stroke-width="10" stroke-linecap="round" opacity="0.6"/>
+    <path d="M480 226 L555 165" fill="none" stroke="var(--hand)" stroke-width="11" stroke-linecap="round"/>
+    <path d="M555 165 L607 165" fill="none" stroke="var(--hand-edge)" stroke-width="11" stroke-linecap="round"/>
+    <line x1="480" y1="244" x2="516" y2="244" stroke="var(--ink)" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="500" y="262" class="svg-math">y<tspan dy="4" font-size="75%">G</tspan><tspan dy="-4"></tspan></text>
+    <line x1="480" y1="244" x2="480" y2="208" stroke="var(--ink)" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="486" y="206" class="svg-math">x<tspan dy="4" font-size="75%">G</tspan><tspan dy="-4"></tspan></text>
+    <circle cx="480" cy="244" r="5.5" fill="var(--bg)" stroke="var(--ink)" stroke-width="1.4"/>
+    <line x1="476" y1="240" x2="484" y2="248" stroke="var(--ink)" stroke-width="1.3"/>
+    <line x1="484" y1="240" x2="476" y2="248" stroke="var(--ink)" stroke-width="1.3"/>
+    <text x="440" y="266" class="svg-math">z<tspan dy="4" font-size="75%">G</tspan><tspan dy="-4"></tspan></text>
+  </g>
+    <!-- approach along +y, blue -->
+    <line x1="120" y1="244" x2="246" y2="244" stroke="#3b82f6" stroke-width="2.5" marker-end="url(#arr2-a)"/>
+    <text x="140" y="236" class="svg-math" style="fill:#3b82f6">â = +y<tspan dy="4" font-size="75%">G</tspan><tspan dy="-4"></tspan></text>
+    <text x="170" y="262" class="svg-small" style="fill:#3b82f6">the approach</text>
+    <!-- the squeeze along +x, dashed red: the physical axis, not the aligned one any more -->
+    <line x1="120" y1="244" x2="120" y2="140" stroke="#e0453a" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#arr2-g)"/>
+    <text x="128" y="134" class="svg-math" style="fill:#e0453a">x<tspan dy="4" font-size="75%">G</tspan><tspan dy="-4"></tspan>, the squeeze</text>
+    <!-- the aligned and spin axis, 45 degrees from x toward -y: up and to the left, red with yellow over it -->
+    <line x1="120" y1="244" x2="35" y2="159" stroke="#e0453a" stroke-width="2.5" marker-end="url(#arr2-g)"/>
+    <line x1="120" y1="244" x2="62" y2="186" stroke="#e6b800" stroke-width="5" marker-end="url(#arr2-o)"/>
+    <text x="44" y="150" class="svg-math" style="fill:#e0453a">ĝ = ô</text>
+    <path d="M 104 212 a 5 5 0 0 1 2 -8" fill="none" stroke="var(--muted)" stroke-width="1"/>
+    <text x="96" y="200" class="svg-small">45°</text>
+    <!-- spin about the aligned axis -->
+    <g transform="rotate(-45 78 202)"><path d="M 64 202 a 14 6 0 1 0 28 0" fill="none" stroke="var(--mark)" stroke-width="1.5" marker-end="url(#arr2-mark)"/></g>
+    <text x="54" y="222" class="svg-math">θ</text>
+    <text x="20" y="290" class="svg-small">G is the palm link origin, at the wrist end of</text>
+    <text x="20" y="304" class="svg-small">the palm. z<tspan dy="3" font-size="75%">G</tspan><tspan dy="-3"></tspan> points into the page.</text>
+    <!-- the pinch point and its decomposition -->
+    <circle cx="228" cy="244" r="3" fill="var(--mark)"/>
+    <line x1="228" y1="244" x2="228" y2="102" stroke="var(--mark)" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <circle cx="228" cy="97" r="5" fill="var(--mark)"/>
+    <text x="236" y="92" class="svg-math">p</text>
+    <line x1="120" y1="250" x2="120" y2="334" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <line x1="228" y1="250" x2="228" y2="334" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <path d="M120 332 L228 332" stroke="var(--muted)" stroke-width="1" marker-start="url(#arr2)" marker-end="url(#arr2)"/>
+    <text x="174" y="350" text-anchor="middle" class="svg-math">f = 0.072</text>
+    <line x1="234" y1="97" x2="276" y2="97" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <line x1="252" y1="244" x2="276" y2="244" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <path d="M272 244 L272 97" stroke="var(--muted)" stroke-width="1" marker-start="url(#arr2)" marker-end="url(#arr2)"/>
+    <text x="280" y="150" class="svg-math">p⊥ = 0.098</text>
+    <line x1="254" y1="30" x2="346" y2="30" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <line x1="254" y1="165" x2="346" y2="165" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <path d="M342 30 L342 165" stroke="var(--muted)" stroke-width="1" marker-start="url(#arr2)" marker-end="url(#arr2)"/>
+    <text x="336" y="112" text-anchor="end" class="svg-math">w = 0.09</text>
+    <text x="280" y="196" class="svg-small">p = (0.098, 0.072, 0)</text>
+    <text x="280" y="211" class="svg-small">= f â + p⊥</text>
+    <text x="20" y="376" class="svg-small">ĝ = ô = (0.71, −0.71, 0): 45° from the squeeze x<tspan dy="3" font-size="75%">G</tspan><tspan dy="-3"></tspan> toward</text>
+    <text x="20" y="390" class="svg-small">the back of the palm, −y<tspan dy="3" font-size="75%">G</tspan><tspan dy="-3"></tspan>. This axis goes on the pinch line and</text>
+    <text x="20" y="404" class="svg-small">the hand spins about it. The squeeze then crosses the line at 45°.</text>
+
+    <!-- ============================== right: laid along a pinch line, c at (575, 185) ============================== -->
+    <text x="560" y="24" font-weight="600">ĝ laid along a pinch line û</text>
+    <text x="560" y="42" class="svg-small">θ = 0 and s = f, the worked example below</text>
+    <rect x="530" y="140" width="90" height="90" fill="var(--object)" stroke="var(--object-edge)" stroke-width="1.5"/>
+    <!-- the squeeze line across the diagonal, drawn under the hand -->
+    <line x1="512" y1="248" x2="638" y2="122" stroke="#e0453a" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <g transform="rotate(45 575 185) translate(-13,88)">
+    <rect x="448" y="40" width="32" height="215" rx="8" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1.5"/>
+    <text x="464" y="150" text-anchor="middle" class="svg-small" fill="#fff" opacity="0.9" transform="rotate(-90 464 150)">palm</text>
+    <path d="M480 52 L555 30" fill="none" stroke="var(--hand)" stroke-width="10" stroke-linecap="round"/>
+    <path d="M555 30 L607 30" fill="none" stroke="var(--hand-edge)" stroke-width="10" stroke-linecap="round"/>
+    <path d="M480 70 L555 48" fill="none" stroke="var(--hand)" stroke-width="10" stroke-linecap="round" opacity="0.6"/>
+    <path d="M555 48 L607 48" fill="none" stroke="var(--hand-edge)" stroke-width="10" stroke-linecap="round" opacity="0.6"/>
+    <path d="M480 226 L555 165" fill="none" stroke="var(--hand)" stroke-width="11" stroke-linecap="round"/>
+    <path d="M555 165 L607 165" fill="none" stroke="var(--hand-edge)" stroke-width="11" stroke-linecap="round"/>
+    <line x1="480" y1="244" x2="516" y2="244" stroke="var(--ink)" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="500" y="262" class="svg-math">y<tspan dy="4" font-size="75%">G</tspan><tspan dy="-4"></tspan></text>
+    <line x1="480" y1="244" x2="480" y2="208" stroke="var(--ink)" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="486" y="206" class="svg-math">x<tspan dy="4" font-size="75%">G</tspan><tspan dy="-4"></tspan></text>
+    <circle cx="480" cy="244" r="5.5" fill="var(--bg)" stroke="var(--ink)" stroke-width="1.4"/>
+    <line x1="476" y1="240" x2="484" y2="248" stroke="var(--ink)" stroke-width="1.3"/>
+    <line x1="484" y1="240" x2="476" y2="248" stroke="var(--ink)" stroke-width="1.3"/>
+    <text x="440" y="266" class="svg-math">z<tspan dy="4" font-size="75%">G</tspan><tspan dy="-4"></tspan></text>
+  </g>
+    <!-- the pinch line: from x on the -x face up through c to y on the +x face -->
+    <line x1="575" y1="230" x2="575" y2="140" stroke="var(--ray)" stroke-width="2" marker-end="url(#arr2-ray)"/>
+    <circle cx="575" cy="230" r="5" fill="#3fbf5a" stroke="var(--ink)" stroke-width="0.8"/>
+    <circle cx="575" cy="140" r="5" fill="#d64fd6" stroke="var(--ink)" stroke-width="0.8"/>
+    <circle cx="575" cy="185" r="5" fill="var(--mark)"/>
+    <text x="581" y="213" class="svg-math" style="fill:var(--ray)">û</text>
+    <text x="655" y="136" class="svg-math">y</text><text x="665" y="136" class="svg-small">, the opposite point,</text>
+    <text x="655" y="150" class="svg-small">on the +x face</text>
+    <text x="655" y="188" class="svg-math">c = p</text><text x="693" y="188" class="svg-small">, the centre, with</text>
+    <text x="655" y="202" class="svg-small">the pinch point on it</text>
+    <text x="655" y="220" class="svg-small" style="fill:var(--ray)">ℓ = 6 cm ≤ w = 9 cm</text>
+    <text x="655" y="244" class="svg-math">x</text><text x="665" y="244" class="svg-small">, the sampled point,</text>
+    <text x="655" y="258" class="svg-small">on the −x face</text>
+    <text x="655" y="282" class="svg-small" style="fill:#e0453a">dashed: the squeeze x<tspan dy="3" font-size="75%">G</tspan><tspan dy="-3"></tspan>,</text>
+    <text x="655" y="296" class="svg-small" style="fill:#e0453a">across the diagonal,</text>
+    <text x="655" y="310" class="svg-small" style="fill:#e0453a">8.5 cm corner to corner</text>
+    <!-- the aligned axis at G = (395, 213), straight up, parallel to the pinch line -->
+    <line x1="395" y1="213" x2="395" y2="153" stroke="#e0453a" stroke-width="2.5" marker-end="url(#arr2-g)"/>
+    <line x1="395" y1="213" x2="395" y2="177" stroke="#e6b800" stroke-width="5" marker-end="url(#arr2-o)"/>
+    <text x="392" y="146" text-anchor="end" class="svg-math" style="fill:#e0453a">ĝ ∥ û</text>
+    <line x1="395" y1="213" x2="458" y2="276" stroke="#3b82f6" stroke-width="2.5" marker-end="url(#arr2-a)"/>
+    <text x="462" y="292" class="svg-math" style="fill:#3b82f6">â</text>
+    <!-- the object frame -->
+    <line x1="470" y1="396" x2="506" y2="396" stroke="var(--ink)" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="490" y="414" class="svg-math">y<tspan dy="4" font-size="75%">O</tspan><tspan dy="-4"></tspan></text>
+    <line x1="470" y1="396" x2="470" y2="360" stroke="var(--ink)" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="476" y="358" class="svg-math">x<tspan dy="4" font-size="75%">O</tspan><tspan dy="-4"></tspan></text>
+    <circle cx="470" cy="396" r="5.5" fill="var(--bg)" stroke="var(--ink)" stroke-width="1.4"/>
+    <line x1="466" y1="392" x2="474" y2="400" stroke="var(--ink)" stroke-width="1.3"/>
+    <line x1="474" y1="392" x2="466" y2="400" stroke="var(--ink)" stroke-width="1.3"/>
+    <text x="432" y="418" class="svg-math">z<tspan dy="4" font-size="75%">O</tspan><tspan dy="-4"></tspan></text>
+    <text x="520" y="342" class="svg-small">O, the object frame: origin at the peg centre,</text>
+    <text x="520" y="356" class="svg-small">under c in this view; z<tspan dy="3" font-size="75%">O</tspan><tspan dy="-3"></tspan> up the peg, into the page.</text>
+    <text x="520" y="370" class="svg-small">With ĝ on û the hand is yawed 45° about z: thumb at</text>
+    <text x="520" y="384" class="svg-small">the (−x, −y) corner, fingertips at (+x, +y), the palm</text>
+    <text x="520" y="398" class="svg-small">facing +y and −x. Spinning about û gives the clock.</text>
+  </g>
+</svg>
+<figcaption>Left: the Dex3 palm link frame as section 2 draws it, seen along \(z_G\). The approach \(\hat{\mathbf{a}}\) is \(+y_G\), the squeeze is \(+x_G\) (dashed), and the axis that goes on the pinch line, \(\hat{\mathbf{g}} = \hat{\mathbf{o}}\), sits 45 degrees from the squeeze toward \(-y_G\). The spin \(\theta\) turns the hand about that axis. Right: the same hand after step 5 of section 3 on the pinch line of the worked example below. With \(\hat{\mathbf{g}}\) on the line the whole hand is yawed 45 degrees about \(z\), so the squeeze runs corner to corner across the peg's cross-section while the pinch point \(\mathbf{p}\) sits on the centre \(\mathbf{c}\).</figcaption>
+</figure>
+
+<h3>The spin is a rotation about the hand's own axis</h3>
+<p>Look at where \(\mathbf{R}_{\text{spin}}\) stands in the product: to the right of the alignment. A rotation on the right of a frame's rotation acts in that frame's own coordinates. Hence \(\mathbf{R}_{\text{spin}}(\theta)\) turns the hand about <em>its own</em> \(\hat{\mathbf{o}}\). When \(\hat{\mathbf{o}} = \hat{\mathbf{g}}\), the alignment has just put that axis on the pinch line, so the same rotation can be written on the other side,</p>
+\[ \mathbf{R}_{\text{align}}\,\operatorname{Rot}(\hat{\mathbf{g}}, \theta) \;=\; \operatorname{Rot}(\hat{\mathbf{u}}, \theta)\,\mathbf{R}_{\text{align}}, \]
+<p>a turn about the pinch line in the object frame by the same angle. The two descriptions are the same motion: "the hand rotated by \(\theta\) about its own \(\hat{\mathbf{g}}\)" and "the whole hand swung by \(\theta\) around the line through the object" are one candidate. For the Dex3 the squeeze axis is 45 degrees from \(\hat{\mathbf{g}}\), so it rides around the pinch line on a cone of half-angle 45 degrees, always crossing the line at the centre.</p>
+<p>If \(\hat{\mathbf{o}}\) were a different axis, say the squeeze axis itself, the spin would keep that axis fixed in the world and swing \(\hat{\mathbf{g}}\) off the pinch line. That is a legitimate family too, a roll of the hand about its squeeze, but a different one, and it is not what the Dex3 configuration does. The event logs the angle between the two axes whenever they differ, so the choice is never silent.</p>
+
+<div class="callout">
+<p>The hand-tuned grasp was found by aligning the palm normal with \(-z\) and rolling the hand 45 degrees about the object's \(x\). In that pose the hand's \(x\) coincided with the object's \(x\), so the roll was about the hand's own squeeze axis. The yaw and the roll are told apart below.</p>
+</div>
+
+
+<h3>Worked example: a side point of the big peg</h3>
+<p>Take the big peg standing on the table, 6 by 6 by 12 cm with its origin at its centre, and a surface point on its \(-x\) face at mid height, \(\mathbf{x} = (-3, 0, 0)\) cm with normal \(\hat{\mathbf{n}} = (-1, 0, 0)\).</p>
+<table class="compact">
+<thead><tr><th>Step</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td>3, the ray</td><td>cast along \(+x\), hits the \(+x\) face at \(\mathbf{y} = (3, 0, 0)\) cm, so \(\ell = 6\) cm \(\le w = 9\) cm and \(\hat{\mathbf{u}} = (1, 0, 0)\)</td></tr>
+<tr><td>4, the centre</td><td>\(\mathbf{c} = (0, 0, 0)\), the peg's axis at mid height</td></tr>
+<tr><td>5, the alignment</td><td>\(\hat{\mathbf{g}} = (0.71, -0.71, 0)\) is turned onto \(+x\) by \(\operatorname{Rot}(z, 45^\circ)\): the hand's \(x\) becomes \((0.71, 0.71, 0)\), across the peg's diagonal, and its palm normal \((-0.71, 0.71, 0)\)</td></tr>
+<tr><td>6, the spin</td><td>\(\mathbf{R} = \operatorname{Rot}(x, \theta)\,\operatorname{Rot}(z, 45^\circ)\): the yaw is kept and the whole hand turns about the object's \(x\), the pinch line</td></tr>
+<tr><td>7, the body origin</td><td>\(\mathbf{c} - \mathbf{R}(9.8, s, 0)\) cm: at \(\theta = 0\) and \(s = f\) that is \((-1.8, -12.0, 0)\) cm, 12 cm to the \(-y\) side of the peg and almost level with the centre</td></tr>
+</tbody>
+</table>
+<p>So with this ray the spins are positions of the whole hand around the pinch line, the object's \(x\) axis here, each with the squeeze across the diagonal. Looking along that axis they form a clock, drawn here at 45 degree steps for legibility, where the sixteen angles of step 5 give fifteen spins 24 degrees apart:</p>
+
+<figure>
+<svg viewBox="0 0 820 430" role="img" aria-label="The eight spin angles seen along the pinch line of the big peg">
+  <defs>
+    <marker id="arrow-in" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#3b82f6"/></marker>
+    <marker id="arrow-in-grey" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="var(--muted)"/></marker>
+  </defs>
+  <!-- view along +x: y to the right, z up; 12 px per cm; centre c at (380, 205); palms at 160 px from c -->
+  <!-- table at z = -6 cm -->
+  <rect x="120" y="277" width="520" height="14" fill="var(--rule)"/>
+  <text x="128" y="306" class="svg-small">table top, z = −6 cm</text>
+  <!-- peg cross-section, 6 x 6 cm -->
+  <rect x="344" y="169" width="72" height="72" fill="var(--object)" stroke="var(--object-edge)" stroke-width="2"/>
+  <text x="380" y="186" text-anchor="middle" class="svg-small">peg, 6 × 6 cm</text>
+  <!-- the pinch line, end on, at the centre -->
+  <circle cx="380" cy="205" r="9" fill="none" stroke="var(--ray)" stroke-width="2"/>
+  <circle cx="380" cy="205" r="2.5" fill="var(--ray)"/>
+  <text x="380" y="262" text-anchor="middle" class="svg-small" style="fill:var(--ray)">pinch line, into the page, c at its middle</text>
+  <!-- palm positions: palm normal a_O = (0, cos t, sin t) points from the palm toward c, so the palm sits at c - 160 a_O.
+       On the page y is to the right and z is up, so a rotate() by -t degrees about c places the group for angle t. -->
+  <g transform="translate(380,205) rotate(0)">
+    <rect x="-160" y="-12" width="10" height="24" rx="2" fill="var(--hand)" stroke="var(--hand-edge)"/>
+    <line x1="-150" y1="0" x2="-100" y2="0" stroke="#3b82f6" stroke-width="3" marker-end="url(#arrow-in)"/>
+  </g>
+  <text x="206" y="209" text-anchor="end" class="svg-text">θ = 0°, beside</text>
+  <g transform="translate(380,205) rotate(45)">
+    <rect x="-160" y="-12" width="10" height="24" rx="2" fill="var(--after)" stroke="var(--hand-edge)"/>
+    <line x1="-150" y1="0" x2="-100" y2="0" stroke="#3b82f6" stroke-width="3" marker-end="url(#arrow-in)"/>
+  </g>
+  <text x="252" y="80" text-anchor="end" class="svg-text" style="fill:var(--after); font-weight:600">θ = −45°, palm 45° from above</text>
+  <g transform="translate(380,205) rotate(90)">
+    <rect x="-160" y="-12" width="10" height="24" rx="2" fill="var(--hand)" stroke="var(--hand-edge)"/>
+    <line x1="-150" y1="0" x2="-100" y2="0" stroke="#3b82f6" stroke-width="3" marker-end="url(#arrow-in)"/>
+  </g>
+  <text x="380" y="24" text-anchor="middle" class="svg-text">θ = −90°, straight from above</text>
+  <g transform="translate(380,205) rotate(135)">
+    <rect x="-160" y="-12" width="10" height="24" rx="2" fill="var(--hand)" stroke="var(--hand-edge)"/>
+    <line x1="-150" y1="0" x2="-100" y2="0" stroke="#3b82f6" stroke-width="3" marker-end="url(#arrow-in)"/>
+  </g>
+  <text x="508" y="80" class="svg-text">θ = −135°, its mirror image</text>
+  <g transform="translate(380,205) rotate(180)">
+    <rect x="-160" y="-12" width="10" height="24" rx="2" fill="var(--hand)" stroke="var(--hand-edge)"/>
+    <line x1="-150" y1="0" x2="-100" y2="0" stroke="#3b82f6" stroke-width="3" marker-end="url(#arrow-in)"/>
+  </g>
+  <text x="554" y="209" class="svg-text">θ = ±180°, beside, other side</text>
+  <!-- palm facing up: hand under the table -->
+  <g opacity="0.45">
+    <g transform="translate(380,205) rotate(-45)">
+      <rect x="-160" y="-12" width="10" height="24" rx="2" fill="var(--muted)" stroke="var(--hand-edge)"/>
+      <line x1="-150" y1="0" x2="-100" y2="0" stroke="var(--muted)" stroke-width="3" marker-end="url(#arrow-in-grey)"/>
+    </g>
+    <g transform="translate(380,205) rotate(-90)">
+      <rect x="-160" y="-12" width="10" height="24" rx="2" fill="var(--muted)" stroke="var(--hand-edge)"/>
+      <line x1="-150" y1="0" x2="-100" y2="0" stroke="var(--muted)" stroke-width="3" marker-end="url(#arrow-in-grey)"/>
+    </g>
+    <g transform="translate(380,205) rotate(-135)">
+      <rect x="-160" y="-12" width="10" height="24" rx="2" fill="var(--muted)" stroke="var(--hand-edge)"/>
+      <line x1="-150" y1="0" x2="-100" y2="0" stroke="var(--muted)" stroke-width="3" marker-end="url(#arrow-in-grey)"/>
+    </g>
+  </g>
+  <text x="380" y="398" text-anchor="middle" class="svg-small">θ = +45°, +90°, +135°: palm facing up, hand under the table, removed by the physics test</text>
+  <text x="380" y="422" text-anchor="middle" class="svg-small">looking along the pinch line, the object's x axis; y to the right, z up, 12 px per centimetre</text>
+  <!-- legend -->
+  <g transform="translate(640, 300)">
+    <rect x="0" y="0" width="170" height="92" rx="8" fill="var(--surface)" stroke="var(--rule)"/>
+    <line x1="12" y1="22" x2="50" y2="22" stroke="#3b82f6" stroke-width="3" marker-end="url(#arrow-in)"/><text x="60" y="26" class="svg-small">palm normal a</text>
+    <rect x="26" y="40" width="10" height="20" rx="2" fill="var(--hand)" stroke="var(--hand-edge)"/><text x="60" y="54" class="svg-small">palm, edge on</text>
+    <circle cx="31" cy="76" r="6" fill="none" stroke="var(--ray)" stroke-width="2"/><text x="60" y="80" class="svg-small">pinch line, end on</text>
+  </g>
+</svg>
+<figcaption>Eight of the spins for the ray from the \(-x\) face, 45 degrees apart, seen along the pinch line. Each blue arrow is the palm normal, which in this view is its projection, since the yaw tilts it 45 degrees toward the viewer. The palm itself sits 12 cm from the centre and \(s\) back along its own normal. Negative angles put the palm above the peg, positive ones below it.</figcaption>
+</figure>
+
+<p>The sign convention in this table belongs to this ray direction. The opposite surface point, on the \(+x\) face, gives the ray \(\hat{\mathbf{u}} = (-1, 0, 0)\), for which the alignment is a different rotation, and that family is the mirror image: the squeeze across the other diagonal, with the same eight palm positions around the line, only numbered differently. Both families are in the candidate set, because both faces get sampled, and the same holds for the \(\pm y\) faces. When in doubt about which angle is which, the inspector shows it.</p>
+
+
+<h3>Yaw, roll, and the hand-tuned grasp</h3>
+<p>Two angles describe the Dex3's pose relative to a pinch line, and it helps to keep them apart.</p>
+<ul>
+<li><strong>The yaw</strong> is the angle between the squeeze axis and the pinch line, in the palm plane. It is fixed by \(\hat{\mathbf{g}}\): 45 degrees in the configuration, which on the square peg takes the diagonal, 8.5 cm, instead of the 6 cm face to face. This is what makes the hold firm, since the peg's corners sit in the pocket between the thumb and the two fingertips instead of its flat faces. It was found by inspection and is the one number worth tuning.</li>
+<li><strong>The roll</strong> is the spin \(\theta\), the position of the palm around the pinch line. Negative angles bring the palm in from above, \(\theta = -45^\circ\) being the tilt that the standing arm can reach. The grid of sixteen angles brackets it with \(-48^\circ\) and \(-24^\circ\).</li>
+</ul>
+<p>The hand-tuned grasp had roll \(-45^\circ\) and yaw zero: its squeeze was across the peg's faces. The sampler's candidates near \(\theta = -45^\circ\) are therefore the same tilt with the squeeze turned onto the diagonal, not the identical pose. If you ever want yaw zero back, set both axes to \((1, 0, 0)\) in the configuration and the squeeze lies on the line again.</p>
+
+
+<h3>What the width test means now</h3>
+<p>Step 3 of section 3 compares the pinch line's length with the aperture. For the Robotiq and the Dex1, whose approach is on the line, \(\ell\) is the depth of the object in front of the palm, and the test is kept as it was on purpose. For the Dex3 the line is the face-to-face width of the object, while the fingers actually span the width at 45 degrees to it, \(\sqrt{2}\) longer on a square section. The test is therefore optimistic by that factor: 6 cm passes, the real 8.5 cm would pass too, but an 8 cm square would pass the test and not fit. The physics test after the hand closes catches such cases, so the width test is a cheap filter rather than the last word.</p>
+
+<figure>
+<svg viewBox="0 0 820 260" role="img" aria-label="A top ray and a side ray through the standing big peg, against the Dex3 aperture">
+  <text x="410" y="22" text-anchor="middle" class="svg-small">the standing big peg, 6 × 6 × 12 cm, 10 px per centimetre, Dex3 aperture 9 cm</text>
+  <!-- left: top ray -->
+  <g transform="translate(150, 40)">
+    <rect x="70" y="40" width="60" height="120" fill="var(--object)" stroke="var(--object-edge)" stroke-width="2"/>
+    <circle cx="100" cy="40" r="5" fill="#3fbf5a"/>
+    <line x1="100" y1="40" x2="100" y2="160" stroke="var(--ray)" stroke-width="3"/>
+    <circle cx="100" cy="160" r="5" fill="#d64fd6"/>
+    <text x="150" y="104" class="svg-text">ℓ = 12 cm &gt; 9 cm</text>
+    <text x="150" y="124" class="svg-small" style="fill:var(--before)">rejected: no finger pair spans it</text>
+    <text x="100" y="200" text-anchor="middle" class="svg-small">top-centre point, ray straight down</text>
+  </g>
+  <!-- right: side ray -->
+  <g transform="translate(480, 40)">
+    <rect x="70" y="40" width="60" height="120" fill="var(--object)" stroke="var(--object-edge)" stroke-width="2"/>
+    <circle cx="70" cy="100" r="5" fill="#3fbf5a"/>
+    <line x1="70" y1="100" x2="130" y2="100" stroke="var(--ray)" stroke-width="3"/>
+    <circle cx="130" cy="100" r="5" fill="#d64fd6"/>
+    <circle cx="100" cy="100" r="3" fill="var(--ink)"/>
+    <text x="150" y="96" class="svg-text">ℓ = 6 cm ≤ 9 cm</text>
+    <text x="150" y="116" class="svg-small" style="fill:var(--after)">kept: a pinch across the peg</text>
+    <text x="100" y="200" text-anchor="middle" class="svg-small">side point at any height, ray across</text>
+  </g>
+</svg>
+<figcaption>The top-centre point of the big peg is rejected because its 12 cm line exceeds the aperture, and every side point is kept.</figcaption>
+</figure>
+
+
+<h3>The standoff sweep</h3>
+<p>The standoff \(s\) is the distance from the body origin to the point placed on the centre, along the approach. At \(s = f\) the pinch point is on the centre. The legacy sweep, which the Robotiq and Dex1 keep, runs from \(f\) outward by an object diagonal plus half the clearance, and suits a hand that approaches along the pinch line and can hold the object anywhere along it. For the Dex3 the approach is across the line, so pulling back moves the centre out of the pocket, and what matters is only how deep in the pocket the object sits. With <code>standoffs_within_clearance</code> the sweep runs over the finger clearance centred on \(f\), that is 5.7 to 8.7 cm from the palm for the Dex3, against a pocket that holds the centre between 5.0 and 8.5 cm. With the Robotiq configuration's 32 standoffs they sit about a millimetre apart.</p>
+
+
+<h3>The same pinch line for the Dex1</h3>
+<p>The Dex1 and the Robotiq run through exactly the same seven steps of section 3, and the contrast with the Dex3 is easiest to see on the same pinch line. For them the axis on the line is the approach, so the hand comes in <em>along</em> the ray, from the sampled point's side, with its pinch point at the centre inside the object. The fingers, which slide along \(\pm y_G\), then close <em>across</em> the ray, and the spin \(\theta\) is a wrist roll that chooses in which direction across the object they close. For the Dex3 the hand sits <em>beside</em> the ray with the squeeze crossing it, and the spin chooses which side the palm comes from. The figure draws the Dex1 on the pinch line of the worked example above, in the same view as the Dex3 figure.</p>
+
+<figure>
+<svg viewBox="0 0 820 432" role="img" aria-label="The Dex1 frame with its single axis, and the hand laid along the same pinch line through the big peg, approaching along the line with the fingers closing across it">
+  <g class="svg-text">
+    <!-- ============================== left: the Dex1 frame, G at (70, 230), seen along z_G ============================== -->
+    <text x="20" y="24" font-weight="600">The Dex1 frame G</text>
+    <text x="160" y="24" class="svg-small">to scale, 15 px per centimetre, seen along z<tspan dy="3" font-size="75%">G</tspan><tspan dy="-3"></tspan></text>
+    <!-- base: 5.4 cm from the body origin to the finger root -->
+    <rect x="70" y="153" width="81" height="154" rx="6" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1.5"/>
+    <text x="110" y="300" text-anchor="middle" class="svg-small" fill="#fff" opacity="0.9">base</text>
+    <!-- finger stems and pads: the pads span 7.7 to 14.3 cm from G, inner faces 4.74 cm from the axis when open -->
+    <rect x="151" y="147" width="34" height="12" rx="2" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1"/>
+    <rect x="151" y="301" width="34" height="12" rx="2" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1"/>
+    <rect x="185" y="147" width="99" height="12" rx="3" fill="var(--hand-edge)" stroke="var(--hand-edge)" stroke-width="1.2"/>
+    <rect x="185" y="301" width="99" height="12" rx="3" fill="var(--hand-edge)" stroke="var(--hand-edge)" stroke-width="1.2"/>
+    <!-- c_f: the pads -->
+    <line x1="185" y1="143" x2="185" y2="118" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <line x1="284" y1="143" x2="284" y2="118" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <path d="M185 120 L284 120" stroke="var(--muted)" stroke-width="1" marker-start="url(#arr2)" marker-end="url(#arr2)"/>
+    <text x="234" y="112" text-anchor="middle" class="svg-math">c<tspan dy="4" font-size="75%">f</tspan><tspan dy="-4"></tspan> = 0.066</text>
+    <!-- the one axis: approach, alignment and spin all +x_G -->
+    <line x1="70" y1="230" x2="330" y2="230" stroke="#3b82f6" stroke-width="2.5" marker-end="url(#arr2-a)"/>
+    <line x1="70" y1="230" x2="300" y2="230" stroke="#e0453a" stroke-width="2.5" marker-end="url(#arr2-g)"/>
+    <line x1="70" y1="230" x2="270" y2="230" stroke="#e6b800" stroke-width="5" marker-end="url(#arr2-o)"/>
+    <text x="150" y="220" class="svg-math" style="fill:#3b82f6">â = ĝ = ô = +x<tspan dy="4" font-size="75%">G</tspan><tspan dy="-4"></tspan></text>
+    <!-- spin about the axis -->
+    <path d="M 345 212 a 7 18 0 1 0 0 36" fill="none" stroke="var(--mark)" stroke-width="1.5" marker-end="url(#arr2-mark)"/>
+    <text x="357" y="258" class="svg-math">θ</text>
+    <text x="357" y="274" class="svg-small">a roll about x<tspan dy="3" font-size="75%">G</tspan><tspan dy="-3"></tspan></text>
+    <!-- origin triad: x right, y up, z out of the page -->
+    <line x1="70" y1="230" x2="106" y2="230" stroke="var(--ink)" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="92" y="248" class="svg-math">x<tspan dy="4" font-size="75%">G</tspan><tspan dy="-4"></tspan></text>
+    <line x1="70" y1="230" x2="70" y2="194" stroke="var(--ink)" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="50" y="190" class="svg-math">y<tspan dy="4" font-size="75%">G</tspan><tspan dy="-4"></tspan></text>
+    <circle cx="70" cy="230" r="5.5" fill="var(--bg)" stroke="var(--ink)" stroke-width="1.4"/>
+    <circle cx="70" cy="230" r="1.8" fill="var(--ink)"/>
+    <text x="28" y="234" class="svg-math">z<tspan dy="4" font-size="75%">G</tspan><tspan dy="-4"></tspan></text>
+    <!-- pinch point on the axis -->
+    <circle cx="250" cy="230" r="5" fill="var(--mark)"/>
+    <text x="218" y="262" class="svg-math">p = f â, so p⊥ = 0</text>
+    <!-- f dimension -->
+    <line x1="70" y1="312" x2="70" y2="344" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <line x1="250" y1="236" x2="250" y2="344" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <path d="M70 342 L250 342" stroke="var(--muted)" stroke-width="1" marker-start="url(#arr2)" marker-end="url(#arr2)"/>
+    <text x="160" y="360" text-anchor="middle" class="svg-math">f = 0.12</text>
+    <!-- w dimension between the open pads -->
+    <line x1="286" y1="159" x2="386" y2="159" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <line x1="286" y1="301" x2="386" y2="301" stroke="var(--rule)" stroke-dasharray="3 3"/>
+    <path d="M382 159 L382 301" stroke="var(--muted)" stroke-width="1" marker-start="url(#arr2)" marker-end="url(#arr2)"/>
+    <text x="388" y="200" class="svg-math">w = 0.0948</text>
+    <text x="20" y="384" class="svg-small">G is the body origin at the back of the base. The fingers slide</text>
+    <text x="20" y="398" class="svg-small">along ±y<tspan dy="3" font-size="75%">G</tspan><tspan dy="-3"></tspan>, so they close across the approach. Every axis the</text>
+    <text x="20" y="412" class="svg-small">sampler uses is x<tspan dy="3" font-size="75%">G</tspan><tspan dy="-3"></tspan>: the hand comes in along the pinch line and</text>
+    <text x="20" y="426" class="svg-small">spins about it. The Robotiq has the same layout.</text>
+
+    <!-- ============================== right: along the pinch line, c at (560, 205), x_O up, y_O right ============================== -->
+    <text x="440" y="24" font-weight="600">â laid along the same pinch line û</text>
+    <text x="440" y="40" class="svg-small">θ = 0 and s = f, the worked example above, the Dex3's view</text>
+    <text x="440" y="62" class="svg-small">The hand comes in along û from the sampled point's side,</text>
+    <text x="440" y="76" class="svg-small">pinch point on c inside the peg, pads straddling the peg.</text>
+    <text x="440" y="90" class="svg-small">θ rolls the pads about û: 0 closes along y<tspan dy="3" font-size="75%">O</tspan><tspan dy="-3"></tspan> (6 cm, fits),</text>
+    <text x="440" y="104" class="svg-small">90° along z<tspan dy="3" font-size="75%">O</tspan><tspan dy="-3"></tspan> (12 cm, too wide). Larger s backs out along û.</text>
+    <!-- the hand, approaching upward: base, stems, pads -->
+    <rect x="477" y="304" width="166" height="81" rx="6" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1.5"/>
+    <text x="560" y="372" text-anchor="middle" class="svg-small" fill="#fff" opacity="0.9">base</text>
+    <rect x="477" y="270" width="12" height="34" rx="2" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1"/>
+    <rect x="631" y="270" width="12" height="34" rx="2" fill="var(--hand)" stroke="var(--hand-edge)" stroke-width="1"/>
+    <rect x="477" y="171" width="12" height="99" rx="3" fill="var(--hand-edge)" stroke="var(--hand-edge)" stroke-width="1.2"/>
+    <rect x="631" y="171" width="12" height="99" rx="3" fill="var(--hand-edge)" stroke="var(--hand-edge)" stroke-width="1.2"/>
+    <!-- the peg cross-section -->
+    <rect x="515" y="160" width="90" height="90" fill="var(--object)" stroke="var(--object-edge)" stroke-width="1.5" opacity="0.95"/>
+    <text x="560" y="232" text-anchor="middle" class="svg-small">peg, 6 × 6 cm</text>
+    <!-- the pinch line, from x on the -x face up through c to y on the +x face, and u beyond -->
+    <line x1="560" y1="250" x2="560" y2="160" stroke="var(--ray)" stroke-width="2"/>
+    <line x1="560" y1="160" x2="560" y2="130" stroke="var(--ray)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr2-ray)"/>
+    <text x="566" y="140" class="svg-math" style="fill:var(--ray)">û</text>
+    <!-- the spin: a roll about the line -->
+    <path d="M 576 124 a 16 6 0 1 1 -32 0" fill="none" stroke="var(--mark)" stroke-width="1.5" marker-end="url(#arr2-mark)"/>
+    <text x="582" y="120" class="svg-math">θ</text>
+    <!-- the one axis at G, on the line -->
+    <line x1="560" y1="385" x2="560" y2="262" stroke="#3b82f6" stroke-width="2.5" marker-end="url(#arr2-a)"/>
+    <line x1="560" y1="385" x2="560" y2="292" stroke="#e0453a" stroke-width="2.5" marker-end="url(#arr2-g)"/>
+    <line x1="560" y1="385" x2="560" y2="322" stroke="#e6b800" stroke-width="5" marker-end="url(#arr2-o)"/>
+    <text x="568" y="292" class="svg-math" style="fill:#3b82f6">â = ĝ = ô</text>
+    <circle cx="560" cy="385" r="5.5" fill="var(--bg)" stroke="var(--ink)" stroke-width="1.4"/>
+    <line x1="556" y1="381" x2="564" y2="389" stroke="var(--ink)" stroke-width="1.3"/>
+    <line x1="564" y1="381" x2="556" y2="389" stroke="var(--ink)" stroke-width="1.3"/>
+    <text x="540" y="400" text-anchor="end" class="svg-math">G</text>
+    <!-- the standoff direction -->
+    <line x1="560" y1="392" x2="560" y2="424" stroke="var(--muted)" stroke-width="1" stroke-dasharray="3 3" marker-end="url(#arr2)"/>
+    <text x="568" y="420" class="svg-small">s &gt; f</text>
+    <!-- the points on the line -->
+    <circle cx="560" cy="250" r="5" fill="#22c55e" stroke="var(--ink)" stroke-width="0.8"/>
+    <circle cx="560" cy="160" r="5" fill="#d946ef" stroke="var(--ink)" stroke-width="0.8"/>
+    <circle cx="560" cy="205" r="3.5" fill="var(--bg)" stroke="var(--ink)" stroke-width="1.2"/>
+    <text x="655" y="164" class="svg-small"><tspan class="svg-math" font-style="italic">y</tspan>, the opposite point,</text>
+    <text x="655" y="178" class="svg-small">on the +x face</text>
+    <text x="655" y="209" class="svg-small"><tspan class="svg-math" font-style="italic">c = p</tspan>, the pinch point</text>
+    <text x="655" y="223" class="svg-small">inside the peg</text>
+    <text x="655" y="254" class="svg-small"><tspan class="svg-math" font-style="italic">x</tspan>, the sampled point,</text>
+    <text x="655" y="268" class="svg-small">on the −x face</text>
+    <text x="655" y="296" class="svg-small" style="fill:var(--hand-edge)">the pads close along ±y<tspan dy="3" font-size="75%">O</tspan><tspan dy="-3"></tspan>,</text>
+    <text x="655" y="310" class="svg-small" style="fill:var(--hand-edge)">6 cm face to face</text>
+    <!-- the object frame, as in the Dex3 figure -->
+    <line x1="436" y1="410" x2="472" y2="410" stroke="var(--ink)" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="456" y="428" class="svg-math">y<tspan dy="4" font-size="75%">O</tspan><tspan dy="-4"></tspan></text>
+    <line x1="436" y1="410" x2="436" y2="374" stroke="var(--ink)" stroke-width="2" marker-end="url(#arr2)"/>
+    <text x="442" y="372" class="svg-math">x<tspan dy="4" font-size="75%">O</tspan><tspan dy="-4"></tspan></text>
+    <circle cx="436" cy="410" r="5.5" fill="var(--bg)" stroke="var(--ink)" stroke-width="1.4"/>
+    <line x1="432" y1="406" x2="440" y2="414" stroke="var(--ink)" stroke-width="1.3"/>
+    <line x1="440" y1="406" x2="432" y2="414" stroke="var(--ink)" stroke-width="1.3"/>
+    <text x="402" y="428" class="svg-math">z<tspan dy="4" font-size="75%">O</tspan><tspan dy="-4"></tspan></text>
+  </g>
+</svg>
+<figcaption>Left: the Dex1 base link frame, seen along \(z_G\). The approach, the alignment axis and the spin axis are all \(+x_G\), and the pinch point lies on it, so \(\mathbf{p}_\perp = 0\). The fingers slide along \(\pm y_G\). Right: the Dex1 on the pinch line of the worked example, in the view of the Dex3 figure above, at \(\theta = 0\) and \(s = f\). The hand comes in along \(\hat{\mathbf{u}}\) from the sampled point's side, its pinch point sits on the centre inside the peg, and the open pads straddle the peg 1.7 cm clear of its \(\pm y\) faces, ready to close across the ray. Compare the Dex3 above: same line, same centre, but the hand beside the line with the squeeze crossing it at 45 degrees.</figcaption>
+</figure>
+
+<p>Put side by side, the seven steps of section 3 mean different things for the two hands:</p>
+<table class="compact">
+<thead><tr><th></th><th>Dex1 and Robotiq</th><th>Dex3</th></tr></thead>
+<tbody>
+<tr><td>Axis on the pinch line</td><td>The approach</td><td>An axis 45 degrees from the squeeze, in the palm plane</td></tr>
+<tr><td>Where the hand sits</td><td>On the line, coming in along it from the sampled point's side</td><td>Beside the line, the palm across it</td></tr>
+<tr><td>What the fingers close across</td><td>A direction perpendicular to the line, chosen by the spin</td><td>The line itself, crossed at 45 degrees</td></tr>
+<tr><td>The spin \(\theta\)</td><td>A wrist roll: which way across the object the fingers close</td><td>Which side the palm comes from, around the line</td></tr>
+<tr><td>\(\ell\) against \(w\)</td><td>The object's depth along the approach</td><td>The face-to-face width, \(\sqrt{2}\) short of the span the fingers need</td></tr>
+<tr><td>The standoff \(s\)</td><td>How far along the line the hand sits; the legacy sweep backs it out by an object diagonal</td><td>How deep the object sits in the pocket; the clearance sweep</td></tr>
+<tr><td>The top bias \(\beta\)</td><td>Useful: a top point gives a top-down approach</td><td>Pointless: a top point gives a vertical line the palm would cross sideways, so \(\beta = 0\)</td></tr>
+</tbody>
+</table>
+<p>None of the Dex1 column is new. It is the sampler of section 3, drawn here so that the Dex3 column has something to stand against.</p>
+
+<h3>What is deliberately left as it is</h3>
+<ul>
+<li><strong>The spin range.</strong> Half of the spins put the palm below the object, where the table is. Restricting \(\theta\) to a range, or filtering spins by the direction of the palm normal in the object frame, would drop them before the physics test does. It would be a range on the existing grid, not a change of axis.</li>
+<li><strong>The width test</strong> above stays optimistic by \(\sqrt{2}\) for the Dex3.</li>
+<li><strong>The Robotiq and Dex1</strong> keep the approach on the pinch line and the legacy standoff sweep. Giving them a convention of their own would be the same handful of parameters in their configurations, and would change their candidate sets, so it is not done.</li>
+</ul>
+
+<p>The Dex3 grasps recorded before this change were made under the earlier convention, on a big peg that then weighed 150 g in the grasp-sampling task. The big peg is authored at 200 g now and the Dex3 candidates are a different set, so the Dex3 grasp file and everything recorded from it need recording again. The Robotiq and Dex1 files are unaffected.</p>
+
+<!-- ============================================================================================== -->
+<h2 id="after">8. From a candidate to a recorded grasp</h2>
 
 <p>For completeness, this is what happens to a candidate once it exists. On every reset the event draws an index per environment uniformly from the candidate list, <code>torch.randint(0, len(self.grasp_candidates), ...)</code>. It makes sure the hand is open and still, and then it composes the candidate with the object's current world pose,</p>
 
@@ -683,16 +1124,16 @@ Read it from the right. The hand frame is first pulled back by \(s_j\) along its
 <p>The binary gripper action then closes the hand. One second in, <code>global_physics_control_event</code> switches gravity on, and between one and two seconds it applies a small random force and torque to the object, which it now removes again once the window closes. At the last step of the four second episode <code>check_grasp_success</code> judges the result. The object must have stayed within 25 cm of where it started and above 25 cm height, it must have been still for five consecutive steps, no gripper joint may be moving abnormally, the hand's sampled surface points may not penetrate the object, and the closure joints must on average have travelled more than ten percent of the way from open to closed. When all of that holds, the recorder stores the pose of the gripper body in the object frame, recomputed from the final simulated poses rather than copied from the candidate, together with the hand's joint positions. Those are the grasps the reset-state tasks later read back.</p>
 
 <!-- ============================================================================================== -->
-<h2 id="glossary">8. Glossary of symbols and variables</h2>
+<h2 id="glossary">9. Glossary of symbols and variables</h2>
 
 <table>
 <thead><tr><th>Symbol</th><th>Variable or expression</th><th>Where</th><th>Meaning</th></tr></thead>
 <tbody>
-<tr><td>\(O\), \(G\)</td><td>object frame, gripper body frame</td><td>sections 2 and 9</td><td>Candidates are \({}^{O}\mathbf{T}_{G}\), the gripper body in the object frame.</td></tr>
+<tr><td>\(O\), \(G\)</td><td>object frame, gripper body frame</td><td>sections 2 and 8</td><td>Candidates are \({}^{O}\mathbf{T}_{G}\), the gripper body in the object frame.</td></tr>
 <tr><td>\({}^{O}\mathbf{T}_{G}\)</td><td><code>self.grasp_candidates[i]</code></td><td><code>__call__</code></td><td>One candidate, 4 by 4.</td></tr>
 <tr><td>\(\hat{\mathbf{a}}\)</td><td><code>self.gripper_approach_direction</code></td><td>metadata</td><td>Approach axis of the hand, in \(G\).</td></tr>
-<tr><td>\(\hat{\mathbf{g}}\)</td><td><code>self.grasp_align_axis</code></td><td>metadata</td><td>Axis aligned with the grasp axis, in \(G\).</td></tr>
-<tr><td>\(\hat{\mathbf{o}}\)</td><td><code>self.orientation_sample_axis</code></td><td>metadata</td><td>Axis the hand is spun about, in \(G\).</td></tr>
+<tr><td>\(\hat{\mathbf{g}}\)</td><td><code>self.grasp_align_axis</code></td><td>metadata, or the <code>grasp_align_axis</code> parameter</td><td>Axis aligned with the grasp axis, in \(G\).</td></tr>
+<tr><td>\(\hat{\mathbf{o}}\)</td><td><code>self.orientation_sample_axis</code></td><td>metadata, or the <code>orientation_sample_axis</code> parameter</td><td>Axis the hand is spun about, in \(G\).</td></tr>
 <tr><td>\(f\)</td><td><code>self.finger_offset</code></td><td>metadata</td><td>Body origin to pinch point along \(\hat{\mathbf{a}}\), m.</td></tr>
 <tr><td>\(c_f\)</td><td><code>self.finger_clearance</code></td><td>metadata</td><td>Usable pad depth behind the fingertips, m. Also bounds the standoff sweep.</td></tr>
 <tr><td>\(w\)</td><td><code>self.gripper_maximum_aperture</code></td><td>metadata</td><td>Largest allowed \(\ell\), m.</td></tr>
@@ -707,10 +1148,12 @@ Read it from the right. The hand frame is first pulled back by \(s_j\) along its
 <tr><td>\(\mathbf{x}_i\), \(\hat{\mathbf{n}}_i\)</td><td><code>surface_points</code>, <code>surface_normals</code></td><td><code>_sample_antipodal_grasps</code></td><td>Sampled point and its face normal.</td></tr>
 <tr><td>\(\mathbf{y}_i\)</td><td><code>opposing_point</code></td><td><code>_sample_antipodal_grasps</code></td><td>Furthest ray hit within \(w\).</td></tr>
 <tr><td>\(\hat{\mathbf{u}}_i\), \(\ell_i\)</td><td><code>grasp_axis</code>, <code>axis_length</code></td><td><code>_sample_antipodal_grasps</code></td><td>Grasp axis and the contact distance.</td></tr>
-<tr><td>\(\mathbf{c}_i\)</td><td><code>grasp_center</code></td><td><code>_sample_antipodal_grasps</code></td><td>Where the pinch point is placed.</td></tr>
-<tr><td>\(\mathbf{R}_{\text{align}}\)</td><td><code>align_matrix</code></td><td><code>_sample_antipodal_grasps</code></td><td>Smallest rotation \(\hat{\mathbf{g}} \to \hat{\mathbf{u}}\).</td></tr>
-<tr><td>\(\theta_k\), \(\mathbf{R}_{\text{spin}}\)</td><td><code>rotation_angles</code>, <code>orient_tf_rot</code></td><td><code>_sample_antipodal_grasps</code></td><td>Spin about \(\hat{\mathbf{o}}\).</td></tr>
+<tr><td>\(\mathbf{c}_i\)</td><td><code>centers</code></td><td><code>_sample_antipodal_grasps</code></td><td>Where the pinch point is placed.</td></tr>
+<tr><td>\(\mathbf{R}_{\text{align}}\)</td><td><code>align</code></td><td><code>_sample_antipodal_grasps</code></td><td>Smallest rotation \(\hat{\mathbf{g}} \to \hat{\mathbf{u}}\).</td></tr>
+<tr><td>\(\theta_k\), \(\mathbf{R}_{\text{spin}}\)</td><td><code>rotation_angles</code>, <code>spins</code></td><td><code>_sample_antipodal_grasps</code></td><td>Spin about \(\hat{\mathbf{o}}\).</td></tr>
 <tr><td>\(s_j\), \(d\)</td><td><code>standoff_distances</code>, <code>mesh_diagonal</code></td><td><code>_sample_antipodal_grasps</code></td><td>Standoff sweep and the mesh diagonal that bounds it.</td></tr>
+<tr><td></td><td><code>self.standoffs_within_clearance</code></td><td>params</td><td>Standoffs over \([f - c_f/2, f + c_f/2]\) in place of the sweep of step 6. On for the Dex3.</td></tr>
+<tr><td>\({}^{O}\mathbf{T}_{G}\), all</td><td><code>transforms</code></td><td><code>_sample_antipodal_grasps</code></td><td>Every candidate, shape \((N, 4, 4)\), ordered point, spin, standoff.</td></tr>
 <tr><td>\(\mathbf{k}\)</td><td><code>asset.cfg.spawn.scale</code></td><td><code>_extract_mesh_from_asset</code></td><td>Spawn scale applied to the mesh.</td></tr>
 </tbody>
 </table>

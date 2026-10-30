@@ -134,9 +134,8 @@ along the sampled pinch line, as the Robotiq does. The Dex3 lays an axis 45 degr
 the line, so that the squeeze, from thumb to fingertips, crosses the line at 45 degrees and takes a square peg
 across its diagonal, and it sweeps the hand around the line, so the 45 degree palm tilt of the hand-tuned grasp
 is among the candidates. Its standoffs stay within the pocket's depth. These choices sit in
-`config/g1_dex3/grasp_sampling_cfg.py`. [The antipodal sampler with the squeeze axis](../omnireset_antipodal_sampler.html)
-explains the mechanism and where the hand-tuned 45 degree tilt sits in it, and
-[How the grasp sampler works](../omnireset_grasp_sampling.html) explains the sampler's mechanics.
+`config/g1_dex3/grasp_sampling_cfg.py`. [How the grasp sampler works](../omnireset_grasp_sampling.html) explains the
+sampler's mechanics, and its section 7 the Dex3's convention and where the hand-tuned 45 degree tilt sits in it.
 
 The scene's object is a Hydra choice. Besides `peg` there are `fbleg`, `fbdrawerbottom` and `big-peg`, which
 is the peg at twice the size with an authored mass of 150 g and a friction of 0.6, made for the Dex3. A
