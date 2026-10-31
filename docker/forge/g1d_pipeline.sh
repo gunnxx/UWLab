@@ -161,10 +161,15 @@ PY
         # The recorder writes into the job's own file system, which disappears with the job: a max-duration kill
         # or a cancel used to lose every state recorded so far. Mirror the reset-state files to the cache every
         # RESET_SYNC_S seconds while recording (the recorder renames complete snapshots into place, so a copy is
-        # never partial; *.tmp is the snapshot being written), then once more when the recording ends.
+        # never partial; *.tmp is the snapshot being written), then once more when the recording ends. Only the
+        # families this job records are copied: with AUX_FROM_CACHE=1 the job also holds the copies it took of the
+        # other families at start-up, and pushing those back overwrote the newer files of jobs running alongside.
+        OWN_RESETS=()
+        for RT in ${RESET_TYPES}; do OWN_RESETS+=("${PAIR}/resets_${RT}.pt"); done
         sync_resets() {
             [[ -n "${CACHE}" && -d "${DATA_DIR}/Resets" ]] || return 0
-            mkdir -p "${CACHE}/datasets/Resets" && rsync -a --exclude '*.tmp' "${DATA_DIR}/Resets/" "${CACHE}/datasets/Resets/"
+            mkdir -p "${CACHE}/datasets/Resets" && printf '%s\n' "${OWN_RESETS[@]}" \
+                | rsync -a --ignore-missing-args --files-from=- "${DATA_DIR}/Resets/" "${CACHE}/datasets/Resets/"
         }
         SYNC_PID=""
         if [[ -n "${CACHE}" ]]; then
@@ -179,7 +184,12 @@ PY
         done
         [[ -n "${SYNC_PID}" ]] && { kill "${SYNC_PID}" 2>/dev/null || true; trap - EXIT; }
         find "${DATA_DIR}" -name '*.pt' -exec ls -la {} \;
-        if [[ -n "${CACHE}" ]]; then mkdir -p "${CACHE}/datasets" && rsync -a "${DATA_DIR}/" "${CACHE}/datasets/" && log "datasets: cached"; fi
+        # a job that took its inputs from the cache gives back only what it recorded (see sync_resets)
+        if [[ -n "${CACHE}" && "${AUX_FROM_CACHE:-0}" == 1 ]]; then
+            sync_resets && log "datasets: cached"
+        elif [[ -n "${CACHE}" ]]; then
+            mkdir -p "${CACHE}/datasets" && rsync -a "${DATA_DIR}/" "${CACHE}/datasets/" && log "datasets: cached"
+        fi
     fi
 fi
 
