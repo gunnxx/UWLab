@@ -130,7 +130,9 @@ cd ${CODE} && echo \"[code] \$(cat .forge-code-stamp)\""
     fi
     ;;
   git)
-    PREP="rm -rf ${CODE} && git clone -q --depth 1 -b ${GIT_REF} ${GIT_REPO} ${CODE} && \
+    # GIT_LFS_SKIP_SMUDGE: the committed robot assets and datasets (Git LFS) stay pointer files; the job takes them
+    # from the blob-disk cache, which keeps every job from downloading them from GitHub
+    PREP="rm -rf ${CODE} && GIT_LFS_SKIP_SMUDGE=1 git clone -q --depth 1 -b ${GIT_REF} ${GIT_REPO} ${CODE} && \
 ln -s /isaac-sim ${CODE}/_isaac_sim && ln -s /opt/uwlab-deps/_isaaclab ${CODE}/_isaaclab && \
 cd ${CODE} && git log -1 --oneline"
     SRC_DESC="code ${GIT_REF}@fork"

@@ -41,9 +41,12 @@ DIRTY="$(git status --porcelain | wc -l | tr -d ' ')"
 STAMP="commit $(git rev-parse --short HEAD) ($(git rev-parse --abbrev-ref HEAD)), ${DIRTY} uncommitted change(s), tree ${HASH}, pushed $(date '+%Y-%m-%d %H:%M %Z') from $(hostname -s)"
 printf '%s\n' "${STAMP}" > .forge-code-stamp      # removed again on exit
 
-# file list: tracked + untracked-not-ignored, existing regular files only
+# file list: tracked + untracked-not-ignored, existing regular files only, without the robot assets and datasets
+# (committed through Git LFS; jobs take them from the blob-disk cache)
 git ls-files -co --exclude-standard -z \
-    | while IFS= read -r -d '' f; do [[ -f "$f" ]] && printf '%s\0' "$f"; done > "${TMP}/files"
+    | while IFS= read -r -d '' f; do
+        [[ -f "$f" && "$f" != source/uwlab_assets/data/* ]] && printf '%s\0' "$f"
+    done > "${TMP}/files"
 printf '.forge-code-stamp\0' >> "${TMP}/files"
 N=$(tr -cd '\0' < "${TMP}/files" | wc -c | tr -d ' ')
 COPYFILE_DISABLE=1 tar -czf "${TMP}/${TAR_NAME}" --null -T "${TMP}/files"

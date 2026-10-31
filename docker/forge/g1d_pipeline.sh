@@ -34,7 +34,7 @@ case "${ROBOT}" in
     g1d_dex1)
         CACHE="${CACHE-/mnt/robotics/twguntara/omni-reset/g1d}"
         ASSET_DIR="${CODE}/source/uwlab_assets/data/Robots/Unitree/G1dDex1"
-        DATA_DIR="${CODE}/source/uwlab_assets/data/Datasets/OmniReset_g1d"
+        DATA_DIR="${CODE}/source/uwlab_assets/data/Datasets/OmniReset_g1d_dex1"
         ROBOT_USD=g1d_dex1_right_arm; GRIPPER_USD=dex1_gripper; GRIPPER_BODY=right_dex1_base_link
         TASK_PREFIX=OmniReset-G1dDex1; GRASP_TASK=OmniReset-Dex1-GraspSampling-v0
         EXPERIMENT=g1d_dex1_omnireset_agent ;;

@@ -148,7 +148,7 @@ const G1D_IK  = 'ROBOT_IK_CFG: joints right_shoulder_.* / right_elbow_joint / ri
 const UR5E_GRIP = 'SceneEntityCfg("robot", joint_names=["finger_joint",".*right.*",".*left.*"])';
 const G1D_GRIP  = 'GRIPPER_CFG: joints right_dex1_finger_joint_.*';
 const UR5E_DS = "{UWLAB_CLOUD_ASSETS_DIR}/Datasets/OmniReset_isaaclab3";
-const G1D_DS  = "G1D_DATASET_DIR (uwlab_assets/data/Datasets/OmniReset_g1d)";
+const G1D_DS  = "G1D_DATASET_DIR (uwlab_assets/data/Datasets/OmniReset_g1d_dex1)";
 const mat = (a) => [["static / dynamic friction", "0.3 / 0.2"], ["restitution", "0.0"], ["num_buckets", "1"], ["asset_cfg", `SceneEntityCfg("${a}")`], ["make_consistent", "True"]];
 const T = (name, mode, func, params = [], note = "", status) => ({ name, mode, func, params, note, status });
 

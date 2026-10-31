@@ -59,7 +59,7 @@
             "args": [
                 "--task", "OmniReset-Dex1-GraspSampling-v0",
                 "--num_envs", "128", "--num_grasps", "32",
-                "--dataset_dir", "${workspaceFolder}/logs/debug_datasets/OmniReset_g1d",
+                "--dataset_dir", "${workspaceFolder}/logs/debug_datasets/OmniReset_g1d_dex1",
                 "--gripper_body_name", "right_dex1_base_link",
                 "env.scene.object=peg"
             ],
@@ -89,7 +89,7 @@
             "args": [
                 "--task", "OmniReset-G1dDex1-${input:resetFamily}-v0",
                 "--num_envs", "256", "--num_reset_states", "8",
-                "--dataset_dir", "${workspaceFolder}/logs/debug_datasets/OmniReset_g1d",
+                "--dataset_dir", "${workspaceFolder}/logs/debug_datasets/OmniReset_g1d_dex1",
                 "env.scene.insertive_object=peg", "env.scene.receptive_object=peghole"
             ],
             "console": "integratedTerminal",

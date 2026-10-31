@@ -73,7 +73,7 @@ reset at a time, and prints the success flag stored with each state:
 
 ```bash
 python scripts_v2/tools/visualize_reset_states.py --task OmniReset-G1dDex1-RelCartesianOSC-State-Play-v0 \
-    --dataset_dir source/uwlab_assets/data/Datasets/OmniReset_g1d --reset_type ObjectAnywhereEEAnywhere \
+    --dataset_dir source/uwlab_assets/data/Datasets/OmniReset_g1d_dex1 --reset_type ObjectAnywhereEEAnywhere \
     --num_envs 4 --reset_interval 2 --viz kit env.scene.insertive_object=peg env.scene.receptive_object=peghole
 ```
 

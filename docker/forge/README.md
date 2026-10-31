@@ -59,14 +59,14 @@ docker/forge/run_local.sh python scripts_v2/tools/visualize_reset_states.py \
 Add `--reset_type ObjectRestingEEGrasped` (or one of the other three set names) to cycle a single set.
 
 The G1-D variant reads the locally generated sets (the `datasets` stage of `g1d_pipeline.sh` writes them
-under `source/uwlab_assets/data/Datasets/OmniReset_g1d`, i.e. after `run_local.sh smoke`). The sets store the
+under `source/uwlab_assets/data/Datasets/OmniReset_g1d_dex1`, i.e. after `run_local.sh smoke`). The sets store the
 root pose of every rigid object including the table, so after any scene change re-record them with
 `FORCE=1 STAGES=datasets docker/forge/run_local.sh smoke` (and `FORCE=1` on the next Forge job):
 
 ```bash
 docker/forge/run_local.sh python scripts_v2/tools/visualize_reset_states.py \
     --task OmniReset-G1dDex1-RelCartesianOSC-State-Play-v0 --num_envs 16 --reset_interval 1.0 --viz kit \
-    --dataset_dir source/uwlab_assets/data/Datasets/OmniReset_g1d
+    --dataset_dir source/uwlab_assets/data/Datasets/OmniReset_g1d_dex1
 ```
 
 Without a display, `scripts_v2/tools/render_reset_states.py` writes the first N states of every set as images
@@ -257,7 +257,7 @@ image has no `rsync`):
 source docker/forge/_lib.sh && uwlab_notebook_ssh uwlab-code-push       # sets UWLAB_SSH_OPTS / UWLAB_SSH_HOST
 ssh "${UWLAB_SSH_OPTS[@]}" "${UWLAB_SSH_HOST}" \
     "tar czf - -C /mnt/robotics/twguntara/omni-reset/g1d/datasets ." \
-    | tar xzf - -C source/uwlab_assets/data/Datasets/OmniReset_g1d
+    | tar xzf - -C source/uwlab_assets/data/Datasets/OmniReset_g1d_dex1
 ```
 
 ## 4. Train

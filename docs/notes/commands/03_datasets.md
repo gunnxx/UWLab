@@ -35,7 +35,7 @@ For the G1-D + Dex1:
 
 ```bash
 ROBOT_ASSETS=source/uwlab_assets/data/Robots/Unitree/G1dDex1
-DATA=source/uwlab_assets/data/Datasets/OmniReset_g1d
+DATA=source/uwlab_assets/data/Datasets/OmniReset_g1d_dex1
 TASK=OmniReset-G1dDex1
 GRASP_TASK=OmniReset-Dex1-GraspSampling-v0
 GRIPPER_BODY=right_dex1_base_link
@@ -73,7 +73,9 @@ pass, and the pipeline's smoke sizes at the end of this page finish in minutes.
 
 ## Step 0. Build the robot assets
 
-This step runs once per machine, not once per dataset. The converted assets are gitignored, so a fresh clone does not have them, but once they exist they stay valid until the builder or the URDF changes. If the two USD files named below are already in the assets folder, together with a `metadata.yaml`, skip to step 1.
+The assets of both robots are committed through Git LFS, the G1-D + Dex1 in `source/uwlab_assets/data/Robots/Unitree/G1dDex1` and the G1 + Dex3 in `Robots/Unitree/G1Dex3`, together with the G1-D peg/peghole datasets in `Datasets/OmniReset_g1d_dex1`. The G1 + Dex3 datasets are not committed: they are regenerated as the grasp sampler changes and live in the blob cache `omni-reset/g1_dex3/datasets` (record them locally with page 3). Run `git lfs pull` after cloning to fetch the committed files, and skip to the step you need. Build the assets yourself only when the builder or the URDF changes. Note that `unitree_ros` added its own Dex1 meshes to `g1_d_description` on 29 and 30 October 2026, in a different frame, and a build from its current head draws the Dex1 fingers inside the gripper base. The committed G1-D assets were built before that change.
+
+Building runs once per machine, not once per dataset. If the two USD files named below are already in the assets folder, together with a `metadata.yaml`, skip to step 1.
 
 Both robots are assembled from the Unitree ROS description, so clone it once:
 

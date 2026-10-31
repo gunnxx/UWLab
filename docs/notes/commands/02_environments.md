@@ -85,7 +85,7 @@ The files live under one dataset root per robot.
 | Robot | Dataset root |
 |---|---|
 | UR5e + Robotiq 2F-85 | `Datasets/OmniReset_isaaclab3` in the cloud assets, downloaded on first use |
-| G1-D + Dex1 | `source/uwlab_assets/data/Datasets/OmniReset_g1d`, recorded by page 3 |
+| G1-D + Dex1 | `source/uwlab_assets/data/Datasets/OmniReset_g1d_dex1`, recorded by page 3 |
 | G1 + Dex3 | `source/uwlab_assets/data/Datasets/OmniReset_g1_dex3`, recorded by page 3 |
 
 ## One thing to remember about recorded states

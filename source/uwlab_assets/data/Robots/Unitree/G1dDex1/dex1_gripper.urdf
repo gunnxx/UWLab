@@ -1,0 +1,83 @@
+<?xml version='1.0' encoding='utf-8'?>
+<robot name="dex1_gripper">
+  <link name="right_dex1_base_link">
+    <inertial>
+      <origin xyz="0.043853 -0.0001306 1.4003E-05" rpy="0 0 0" />
+      <mass value="0.19138" />
+      <inertia ixx="7.4842E-05" ixy="1.6252E-07" ixz="-8.0516E-09" iyy="5.861E-05" iyz="-3.5931E-08" izz="3.9364E-05" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="meshes/Dex1_base_link.STL" />
+      </geometry>
+      <material name="">
+        <color rgba="0.79216 0.81961 0.93333 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="meshes/Dex1_base_link.STL" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="right_dex1_finger_link_1">
+    <inertial>
+      <origin xyz="0.073453 -0.011173 0.0086355" rpy="0 0 0" />
+      <mass value="0.086783" />
+      <inertia ixx="2.5583E-05" ixy="5.1557E-07" ixz="-6.3178E-07" iyy="1.4549E-05" iyz="7.8542E-08" izz="3.6013E-05" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="meshes/Dex1_finger_link_1.STL" />
+      </geometry>
+      <material name="">
+        <color rgba="0.41176 0.41176 0.41176 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="meshes/dex1_col_1.stl" />
+      </geometry>
+    </collision>
+  </link>
+  <link name="right_dex1_finger_link_2">
+    <inertial>
+      <origin xyz="0.073453 0.011173 -0.0086355" rpy="0 0 0" />
+      <mass value="0.086783" />
+      <inertia ixx="2.5583E-05" ixy="-5.1557E-07" ixz="6.3178E-07" iyy="1.4549E-05" iyz="7.8542E-08" izz="3.6013E-05" />
+    </inertial>
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="meshes/Dex1_finger_link_2.STL" />
+      </geometry>
+      <material name="">
+        <color rgba="0.89804 0.91765 0.92941 1" />
+      </material>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0" />
+      <geometry>
+        <mesh filename="meshes/dex1_col_2.stl" />
+      </geometry>
+    </collision>
+  </link>
+  <joint name="right_dex1_finger_joint_1" type="prismatic">
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <parent link="right_dex1_base_link" />
+    <child link="right_dex1_finger_link_1" />
+    <axis xyz="0 -1 0" />
+    <limit lower="-0.02" upper="0.0245" effort="20" velocity="0.2" />
+  </joint>
+  <joint name="right_dex1_finger_joint_2" type="prismatic">
+    <origin xyz="0 0 0" rpy="0 0 0" />
+    <parent link="right_dex1_base_link" />
+    <child link="right_dex1_finger_link_2" />
+    <axis xyz="0 1 0" />
+    <limit lower="-0.02" upper="0.0245" effort="20" velocity="0.2" />
+  </joint>
+</robot>

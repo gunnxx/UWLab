@@ -10,7 +10,7 @@ environments exactly as recorded (no random sampling), a camera per environment 
 result is saved as one image grid per set plus the individual tiles. Works without a display.
 
     python scripts_v2/tools/render_reset_states.py --task OmniReset-G1dDex1-RelCartesianOSC-State-Play-v0 \\
-        --dataset_dir source/uwlab_assets/data/Datasets/OmniReset_g1d --out_dir /tmp/reset_renders
+        --dataset_dir source/uwlab_assets/data/Datasets/OmniReset_g1d_dex1 --out_dir /tmp/reset_renders
 """
 
 from __future__ import annotations
