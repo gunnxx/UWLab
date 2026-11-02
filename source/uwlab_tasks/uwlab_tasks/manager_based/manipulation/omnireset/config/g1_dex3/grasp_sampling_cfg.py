@@ -35,6 +35,20 @@ class Dex3GraspSamplingSceneCfg(robotiq.GraspSamplingSceneCfg):
     """The floating Dex3 hand."""
 
 
+# ============================================================================
+# Grasp geometry in the Dex3 palm frame (``right_hand_palm_link``), in metres.
+# ============================================================================
+
+DEX3_MIN_PALM_CLEARANCE = 0.03
+"""Least distance [m] along the palm normal from the palm origin to any point of a grasped object: the palm's inner
+face is at 20 mm (``right_hand_palm_link`` collision mesh), so the object is held at least 10 mm off the palm, by the
+fingers. Without it 59% of the long-peg grasps recorded on 2026-10-30 had the peg's end against the palm."""
+
+DEX3_MIN_HELD_PALM_CLEARANCE = 0.025
+"""Least distance [m] along the palm normal from the palm origin to any point of the object once the hand has closed
+on it, 5 mm off the palm's inner face. Closing fingers pull a candidate held at :data:`DEX3_MIN_PALM_CLEARANCE` into
+the palm in about a third of the grasps; those are rejected."""
+
 # configclass stores mutable defaults as factories, so defaults are read from an instance, not the class
 _ROBOTIQ_EVENTS = robotiq.GraspSamplingEventCfg()
 
@@ -58,10 +72,25 @@ class Dex3GraspSamplingEventCfg(robotiq.GraspSamplingEventCfg):
             # standoffs over the pocket's depth about the pinch point, instead of the sweep out by an object
             # diagonal that suits hands which approach along the pinch line; the counts are the Robotiq's
             "standoffs_within_clearance": True,
+            "min_palm_clearance": DEX3_MIN_PALM_CLEARANCE,
         }
     )
     """The grasp-sampling event with the Dex3 palm frame: antipodal candidates with the squeeze axis across the pinch
     line at 45 degrees and the hand swept around the line."""
+
+
+_ROBOTIQ_TERMINATIONS = robotiq.GraspSamplingTerminationCfg()
+
+
+@configclass
+class Dex3GraspSamplingTerminationCfg(robotiq.GraspSamplingTerminationCfg):
+    """Grasp-sampling terminations of the Robotiq procedure, with the closed hand required to hold the object off the
+    palm."""
+
+    success = _ROBOTIQ_TERMINATIONS.success.replace(
+        params={**_ROBOTIQ_TERMINATIONS.success.params, "min_palm_clearance": DEX3_MIN_HELD_PALM_CLEARANCE}
+    )
+    """The Robotiq grasp-success check with the palm-clearance clause."""
 
 
 @configclass
@@ -70,4 +99,5 @@ class Dex3GraspSamplingCfg(robotiq.Robotiq2f85GraspSamplingCfg):
 
     scene: Dex3GraspSamplingSceneCfg = Dex3GraspSamplingSceneCfg(num_envs=32, env_spacing=1.5)
     events: Dex3GraspSamplingEventCfg = Dex3GraspSamplingEventCfg()
+    terminations: Dex3GraspSamplingTerminationCfg = Dex3GraspSamplingTerminationCfg()
     actions: Dex3BinaryHandAction = Dex3BinaryHandAction()

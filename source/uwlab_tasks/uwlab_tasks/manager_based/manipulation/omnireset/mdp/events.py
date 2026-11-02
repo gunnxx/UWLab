@@ -95,6 +95,9 @@ class grasp_sampling_event(ManagerTermBase):
         # standoffs within the finger clearance about the pinch depth, instead of the sweep from the pinch depth out
         # by an object diagonal, see ``_sample_antipodal_grasps``
         self.standoffs_within_clearance = bool(cfg.params.get("standoffs_within_clearance", False))
+        # least distance along the approach from the gripper body origin to any point of the object; candidates in
+        # which the object reaches nearer, against the palm instead of between the fingers, are dropped
+        self.min_palm_clearance = cfg.params.get("min_palm_clearance")
 
         # Read parameters from object metadata
         gripper_asset = env.scene[self.gripper_cfg.name]
@@ -183,6 +186,7 @@ class grasp_sampling_event(ManagerTermBase):
         visualization_scale: float = 0.01,
         top_bias_fraction: float = 1.0,
         standoffs_within_clearance: bool = False,
+        min_palm_clearance: float | None = None,
         grasp_align_axis: list[float] | None = None,
         orientation_sample_axis: list[float] | None = None,
     ) -> None:
@@ -232,71 +236,9 @@ class grasp_sampling_event(ManagerTermBase):
 
     def _extract_mesh_from_asset(self, asset):
         """Extract trimesh from IsaacLab asset."""
-        # Get USD stage and prim path from the asset
-        stage = omni.usd.get_context().get_stage()
-
-        # For multi-environment setups, we need to get the first environment's path
-        prim_path = utils.RigidObjectHasher.resolve_prim_paths(self._env.num_envs, asset.cfg.prim_path, stage=stage)[0]
-
-        # Get the USD prim
-        prim = stage.GetPrimAtPath(prim_path)
-
-        # Find mesh geometry in the prim hierarchy
-        mesh_schema = self._find_mesh_in_prim(prim)
-
-        # Convert USD mesh to trimesh
-        mesh = self._usd_mesh_to_trimesh(mesh_schema)
-
-        # The mesh points are authored at the asset's own size.
-        # Apply the scale if it is spawned at a different size.
-        scale = getattr(asset.cfg.spawn, "scale", None)
-        if scale is not None and any(abs(float(v) - 1.0) > 1e-9 for v in scale):
-            mesh.apply_scale([float(v) for v in scale])
+        mesh = utils.object_mesh(asset, self._env.num_envs)
         logger.info(f"grasp_sampling_event: object mesh extents (m) {np.round(mesh.extents, 4).tolist()}")
-
         return mesh
-
-    def _find_mesh_in_prim(self, prim):
-        """Find the first mesh under a prim."""
-        if prim.IsA(UsdGeom.Mesh):
-            return UsdGeom.Mesh(prim)
-
-        for child in Usd.PrimRange(prim):
-            if child.IsA(UsdGeom.Mesh):
-                return UsdGeom.Mesh(child)
-        return None
-
-    def _usd_mesh_to_trimesh(self, usd_mesh):
-        """Convert USD mesh to trimesh for grasp sampling."""
-        # Get vertices
-        points_attr = usd_mesh.GetPointsAttr()
-        vertices = torch.tensor(points_attr.Get(), dtype=torch.float32)
-        max_distance = torch.max(torch.norm(vertices, dim=1))
-        # if the max distance is greater than 1.0, then the mesh is in mm
-        if max_distance > 1.0:
-            vertices = vertices / 1000.0
-
-        # Get faces
-        face_indices_attr = usd_mesh.GetFaceVertexIndicesAttr()
-        face_counts_attr = usd_mesh.GetFaceVertexCountsAttr()
-
-        vertex_indices = torch.tensor(face_indices_attr.Get(), dtype=torch.long)
-        vertex_counts = torch.tensor(face_counts_attr.Get(), dtype=torch.long)
-
-        # Convert to triangles
-        triangles = []
-        offset = 0
-        for count in vertex_counts:
-            indices = vertex_indices[offset : offset + count]
-            if count == 3:
-                triangles.append(indices.numpy())
-            elif count == 4:
-                # Split quad into two triangles
-                triangles.extend([indices[[0, 1, 2]].numpy(), indices[[0, 2, 3]].numpy()])
-            offset += count
-
-        faces = torch.tensor(np.array(triangles), dtype=torch.long)
-        return trimesh.Trimesh(vertices=vertices.numpy(), faces=faces.numpy(), process=False)
 
     def _sample_antipodal_grasps(self, mesh):
         """Sample antipodal grasp poses on the object mesh.
@@ -445,7 +387,32 @@ class grasp_sampling_event(ManagerTermBase):
             f"grasp_sampling_event: {transforms.size // 16} antipodal candidates from {len(centers)} pinch lines,"
             f" {self.num_orientations} spins and {self.num_standoff_samples} standoffs"
         )
-        return transforms.reshape(-1, 4, 4).astype(np.float32)
+        transforms = transforms.reshape(-1, 4, 4)
+        if self.min_palm_clearance is not None:
+            transforms = self._drop_palm_contact(transforms, mesh, approach)
+        return transforms.astype(np.float32)
+
+    def _drop_palm_contact(self, transforms: np.ndarray, mesh: trimesh.Trimesh, approach: np.ndarray) -> np.ndarray:
+        """Keep the candidates that hold the whole object at least ``min_palm_clearance`` out along the approach.
+
+        Args:
+            transforms: Candidate gripper-body transforms in the object frame, shape (N, 4, 4).
+            mesh: The object mesh in the object frame, at the spawned scale.
+            approach: Unit approach direction in the gripper frame, shape (3,).
+
+        Returns:
+            The kept candidates, shape (K, 4, 4).
+        """
+        # depth of a point along the approach in the gripper frame: (R a) . (v - t), least over the hull vertices
+        vertices = np.asarray(mesh.convex_hull.vertices, dtype=np.float64)
+        approach_obj = np.einsum("nij,j->ni", transforms[:, :3, :3], approach)
+        depth = approach_obj @ vertices.T - np.einsum("ni,ni->n", approach_obj, transforms[:, :3, 3])[:, None]
+        keep = depth.min(axis=1) >= self.min_palm_clearance
+        logger.info(
+            f"grasp_sampling_event: {int(keep.sum())} of {len(keep)} candidates keep the object at least"
+            f" {self.min_palm_clearance * 1000:.0f} mm from the palm"
+        )
+        return transforms[keep]
 
     def _apply_grasp_transform_to_gripper(self, env, gripper_asset, grasp_transform, env_idx):
         """Apply grasp transform to gripper asset."""

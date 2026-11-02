@@ -143,6 +143,15 @@ class check_grasp_success(ManagerTermBase):
                 self._closure_open = torch.tensor([open_expr[n] for n in names], device=env.device)
                 self._closure_close = torch.tensor([close_expr[n] for n in names], device=env.device)
 
+        # The closed hand must hold every point of the object at least this far out along the approach from the
+        # gripper root (the palm): fingers that close on an object can pull it into the palm, and such a grasp is
+        # rejected when the configuration asks for fingertip grasps. ``None`` skips the clause.
+        self.min_palm_clearance = cfg.params.get("min_palm_clearance")
+        self._object_hull: torch.Tensor | None = None  # read from the stage on first use
+        if self.min_palm_clearance is not None:
+            metadata = utils.read_metadata_from_usd_directory(env.scene[self.gripper_cfg.name].cfg.spawn.usd_path)
+            self._approach = _unit_vector(metadata.get("gripper_approach_direction"), env.device)
+
         self.stability_counter = torch.zeros(env.num_envs, device=env.device, dtype=torch.int32)
 
     def reset(self, env_ids: torch.Tensor | None = None) -> None:
@@ -171,6 +180,7 @@ class check_grasp_success(ManagerTermBase):
         pos_z_threshold: float = 0.05,
         consecutive_stability_steps: int = 5,
         min_close_fraction: float = 0.1,
+        min_palm_clearance: float | None = None,
     ) -> torch.Tensor:
         # Get object and gripper from scene
         object_asset = env.scene[self.object_cfg.name]
@@ -237,6 +247,18 @@ class check_grasp_success(ManagerTermBase):
             # its open target while the others close on it, and that is still a grasp
             grasp_success &= closed_fraction.mean(dim=1) > self.min_close_fraction
 
+        if self.min_palm_clearance is not None:
+            if self._object_hull is None:
+                self._object_hull = _hull_vertices(object_asset, env)
+            clearance = _palm_clearance(
+                object_asset,
+                self._object_hull,
+                gripper_asset.data.root_pos_w.torch,
+                gripper_asset.data.root_quat_w.torch,
+                self._approach,
+            )
+            grasp_success &= clearance >= self.min_palm_clearance
+
         return grasp_success
 
 
@@ -293,6 +315,16 @@ class check_reset_state_success(ManagerTermBase):
             self.grasp_event_name = cfg.params.get("grasp_event_name", "reset_end_effector_pose_from_grasp_dataset")
             self.grasp_pos_tol = cfg.params.get("grasp_pos_tol", 0.015)
             self.grasp_ang_tol = cfg.params.get("grasp_ang_tol", 0.26)
+            # Optional: every point of the object at least this far out along the approach from the gripper body
+            # (``gripper_body_name`` of the robot metadata), so the hold keeps a fingertip grasp off the palm
+            self.grasp_min_palm_clearance = cfg.params.get("grasp_min_palm_clearance")
+            if self.grasp_min_palm_clearance is not None:
+                robot_metadata = utils.read_metadata_from_usd_directory(self.robot_asset.cfg.spawn.usd_path)
+                self.grasp_palm_body_idx = self.robot_asset.data.body_names.index(
+                    robot_metadata.get("gripper_body_name")
+                )
+                self._grasp_approach = _unit_vector(robot_metadata.get("gripper_approach_direction"), env.device)
+                self._grasp_object_hull = _hull_vertices(self.grasp_object, env)
             self._grasp_event = None  # resolved on first call, the event manager may not exist yet
             gripper_action_cfg = env.cfg.actions.gripper
             # joints whose open and closed targets coincide (the Dex3 thumb abduction) say nothing about closure
@@ -400,6 +432,7 @@ class check_reset_state_success(ManagerTermBase):
         grasp_event_name: str = "reset_end_effector_pose_from_grasp_dataset",
         grasp_pos_tol: float = 0.015,
         grasp_ang_tol: float = 0.26,
+        grasp_min_palm_clearance: float | None = None,
         collect_funnel: bool = False,
     ) -> torch.Tensor:
 
@@ -526,6 +559,20 @@ class check_reset_state_success(ManagerTermBase):
                 clauses["  fingers open>20%"] = (open_fraction > 0.2).all(dim=1)
                 clauses["  fingers open>50%"] = (open_fraction > 0.5).all(dim=1)
                 clauses["object_near_ee"] = object_near_ee
+            if self.grasp_min_palm_clearance is not None:
+                off_palm = (
+                    _palm_clearance(
+                        self.grasp_object,
+                        self._grasp_object_hull,
+                        self.robot_asset.data.body_link_pos_w.torch[:, self.grasp_palm_body_idx],
+                        self.robot_asset.data.body_link_quat_w.torch[:, self.grasp_palm_body_idx],
+                        self._grasp_approach,
+                    )
+                    >= self.grasp_min_palm_clearance
+                )
+                reset_success = reset_success & off_palm
+                if self.collect_funnel:
+                    clauses["object_off_palm"] = off_palm
             grasp_event = self._resolve_grasp_event(env)
             if grasp_event is not None:
                 at_grasp_pose = torch.zeros(env.num_envs, device=env.device, dtype=torch.bool)
@@ -1111,3 +1158,65 @@ def corrupted_camera_detected(
         is_corrupted |= std_per_env < std_threshold
 
     return is_corrupted
+
+
+# ===============
+# Private Helpers
+# ===============
+
+
+def _unit_vector(vector: list[float], device: str) -> torch.Tensor:
+    """A direction from the metadata as a unit tensor.
+
+    Args:
+        vector: The direction, any length.
+        device: Torch device of the result.
+
+    Returns:
+        The normalized direction, shape (3,).
+    """
+    v = torch.tensor(vector, dtype=torch.float32, device=device)
+    return v / v.norm()
+
+
+def _hull_vertices(asset: BaseRigidObject, env: ManagerBasedEnv) -> torch.Tensor:
+    """Vertices of the convex hull of a rigid object's mesh, in the object frame.
+
+    Args:
+        asset: The rigid object.
+        env: The environment holding it.
+
+    Returns:
+        The hull vertices [m], shape (V, 3).
+    """
+    vertices = utils.object_mesh(asset, env.num_envs).convex_hull.vertices
+    return torch.tensor(vertices, dtype=torch.float32, device=env.device)
+
+
+def _palm_clearance(
+    object_asset: BaseRigidObject,
+    hull: torch.Tensor,
+    palm_pos_w: torch.Tensor,
+    palm_quat_w: torch.Tensor,
+    approach: torch.Tensor,
+) -> torch.Tensor:
+    """Least distance of an object from the gripper body along the gripper's approach direction.
+
+    Args:
+        object_asset: The object held by the gripper.
+        hull: The object's convex-hull vertices in its own frame, shape (V, 3).
+        palm_pos_w: Position of the gripper body in the world, shape (N, 3).
+        palm_quat_w: Orientation (x, y, z, w) of the gripper body in the world, shape (N, 4).
+        approach: Unit approach direction in the gripper body frame, shape (3,).
+
+    Returns:
+        Per environment, the smallest component along the approach of a hull vertex relative to the gripper body
+        [m], shape (N,).
+    """
+    num_envs, num_vertices = palm_pos_w.shape[0], hull.shape[0]
+    obj_quat = object_asset.data.root_quat_w.torch[:, None, :].expand(num_envs, num_vertices, 4)
+    vertices_w = object_asset.data.root_pos_w.torch[:, None, :] + math_utils.quat_apply(
+        obj_quat, hull[None].expand(num_envs, num_vertices, 3)
+    )
+    approach_w = math_utils.quat_apply(palm_quat_w, approach.expand(num_envs, 3))
+    return ((vertices_w - palm_pos_w[:, None, :]) * approach_w[:, None, :]).sum(dim=-1).min(dim=1).values

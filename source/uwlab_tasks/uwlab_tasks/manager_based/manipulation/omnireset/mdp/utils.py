@@ -33,7 +33,7 @@ from isaaclab.utils import configclass
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR, NVIDIA_NUCLEUS_DIR, retrieve_file_path
 from isaaclab.utils.seed import configure_seed
 from isaaclab.utils.warp import convert_to_warp_mesh
-from pxr import UsdGeom
+from pxr import Usd, UsdGeom
 
 from uwlab_assets import UWLAB_CLOUD_ASSETS_DIR, _extract_relative_path, resolve_cloud_path
 
@@ -493,6 +493,44 @@ def read_asset_metadata(asset: RigidObject | Articulation) -> dict:
     spawn = asset.cfg.spawn
     metadata = scale_metadata(read_metadata_from_usd_directory(spawn.usd_path), getattr(spawn, "scale", None))
     return apply_metadata_overrides(metadata, getattr(spawn, "metadata_overrides", None))
+
+
+def object_mesh(asset: RigidObject, num_envs: int) -> trimesh.Trimesh:
+    """Triangle mesh of a rigid object in its own frame, at the scale it is spawned with.
+
+    The first ``UsdGeom.Mesh`` under the asset's prim in the first environment is read; points authored in
+    millimetres (any point beyond 1 m from the origin) are converted to metres, and quads are split into triangles.
+
+    Args:
+        asset: The scene asset. Its ``cfg.spawn`` holds the scale, if any.
+        num_envs: Number of environments in the scene, used to resolve the asset's prim path.
+
+    Returns:
+        The mesh, in metres in the object frame.
+    """
+    stage = omni.usd.get_context().get_stage()
+    prim_path = RigidObjectHasher.resolve_prim_paths(num_envs, asset.cfg.prim_path, stage=stage)[0]
+    usd_mesh = next(
+        (UsdGeom.Mesh(child) for child in Usd.PrimRange(stage.GetPrimAtPath(prim_path)) if child.IsA(UsdGeom.Mesh)),
+        None,
+    )
+    vertices = np.asarray(usd_mesh.GetPointsAttr().Get(), dtype=np.float64)
+    if np.linalg.norm(vertices, axis=1).max() > 1.0:
+        vertices = vertices / 1000.0
+    indices = np.asarray(usd_mesh.GetFaceVertexIndicesAttr().Get(), dtype=np.int64)
+    triangles, offset = [], 0
+    for count in usd_mesh.GetFaceVertexCountsAttr().Get():
+        face = indices[offset : offset + count]
+        if count == 3:
+            triangles.append(face)
+        elif count == 4:
+            triangles.extend([face[[0, 1, 2]], face[[0, 2, 3]]])
+        offset += count
+    mesh = trimesh.Trimesh(vertices=vertices, faces=np.asarray(triangles), process=False)
+    scale = getattr(asset.cfg.spawn, "scale", None)
+    if scale is not None and any(abs(float(v) - 1.0) > 1e-9 for v in scale):
+        mesh.apply_scale([float(v) for v in scale])
+    return mesh
 
 
 def object_name_from_usd(usd_path: str) -> str:

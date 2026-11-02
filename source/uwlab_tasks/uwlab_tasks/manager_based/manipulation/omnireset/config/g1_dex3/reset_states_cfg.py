@@ -32,6 +32,7 @@ from uwlab_assets.robots.unitree_g1_dex3 import (
 from ... import mdp as task_mdp
 from ..ur5e_robotiq_2f85 import reset_states_cfg as ur5e
 from .actions import G1Dex3RelativeOSCAction
+from .grasp_sampling_cfg import DEX3_MIN_HELD_PALM_CLEARANCE
 from .layout import (
     EE_X,
     EE_Y,
@@ -276,10 +277,12 @@ class G1Dex3ResetStatesTerminationCfg(ur5e.ResetStatesTerminationCfg):
             # objects (and the hand) must stay above the table top: a peg that rolled off the edge onto the
             # floor is not a usable reset state (the UR5e value is relative to its mounting plate)
             "pos_z_threshold": TABLE_TOP_Z - 0.02,
+            # grasped families: the hold must keep the object off the palm, as the recorded grasps do
+            "grasp_min_palm_clearance": DEX3_MIN_HELD_PALM_CLEARANCE,
         }
     )
-    """The UR5e success test sampling the right-arm and Dex3 links only, with the palm as the hand body and the
-    height threshold just below the table top."""
+    """The UR5e success test sampling the right-arm and Dex3 links only, with the palm as the hand body, the height
+    threshold just below the table top and, for the grasped families, the object held off the palm."""
 
 
 # ------------------------------------------------------------------------------------------------- environments
