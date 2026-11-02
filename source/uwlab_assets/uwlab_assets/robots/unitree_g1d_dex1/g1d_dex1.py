@@ -8,8 +8,8 @@
 The following configurations are available:
 
 * :obj:`G1D_DEX1_ARTICULATION`: Base articulation (USD, init state), no actuators.
-* :obj:`IMPLICIT_G1D_DEX1`: ImplicitActuator arm with zero joint gains (pure effort passthrough for the task-space
-  OSC) and a PD gripper. Stage 1 RL training.
+* :obj:`IMPLICIT_G1D_DEX1`: ImplicitActuator arm with zero joint stiffness (effort passthrough for the task-space
+  OSC), implicit joint damping :data:`G1D_ARM_JOINT_DAMPING` and a PD gripper. Stage 1 RL training.
 * :obj:`EXPLICIT_G1D_DEX1`: DelayedPDActuator arm (motor delay) for sim2real fine-tuning.
 * :obj:`DEX1_GRIPPER`: the floating Dex1-1 alone, for grasp sampling.
 
@@ -84,6 +84,13 @@ G1D_VELOCITY_LIMITS = {
     "right_wrist_yaw_joint": 22.0,
 }
 
+G1D_ARM_JOINT_DAMPING = {
+    "right_shoulder_.*": 1.0,
+    "right_elbow_joint": 1.0,
+    "right_wrist_.*": 2.0,
+}
+"""Implicit joint damping of the arm actuator per joint regex, in N m s/rad (wrists doubled to slow the turn rate)."""
+
 DEX1_GRIPPER_ACTUATOR = ImplicitActuatorCfg(
     joint_names_expr=DEX1_FINGER_JOINT_REGEX,
     stiffness=1000.0,
@@ -141,8 +148,10 @@ IMPLICIT_G1D_DEX1.actuators = {
         # wrist links weigh ~85 g (I ~ 5e-4 kg m^2 about the roll axis), and an explicit task-space damping torque
         # of a few N m s/rad at 120 Hz overshoots the velocity each substep and diverges within a handful of
         # substeps (verified with scripts_v2/tools/debug_reset_env-style probes on 2026-10-26). The UR5e gets away
-        # with explicit damping only because its wrist links are ~10x heavier.
-        damping=1.0,
+        # with explicit damping only because its wrist links are ~10x heavier. The wrists get twice the damping of
+        # the other joints, which brings the open-loop turn rate (14 deg/s) close to the UR5e's (17 deg/s), see
+        # docs/notes/omnireset_osc_two_arms.html.
+        damping=G1D_ARM_JOINT_DAMPING,
         effort_limit_sim=G1D_EFFORT_LIMITS,
         velocity_limit_sim=G1D_VELOCITY_LIMITS,
     ),
