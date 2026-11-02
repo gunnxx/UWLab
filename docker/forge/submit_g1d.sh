@@ -14,7 +14,7 @@
 # the shared blob disk at /mnt/robotics for the asset/dataset cache and checkpoints. Env knobs: IMAGE, GPUS, HOURS,
 # ROBOT, STAGES, INSERTIVE, RECEPTIVE, SEED, NUM_ENVS, MAX_ITER, LOGGER, LOG_PROJECT, RUN_NAME, FORCE, BUILD_ARGS,
 # RESET_ENVS, NUM_RESETS, GRASP_ENVS, NUM_GRASPS, GRASP_ARGS, PA_ENVS, PA_TRAJ, RESET_TYPES, AUX_FROM_CACHE, BENCH_*, CODE_SOURCE, CODE_TAR, GIT_REPO, GIT_REF,
-# JOB_NAME, WANDB_API_KEY, WANDB_ENTITY, YES, DRY_RUN.
+# JOB_NAME, NODE, WANDB_API_KEY, WANDB_ENTITY, YES, DRY_RUN.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=_lib.sh
@@ -87,6 +87,8 @@ ARGS=(--name "${JOB_NAME}" --image "${IMAGE}" --gpu "${GPUS}" --max-duration "${
       --disk-mount "${CKPT_DISK}:${CKPT_MOUNT}"
       -m "OmniReset ${ROBOT:-g1d_dex1} ${INSERTIVE}/${RECEPTIVE}: ${STAGES} (${GPUS}x${NUM_ENVS} envs, seed ${SEED}, ${SRC_DESC})"
       --entrypoint "${ENTRY}")
+# NODE pins the job to one node by name (forge cluster nodes), e.g. to keep it off a node with a full disk
+[[ -n "${NODE:-}" ]] && ARGS+=(--node "${NODE}")
 if [[ "${LOGGER}" == "wandb" && ",${STAGES}," == *",train,"* ]]; then
     ARGS+=(--env "WANDB_API_KEY=${WANDB_API_KEY}")
     [[ -n "${WANDB_ENTITY:-}" ]] && ARGS+=(--env "WANDB_ENTITY=${WANDB_ENTITY}")

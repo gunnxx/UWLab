@@ -84,3 +84,6 @@ source/uwlab_assets/data/Robots/Unitree/*
 !source/uwlab_assets/data/Robots/Unitree/G1Dex3/**
 source/uwlab_assets/data/Datasets/*
 !source/uwlab_assets/data/Datasets/OmniReset_g1d_dex1/
+
+# Isaac Sim GL shader cache written next to the launch directory
+nv_shadercache/

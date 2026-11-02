@@ -5,8 +5,8 @@
 
 """Render recorded reset states to images, headless.
 
-One environment per state: the first ``--num_states`` states of each reset set are written into the
-environments exactly as recorded (no random sampling), a camera per environment renders them, and the
+One environment per state: the first ``--num_states`` states of each reset set (or a random draw with
+``--sample_seed``) are written into the environments exactly as recorded, a camera per environment renders them, and the
 result is saved as one image grid per set plus the individual tiles. Works without a display.
 
     python scripts_v2/tools/render_reset_states.py --task OmniReset-G1dDex1-RelCartesianOSC-State-Play-v0 \\
@@ -33,6 +33,18 @@ parser.add_argument("--task", type=str, required=True, help="Task whose events c
 parser.add_argument("--dataset_dir", type=str, required=True, help="Dataset directory (contains Resets/<Pair>/).")
 parser.add_argument("--reset_types", nargs="+", default=ALL_RESET_TYPES, help="Reset sets to render.")
 parser.add_argument("--num_states", type=int, default=8, help="States per set (= number of environments).")
+parser.add_argument(
+    "--sample_seed",
+    type=int,
+    default=None,
+    help="Draw the states at random with this seed instead of taking the first ``--num_states`` of each set.",
+)
+parser.add_argument(
+    "--sample_offset",
+    type=int,
+    default=0,
+    help="Skip this many states of the random draw, so one draw can be rendered over several runs.",
+)
 parser.add_argument("--out_dir", type=str, required=True, help="Where the images are written.")
 parser.add_argument("--width", type=int, default=720)
 parser.add_argument("--height", type=int, default=540)
@@ -169,7 +181,13 @@ def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: object):
         available = int(manager.num_states[set_idx])
         count = min(available, args_cli.num_states)
         env_ids = torch.arange(count, device=device)
-        states = sample_from_nested_dict(manager.datasets[set_idx], env_ids)
+        if args_cli.sample_seed is None:
+            state_ids = env_ids
+        else:
+            generator = torch.Generator().manual_seed(args_cli.sample_seed + set_idx)
+            state_ids = torch.randperm(available, generator=generator)
+            state_ids = state_ids[args_cli.sample_offset : args_cli.sample_offset + count].to(device)
+        states = sample_from_nested_dict(manager.datasets[set_idx], state_ids)
         manager._reset_to(states["initial_state"], env_ids=env_ids, is_relative=True)
         hold_and_render(args_cli.settle_steps)
 
@@ -189,6 +207,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg, agent_cfg: object):
         ee_body = robot.find_bodies(env.cfg.actions.arm.body_name)[0][0]
         ee = robot.data.body_pos_w[:count, ee_body] - origins[:count]
         poses[reset_type] = {
+            "state_ids": state_ids.tolist(),
             "settle_steps": args_cli.settle_steps,
             "gripper": args_cli.gripper,
             "insertive_pos": [[round(v, 4) for v in row] for row in ins.tolist()],

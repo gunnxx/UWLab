@@ -1,0 +1,41 @@
+% ---------- notation and helpers shared by both layouts ----------
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\subl}[1]{{\scriptsize\color{black!60}#1}}
+\definecolor{series1}{HTML}{2A78D6}
+\definecolor{series2}{HTML}{EB6834}
+\definecolor{band}{HTML}{E7EEF1}
+\definecolor{codebg}{HTML}{F4F5F4}
+\definecolor{stagefill}{HTML}{DFEAEF}
+\definecolor{stageline}{HTML}{1F6F8B}
+\lstset{
+  language=Python,
+  commentstyle=\color{black!55}\itshape,
+  keywordstyle=\bfseries,
+  stringstyle=\color{black!70},
+  backgroundcolor=\color{codebg},
+  frame=single, framerule=0pt, framesep=3pt,
+  columns=fullflexible, keepspaces=true,
+  breaklines=true, breakatwhitespace=false, showstringspaces=false,
+  numbers=left, numberstyle=\tiny\color{black!45}\ttfamily, numbersep=5pt, stepnumber=1,
+  xleftmargin=18pt, xrightmargin=2pt,
+  aboveskip=1pt, belowskip=0pt,
+  literate={ö}{{\"o}}1 {ä}{{\"a}}1 {·}{{$\cdot$}}1 {—}{{--}}1 {→}{{$\to$}}1,
+}
+% file header above a listing: path on the left, line range on the right
+\newcommand{\snippethead}[2]{\par\noindent{\scriptsize\sffamily\color{black!60}\path{#1}\hfill\mbox{#2}}\par\nopagebreak\vspace{-2pt}}
+\newcommand{\snippetelide}{\par\nopagebreak\vspace{-5pt}\noindent{\scriptsize\color{black!45}\ttfamily\hspace{6pt}$\vdots$}\par\nopagebreak\vspace{-6pt}}
+\tikzset{
+  blk/.style={draw=black!55, rounded corners=2pt, minimum height=8mm, align=center, font=\small, inner sep=3pt, fill=black!4},
+  stage/.style={blk, fill=stagefill, draw=stageline, line width=0.8pt},
+  sub/.style={font=\scriptsize\color{black!60}},
+  arr/.style={-{Latex[length=2mm]}, thick, black!70},
+  darr/.style={-{Latex[length=2mm]}, thick, dashed, black!55},
+}
+% a snippet (header + listing, possibly with elisions). The optional argument is the number of text lines that
+% must still fit on the page before the snippet may start, so the header always stays with the first code lines;
+% a long listing may then break across pages instead of leaving a large gap at the page bottom.
+\newenvironment{snippetbox}[1][8]{\par\addvspace{4pt}\penalty0
+  \ifdim\pagegoal=\maxdimen\else
+    \ifdim\dimexpr\pagegoal-\pagetotal\relax<#1\baselineskip \newpage\fi
+  \fi
+  \lstset{aboveskip=1pt, belowskip=0pt}}{\par\addvspace{4pt}}

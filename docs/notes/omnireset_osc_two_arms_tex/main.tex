@@ -1,0 +1,51 @@
+\documentclass{article}
+
+\usepackage[preprint]{corl_2026}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{graphicx}
+\usepackage[table]{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc,fit,backgrounds,decorations.pathmorphing}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{listings}
+\usepackage{microtype}
+\usepackage{float}
+\usepackage{caption}
+\captionsetup{labelsep=period}
+
+\input{shared_macros}
+\lstset{basicstyle=\ttfamily\scriptsize}
+\definecolor{seriesfix}{HTML}{2E8455}
+\definecolor{seriesbad}{HTML}{9B3C8E}
+\definecolor{series1}{HTML}{2F6DB5}
+\definecolor{series2}{HTML}{C4581B}
+
+% figure and table wrappers: placed exactly where they are referenced (no floating)
+\newenvironment{myfigure}{\begin{figure}[H]\centering}{\end{figure}}
+\newenvironment{mytable}{\begin{table}[H]\centering}{\end{table}}
+\newcommand{\myfigcaption}[2]{\caption{#2}\label{#1}}
+\newcommand{\mytabcaption}[2]{\caption{#2}\label{#1}}
+
+\title{Two Arms, One Controller\\[2pt] \large Why the G1-D Hand Moves Faster than the UR5e Hand}
+
+\author{
+  Tri Wahyu Guntara\\
+  Controller notes on the UWLab OmniReset code base\\
+}
+
+\raggedbottom
+
+\begin{document}
+\maketitle
+
+\input{body}
+
+\bibliography{references}
+
+\end{document}
