@@ -25,6 +25,10 @@ G1_JACOBIAN_FN = "uwlab_assets.robots.unitree_g1_dex3.kinematics:compute_jacobia
 G1_TORQUE_LIMIT = tuple(G1_EFFORT_LIMITS[n] for n in G1_ARM_JOINT_NAMES)
 """Per-joint torque clamp of the OSC action: the motor effort limits of the seven right-arm joints."""
 
+G1_LATCH_MAX_ERROR = (0.03, 0.3)
+"""Largest distance [m] and angle [rad] the latched OSC target may lead the measured wrist pose: about three
+policy steps of translation, and well above the steady error a held peg leaves (a few millimetres, a few degrees)."""
+
 G1_DEX3_RELATIVE_OSC = RelCartesianOSCActionCfg(
     asset_name="robot",
     joint_names=G1_ARM_JOINT_NAMES,
@@ -40,8 +44,12 @@ G1_DEX3_RELATIVE_OSC = RelCartesianOSCActionCfg(
     nullspace_stiffness=2.0,
     nullspace_damping_ratio=1.0,
     nullspace_joint_pos=G1_DEFAULT_ARM_JOINT_POS,
+    # The target is latched: re-anchored to the measured pose every step, the side-held peg's weight walks the wrist
+    # down (72 mm and 24 deg in 4 s with zero action, against 4 mm and 2.5 deg latched, 2026-11-01)
+    latch_target=True,
+    latch_max_error=G1_LATCH_MAX_ERROR,
 )
-"""Pre-train gains: the G1-D recipe, this being the same arm."""
+"""Pre-train gains: the G1-D recipe, this being the same arm, with the target latched."""
 
 G1_DEX3_RELATIVE_OSC_EVAL = G1_DEX3_RELATIVE_OSC.replace(
     scale_xyz_axisangle=(0.01, 0.01, 0.002, 0.02, 0.02, 0.2),

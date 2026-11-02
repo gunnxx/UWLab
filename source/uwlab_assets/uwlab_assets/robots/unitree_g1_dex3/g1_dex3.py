@@ -9,7 +9,7 @@ The following configurations are available:
 
 * :obj:`G1_DEX3_ARTICULATION`: Base articulation (USD, init state), no actuators.
 * :obj:`IMPLICIT_G1_DEX3`: ImplicitActuator arm with zero joint stiffness (pure effort passthrough for the
-  task-space OSC) and the Dex3 at the robot's position-loop gains. Stage 1 RL training.
+  task-space OSC) and the Dex3 at the simulation grip gains (:data:`DEX3_SIM_KP`). Stage 1 RL training.
 * :obj:`EXPLICIT_G1_DEX3`: DelayedPDActuator arm (motor delay) for sim2real fine-tuning.
 * :obj:`DEX3_HAND`: the floating right Dex3 alone, for grasp sampling.
 
@@ -127,16 +127,29 @@ DEX3_VELOCITY_LIMITS = {n: 6.857 if n.endswith("thumb_0_joint") else 12.0 for n 
 # Actuators and articulations.
 # ===========================================================================================================
 
+DEX3_GRIP_GAIN_FACTOR = 4.0
+"""Factor on the rig's Dex3 position-loop gains (:data:`~.stance.DEX3_KP`, :data:`~.stance.DEX3_KD`) for the
+simulated hand. At the rig's 0.5 N m/rad the fingers press a held peg with ~0.1 N m per joint; a 6 s shake test of
+1024 held long pegs (2026-11-01) lost 6% of the fingertip grasps at 1x and 2% at 3x to 12x, and the palm grasps'
+90th-percentile slip fell from 6.1 to 4.0 mm at 3x."""
+
+DEX3_SIM_KP = DEX3_GRIP_GAIN_FACTOR * DEX3_KP
+"""Stiffness [N m/rad] of the simulated Dex3 position loop. At the 0.1-0.4 rad a grasp leaves between the fingers and
+the shut pose it gives up to ~0.8 N m, inside the 1.4 N m flexion limit (:data:`DEX3_EFFORT_LIMITS`)."""
+
+DEX3_SIM_KD = DEX3_GRIP_GAIN_FACTOR * DEX3_KD
+"""Damping [N m s/rad] of the simulated Dex3 position loop, scaled with :data:`DEX3_SIM_KP` to keep the rig's ratio."""
+
 DEX3_HAND_ACTUATOR = ImplicitActuatorCfg(
     joint_names_expr=DEX3_JOINT_REGEX,
-    stiffness=DEX3_KP,
-    damping=DEX3_KD,
+    stiffness=DEX3_SIM_KP,
+    damping=DEX3_SIM_KD,
     effort_limit_sim=DEX3_EFFORT_LIMITS,
     velocity_limit_sim=DEX3_VELOCITY_LIMITS,
 )
-"""The Dex3 position loop at the gains the data-recording rig drives the real hand with (0.5 N m/rad, 0.1 N m
-s/rad): soft, so the fingers stop on an object well short of the shut pose, which is how the robot's code tells a
-holding hand from an empty one."""
+"""The Dex3 position loop at the simulation grip gains (:data:`DEX3_SIM_KP`, :data:`DEX3_SIM_KD`): stiffer than the
+rig so that a fingertip grasp holds the peg, still soft enough that the fingers stop on an object short of the shut
+pose, which is how the robot's code tells a holding hand from an empty one."""
 
 G1_DEX3_ARTICULATION = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
@@ -177,7 +190,7 @@ EXPLICIT_G1_DEX3.actuators = {
     ),
     "gripper": DEX3_HAND_ACTUATOR,
 }
-"""Delayed PD arm for sim2real fine-tuning, Dex3 at the robot's gains."""
+"""Delayed PD arm for sim2real fine-tuning, Dex3 at the simulation grip gains."""
 
 IMPLICIT_G1_DEX3 = G1_DEX3_ARTICULATION.copy()  # type: ignore
 IMPLICIT_G1_DEX3.actuators = {
@@ -192,7 +205,7 @@ IMPLICIT_G1_DEX3.actuators = {
     ),
     "gripper": DEX3_HAND_ACTUATOR,
 }
-"""Implicit arm actuator (zero stiffness, implicit damping) for stage 1 training, Dex3 at the robot's gains."""
+"""Implicit arm actuator (zero stiffness, implicit damping) for stage 1 training, Dex3 at the simulation grip gains."""
 
 DEX3_HAND = ArticulationCfg(
     prim_path="{ENV_REGEX_NS}/Dex3Hand",

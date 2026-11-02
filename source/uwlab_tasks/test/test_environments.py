@@ -602,11 +602,11 @@ def test_obb_visualization_submits_whole_environment_batches():
 
 @pytest.mark.isaacsim_ci
 def test_reset_state_latch_is_dex3_only():
-    """The latched OSC target is off by default and on in every G1 + Dex3 reset-state family, not in training."""
+    """The latched OSC target is off by default and on for the G1 + Dex3, in every reset-state family and training."""
     package = "uwlab_tasks.manager_based.manipulation.omnireset.config"
     dex3_resets = importlib.import_module(f"{package}.g1_dex3.reset_states_cfg")
     for name in dir(dex3_resets):
         if name.startswith("G1Dex3") and name.endswith("ResetStatesCfg"):
             assert getattr(dex3_resets, name)().actions.arm.latch_target is True, name
-    assert importlib.import_module(f"{package}.g1_dex3.actions").G1_DEX3_RELATIVE_OSC.latch_target is False
+    assert importlib.import_module(f"{package}.g1_dex3.actions").G1_DEX3_RELATIVE_OSC.latch_target is True
     assert importlib.import_module(f"{package}.g1d_dex1.actions").G1D_DEX1_RELATIVE_OSC.latch_target is False

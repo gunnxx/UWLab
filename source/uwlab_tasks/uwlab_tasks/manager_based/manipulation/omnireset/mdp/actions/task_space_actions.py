@@ -140,6 +140,8 @@ class RelCartesianOSCAction(ActionTerm):
         # (base_link) frame
         if self.cfg.latch_target:
             ee_pos_b, ee_quat_b = self._ee_pos_des.clone(), self._ee_quat_des.clone()
+            if self.cfg.latch_max_error is not None:
+                ee_pos_b, ee_quat_b = self._bound_latched_anchor(ee_pos_b, ee_quat_b)
         else:
             ee_pos_b, ee_quat_b = self._get_ee_pose_root_frame()
 
@@ -209,6 +211,29 @@ class RelCartesianOSCAction(ActionTerm):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _bound_latched_anchor(
+        self, anchor_pos: torch.Tensor, anchor_quat: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Pull the latched anchor back to within :attr:`~RelCartesianOSCActionCfg.latch_max_error` of the EE pose.
+
+        Args:
+            anchor_pos: Previous desired EE position in the root frame, shape (N, 3).
+            anchor_quat: Previous desired EE orientation (x, y, z, w) in the root frame, shape (N, 4).
+
+        Returns:
+            The anchor position and orientation, each at most the configured distance and angle from the measured
+            EE pose, along the same direction.
+        """
+        max_pos, max_rot = self.cfg.latch_max_error
+        ee_pos_b, ee_quat_b = self._get_ee_pose_root_frame()
+        pos_err = anchor_pos - ee_pos_b
+        pos_scale = torch.clamp(max_pos / pos_err.norm(dim=-1, keepdim=True).clamp(min=1e-9), max=1.0)
+        rot_err = math_utils.axis_angle_from_quat(math_utils.quat_mul(anchor_quat, math_utils.quat_inv(ee_quat_b)))
+        angle = rot_err.norm(dim=-1)
+        rot_scale = torch.clamp(max_rot / angle.clamp(min=1e-9), max=1.0)
+        bounded_rot = math_utils.quat_from_angle_axis(angle * rot_scale, rot_err / angle.clamp(min=1e-9).unsqueeze(-1))
+        return ee_pos_b + pos_err * pos_scale, math_utils.quat_mul(bounded_rot, ee_quat_b)
 
     def _get_ee_pose_root_frame(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Get EE pose in root (base_link) frame from sim state."""

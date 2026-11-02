@@ -54,6 +54,12 @@ class RelCartesianOSCActionCfg(ActionTermCfg):
     kept while the action is zero, so a load on the end effector cannot walk the arm step by step. ``False`` (the
     default) re-anchors the desired pose to the measured pose every control step."""
 
+    latch_max_error: tuple[float, float] | None = None
+    """With :attr:`latch_target`, the largest distance [m] and angle [rad] the anchor of the next delta may be from
+    the measured end-effector pose; a latched target that runs further ahead, for instance while the hand is pressed
+    against the table, is pulled back along the same direction before the delta is added. ``None`` leaves it
+    unbounded."""
+
     motion_stiffness: tuple[float, float, float, float, float, float] = (200.0, 200.0, 200.0, 3.0, 3.0, 3.0)
     """Task-space stiffness Kp for [x, y, z, rx, ry, rz]."""
 
